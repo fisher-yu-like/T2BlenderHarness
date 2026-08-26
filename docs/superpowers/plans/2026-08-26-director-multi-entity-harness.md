@@ -317,12 +317,12 @@ uv run --extra test python -m pytest tests/test_multi_entity_dataset.py -q -p no
 - Create: `tests/test_director_skill.py`
 - Modify: `tests/test_autodesign_skill_tools.py`
 
-- [ ] Write failing tests requiring five rounds, 10 train plus 10 paired dev per attempt, five attempts maximum, all 60 dev at round end, 30 frozen test cases, 12 workers, canonical model names, exact Memory columns, one-owner rules, and separate curves.
-- [ ] Add a `multi-five-rounds` protocol; do not reuse a misleading six-round name.
-- [ ] Set defaults to `dataset/trajectory-v4-multi`, `out/training/multi-five-rounds-v1`, `docs/t2blendercodeharness-multi-training-memory-v1.md`, `D:\blender\blender.exe`, 12 workers, and `gpt-5.6-Luna`.
-- [ ] Create the Director Skill with schemas, deterministic/provider-assisted modes, evidence/uncertainty policy, repair routing, and stop conditions.
-- [ ] Update all component Skills so commands, fingerprints, owners, Memory schema, and scores match implementation.
-- [ ] Run focused Skill tests and the full suite; expect zero failures.
+- [x] Write failing tests requiring five rounds, 10 train plus 10 paired dev per attempt, five attempts maximum, all 60 dev at round end, 30 frozen test cases, 12 workers, canonical model names, exact Memory columns, one-owner rules, and separate curves.
+- [x] Add a `multi-five-rounds` protocol; do not reuse a misleading six-round name.
+- [x] Set defaults to `dataset/trajectory-v4-multi`, `out/training/multi-five-rounds-v1`, `docs/t2blendercodeharness-multi-training-memory-v1.md`, `D:\blender\blender.exe`, 12 workers, and `gpt-5.6-Luna`.
+- [x] Create the Director Skill with schemas, deterministic/provider-assisted modes, evidence/uncertainty policy, repair routing, and stop conditions.
+- [x] Update all component Skills so commands, fingerprints, owners, Memory schema, and scores match implementation.
+- [x] Run focused Skill tests and the full suite; expect zero failures.
 - [ ] Commit with `git commit -m "feat: package DirectorAgent multi-entity training workflow"`.
 
 ### Task 15: Pass capability checks and a real multi-entity smoke

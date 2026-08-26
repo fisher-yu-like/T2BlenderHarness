@@ -1,7 +1,8 @@
-"""Draw training-memory curves with Pillow (no plotting dependency required)."""
+"""Draw separate Director/task/realism/artifact curves from completed rounds."""
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -9,8 +10,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_ROOT = ROOT / "out" / "training" / "six-rounds-real-v6"
-OUTPUT = ROOT / "docs" / "assets" / "t2blendercodeharness-training-curves.png"
+DEFAULT_REPORT_ROOT = ROOT / "out" / "training" / "multi-five-rounds-v1"
+DEFAULT_OUTPUT = ROOT / "docs" / "figures" / "multi-training-curves-v1.png"
 
 
 def _font(size: int, bold: bool = False):
@@ -24,22 +25,71 @@ def _font(size: int, bold: bool = False):
     return ImageFont.load_default()
 
 
-def _summary(round_number: int) -> dict:
-    report = json.loads((REPORT_ROOT / f"round-{round_number:02d}" / "overall_report.json").read_text(encoding="utf-8"))
-    cases = report["cases"]
+def _report_path(report_root: Path, round_number: int) -> Path:
+    candidates = (
+        report_root / f"round-{round_number:02d}" / "overall_report.json",
+        report_root / f"round-{round_number:02d}" / "overall_evaluation.json",
+        report_root / f"round-{round_number:02d}" / "overall" / "real" / "real_unified_score.json",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"no completed overall report for round {round_number} under {report_root}")
+
+
+def _number(row: dict, *keys: str) -> float | None:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value != "":
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _summary(report_root: Path, round_number: int) -> dict:
+    report = json.loads(_report_path(report_root, round_number).read_text(encoding="utf-8"))
+    cases = report.get("cases", [])
     summary = {"round": round_number}
+    channels = {
+        "director": ("director_plan_score",),
+        "task": ("task_final_score", "video_score", "task_score"),
+        "realism": ("realism_score",),
+        "deterministic": ("deterministic_score",),
+    }
     for split in ("train", "dev"):
         rows = [row for row in cases if row.get("split") == split]
-        summary[f"{split}_deterministic"] = sum(row["deterministic_score"] for row in rows) / len(rows)
-        summary[f"{split}_pass_rate"] = sum(row["deterministic_status"] == "pass" for row in rows) / len(rows) * 100.0
-        scored = [row["video_score"] for row in rows if row.get("video_score") is not None]
-        summary[f"{split}_visual_scored"] = sum(scored) / len(scored) if scored else None
-    summary["scored_count"] = sum(row.get("video_score") is not None for row in cases)
-    summary["video_count"] = sum(row.get("video_exists") is True for row in cases)
+        for channel, keys in channels.items():
+            values = [value for row in rows if (value := _number(row, *keys)) is not None]
+            summary[f"{split}_{channel}"] = sum(values) / len(values) if values else None
+        summary[f"{split}_pass_rate"] = (
+            sum(row.get("deterministic_status") == "pass" for row in rows) / len(rows) * 100.0
+            if rows
+            else None
+        )
+        completion = [
+            100.0 if row.get("artifact_status") == "complete" or row.get("video_exists") is True else 0.0
+            for row in rows
+        ]
+        summary[f"{split}_artifact_completion"] = sum(completion) / len(completion) if completion else None
+    summary["scored_count"] = sum(
+        _number(row, "task_final_score", "video_score", "task_score") is not None for row in cases
+    )
+    summary["video_count"] = sum(
+        row.get("video_exists") is True or row.get("artifact_status") == "complete" for row in cases
+    )
     return summary
 
 
-def _draw_chart(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], title: str, series: list[tuple[str, str, list[float | None]]], rounds: list[int], fonts: dict):
+def _draw_chart(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    title: str,
+    series: list[tuple[str, str, list[float | None]]],
+    rounds: list[int],
+    fonts: dict,
+):
     left, top, right, bottom = box
     draw.rectangle(box, outline=(190, 198, 210), width=2)
     draw.text((left + 20, top + 16), title, fill=(26, 37, 52), font=fonts["subtitle"])
@@ -52,9 +102,8 @@ def _draw_chart(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], title
     for index, round_number in enumerate(rounds):
         x = px0 if len(rounds) == 1 else px0 + (px1 - px0) * index / (len(rounds) - 1)
         draw.line((x, py0, x, py1), fill=(239, 242, 246), width=1)
-        label = f"R{round_number}"
-        draw.text((x - 12, py1 + 13), label, fill=(90, 103, 120), font=fonts["small"])
-    for series_name, color, values in series:
+        draw.text((x - 12, py1 + 13), f"R{round_number}", fill=(90, 103, 120), font=fonts["small"])
+    for name, color, values in series:
         points = []
         for index, value in enumerate(values):
             if value is None:
@@ -75,32 +124,45 @@ def _draw_chart(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], title
 
 
 def main() -> int:
-    rounds = [1, 2]
-    summaries = [_summary(round_number) for round_number in rounds]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--report-root", default=str(DEFAULT_REPORT_ROOT))
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--round", dest="rounds", action="append", type=int)
+    args = parser.parse_args()
+    report_root = Path(args.report_root)
+    rounds = args.rounds or sorted(
+        int(path.name.removeprefix("round-"))
+        for path in report_root.glob("round-*")
+        if path.is_dir() and path.name.removeprefix("round-").isdigit()
+    )
+    if not rounds:
+        raise SystemExit("no completed overall rounds found; missing rounds are never synthesized")
+    summaries = [_summary(report_root, round_number) for round_number in rounds]
     image = Image.new("RGB", (1500, 920), (248, 250, 253))
     draw = ImageDraw.Draw(image)
     fonts = {"title": _font(34, True), "subtitle": _font(22, True), "small": _font(16)}
-    draw.text((56, 28), "T2Blendercodeharness real training memory", fill=(20, 31, 46), font=fonts["title"])
-    draw.text((58, 72), "Rounds 1–2; real Blender videos; visual scores only where the deterministic gate passed", fill=(84, 96, 113), font=fonts["small"])
+    draw.text((56, 28), "T2Blendercodeharness multi-five real training", fill=(20, 31, 46), font=fonts["title"])
+    draw.text((58, 72), "Director plan, task, realism, and artifact completion; unavailable review is not zero", fill=(84, 96, 113), font=fonts["small"])
     _draw_chart(
-        draw, (48, 120, 730, 510), "Deterministic score (higher is better)",
-        [("train", (24, 101, 178), [s["train_deterministic"] for s in summaries]), ("dev", (210, 91, 67), [s["dev_deterministic"] for s in summaries])], rounds, fonts,
+        draw, (48, 120, 730, 510), "Director plan score",
+        [("train", (24, 101, 178), [s["train_director"] for s in summaries]), ("dev", (210, 91, 67), [s["dev_director"] for s in summaries])], rounds, fonts,
     )
     _draw_chart(
-        draw, (770, 120, 1452, 510), "Deterministic pass rate (%)", 
-        [("train", (24, 101, 178), [s["train_pass_rate"] for s in summaries]), ("dev", (210, 91, 67), [s["dev_pass_rate"] for s in summaries])], rounds, fonts,
+        draw, (770, 120, 1452, 510), "Task score",
+        [("train", (36, 142, 89), [s["train_task"] for s in summaries]), ("dev", (139, 91, 173), [s["dev_task"] for s in summaries])], rounds, fonts,
     )
     _draw_chart(
-        draw, (48, 550, 730, 900), "Scored visual mean (assistant-local review)",
-        [("train", (36, 142, 89), [s["train_visual_scored"] for s in summaries]), ("dev", (139, 91, 173), [s["dev_visual_scored"] for s in summaries])], rounds, fonts,
+        draw, (48, 550, 730, 900), "Realism score",
+        [("train", (193, 130, 38), [s["train_realism"] for s in summaries]), ("dev", (87, 112, 137), [s["dev_realism"] for s in summaries])], rounds, fonts,
     )
     _draw_chart(
-        draw, (770, 550, 1452, 900), "Real video coverage (%)", 
-        [("rendered", (87, 112, 137), [s["video_count"] / 120 * 100 for s in summaries]), ("visual scored", (193, 130, 38), [s["scored_count"] / 120 * 100 for s in summaries])], rounds, fonts,
+        draw, (770, 550, 1452, 900), "Artifact completion (%)",
+        [("train", (24, 101, 178), [s["train_artifact_completion"] for s in summaries]), ("dev", (210, 91, 67), [s["dev_artifact_completion"] for s in summaries])], rounds, fonts,
     )
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    image.save(OUTPUT)
-    print(json.dumps({"output": str(OUTPUT), "summaries": summaries}, indent=2))
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output)
+    print(json.dumps({"output": str(output), "summaries": summaries}, indent=2))
     return 0
 
 

@@ -24,6 +24,10 @@ REQUIRED_COMPONENTS = {
     "realism_audit_entrypoint": "scripts/evaluate_proxy_realism.py",
     "real_job_entrypoint": "scripts/prepare_real_jobs.py",
     "real_outer_loop": "scripts/run_real_outer_loop.py",
+    "director_agent": "src/videoact/director.py",
+    "director_metrics": "evaluator/director_metrics.py",
+    "interaction_metrics": "evaluator/interaction_metrics.py",
+    "multi_entity_dataset_validator": "scripts/validate_multi_entity_dataset.py",
 }
 
 
@@ -51,10 +55,12 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         from evaluator.deterministic import DeterministicEvaluator
         from videoact.meta_harness import MetaHarnessOptimizer
         from videoact.real_artifacts import RealArtifactGate
+        from videoact.director import DirectorAgent
+        from evaluator.director_metrics import evaluate_director_plan
         from videoact.scene_contract import SceneContractBuilder
         from videoact.trajectory import TrajectoryPlanner
 
-        checks.append(_check("imports", True, "contract, planner, artifact gate, evaluator, and optimizer imported"))
+        checks.append(_check("imports", True, "DirectorAgent, contract, planner, artifact gate, evaluator, and optimizer imported"))
     except Exception as exc:  # pragma: no cover - exercised by a missing runtime
         checks.append(_check("imports", False, f"{type(exc).__name__}: {exc}"))
         return {"skill_version": "t2blendercodeharness-v3", "project_root": str(root), "status": "fail", "checks": checks}
@@ -73,6 +79,28 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         )
     except Exception as exc:
         checks.append(_check("contract_and_plan", False, f"{type(exc).__name__}: {exc}"))
+
+    try:
+        director_result = DirectorAgent().plan(
+            "Alice carries the red cube while Bob carries the blue cup, then Alice hands the red cube to Bob.",
+            scene_id="skill-director-probe",
+            duration_s=12.0,
+            fps=24,
+        )
+        director_report = evaluate_director_plan(
+            director_result.director_plan,
+            director_result.trajectory_plan,
+        )
+        checks.append(
+            _check(
+                "director_multi_plan",
+                director_report.director_plan_score == 100.0
+                and {"actor_a", "actor_b", "red_cube", "blue_cup"}.issubset(director_result.trajectory_plan.entities),
+                f"director_score={director_report.director_plan_score}, entities={len(director_result.trajectory_plan.entities)}",
+            )
+        )
+    except Exception as exc:
+        checks.append(_check("director_multi_plan", False, f"{type(exc).__name__}: {exc}"))
 
     try:
         RealArtifactGate()

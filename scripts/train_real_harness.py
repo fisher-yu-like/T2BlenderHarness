@@ -1,4 +1,4 @@
-"""Run the real Blender/VLM six-round protocol without synthetic scores.
+"""Run the real Blender/VLM Harness protocols without synthetic scores.
 
 The round roots produced by this protocol are immutable job
 batches.  This runner renders those jobs with Blender CLI, evaluates the real
@@ -134,6 +134,93 @@ def build_protocol_manifest(
             "blind_test_cases": test_ids,
         },
     }
+
+
+def build_multi_five_round_manifest(
+    train_ids: list[str],
+    dev_ids: list[str],
+    test_ids: list[str],
+    *,
+    dataset_fingerprint: str,
+) -> dict[str, Any]:
+    """Build the trajectory-v4-multi five-round outer-loop protocol.
+
+    Each attempt pairs ten train cases with ten dev cases.  The round-end
+    overall evaluation uses all train cases seen so far and all sixty dev
+    cases, so the held-out dev set cannot be silently narrowed to the paired
+    batch.
+    """
+    if len(train_ids) != 50 or len(dev_ids) != 60 or len(test_ids) != 30:
+        raise ValueError("multi-five-round protocol requires 50 train, 60 dev, and 30 test cases")
+    if set(train_ids) & set(dev_ids) or set(train_ids) & set(test_ids) or set(dev_ids) & set(test_ids):
+        raise ValueError("multi-five-round splits must be disjoint")
+    def fixed_groups(case_ids: list[str], group_count: int) -> list[list[str]]:
+        ordered = sorted(case_ids)
+        if len(ordered) % group_count:
+            raise ValueError("multi-five-round IDs cannot be split into ten-case groups")
+        size = len(ordered) // group_count
+        return [ordered[index : index + size] for index in range(0, len(ordered), size)]
+
+    train_groups = fixed_groups(train_ids, 5)
+    dev_groups = fixed_groups(dev_ids, 6)
+    rounds: list[dict[str, Any]] = []
+    cumulative_train: list[str] = []
+    for index, train_group in enumerate(train_groups):
+        paired_dev = dev_groups[index]
+        cumulative_train.extend(train_group)
+        rounds.append(
+            {
+                "round": index + 1,
+                "train": train_group,
+                "dev": paired_dev,
+                "overall_evaluation": {
+                    "scope": "cumulative_train_and_all_dev",
+                    "train_cases": list(cumulative_train),
+                    "dev_cases": list(dev_ids),
+                    "blind_test": False,
+                },
+            }
+        )
+    overall_counts = [
+        len(item["overall_evaluation"]["train_cases"])
+        + len(item["overall_evaluation"]["dev_cases"])
+        for item in rounds
+    ]
+    attempt_policy = build_attempt_policy(overall_case_count=110)
+    attempt_policy["overall_case_counts_by_round"] = overall_counts
+    attempt_policy["videos_total_max"] = 5 * 100 + sum(overall_counts)
+    return {
+        "protocol_version": "multi-five-rounds-v1",
+        "dataset_fingerprint": dataset_fingerprint,
+        "round_count": 5,
+        "train_count": 50,
+        "dev_count": 60,
+        "test_count": 30,
+        "attempts_per_round_max": 5,
+        "attempt_policy": attempt_policy,
+        "batch_case_count": 20,
+        "overall_case_counts_by_round": overall_counts,
+        "videos_per_attempt": 20,
+        "videos_per_round_max": 100 + max(overall_counts),
+        "videos_total_max": 5 * 100 + sum(overall_counts),
+        "selection_policy": "five disjoint ten-case train families paired with five ten-case dev families; sixth dev family is overall-only",
+        "patch_scope": "one Harness owner per accepted patch; dataset/evaluator/Blender are frozen",
+        "rounds": rounds,
+        "final_evaluation": {
+            "scope": "all_train_and_all_dev_then_blind_test",
+            "train_cases": list(train_ids),
+            "dev_cases": list(dev_ids),
+            "blind_test_cases": list(test_ids),
+        },
+    }
+
+
+def build_active_protocol_manifest(
+    train_ids: list[str], dev_ids: list[str], test_ids: list[str], *, dataset_fingerprint: str, dataset_id: str | None = None
+) -> dict[str, Any]:
+    if dataset_id == "trajectory-v4-multi" or len(train_ids) == 50 and len(dev_ids) == 60 and len(test_ids) == 30:
+        return build_multi_five_round_manifest(train_ids, dev_ids, test_ids, dataset_fingerprint=dataset_fingerprint)
+    return build_protocol_manifest(train_ids, dev_ids, test_ids, dataset_fingerprint=dataset_fingerprint)
 
 
 def build_attempt_policy(max_attempts: int = 5, overall_case_count: int | None = None) -> dict[str, Any]:
@@ -568,8 +655,8 @@ def _protocol_round(dataset_root: str | Path, round_number: int) -> dict[str, An
     dataset = Path(dataset_root)
     split_payload = json.loads((dataset / "splits.json").read_text(encoding="utf-8"))
     metadata = json.loads((dataset / "metadata.json").read_text(encoding="utf-8"))
-    protocol = build_protocol_manifest(
-        split_payload["train"], split_payload["dev"], split_payload["test"], dataset_fingerprint=metadata["fingerprint"]
+    protocol = build_active_protocol_manifest(
+        split_payload["train"], split_payload["dev"], split_payload["test"], dataset_fingerprint=metadata["fingerprint"], dataset_id=metadata.get("dataset_id")
     )
     if not 1 <= round_number <= protocol["round_count"]:
         raise ValueError(f"round must be between 1 and {protocol['round_count']}")
@@ -844,15 +931,73 @@ def run_six_round_protocol(
     return result
 
 
+def run_multi_five_round_protocol(
+    output_root: str | Path,
+    *,
+    dataset_root: str | Path,
+    harness_version: str,
+    evaluator_version: str,
+    blender_bin: str,
+    workers: int,
+    timeout_s: int,
+    vlm_model: str,
+    markdown_path: str | Path,
+) -> dict[str, Any]:
+    """Execute one real attempt plus one round-end overall evaluation per round."""
+    dataset = Path(dataset_root)
+    split_payload = json.loads((dataset / "splits.json").read_text(encoding="utf-8"))
+    metadata = json.loads((dataset / "metadata.json").read_text(encoding="utf-8"))
+    protocol = build_multi_five_round_manifest(
+        split_payload["train"],
+        split_payload["dev"],
+        split_payload["test"],
+        dataset_fingerprint=metadata["fingerprint"],
+    )
+    root = Path(output_root)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "multi_five_protocol.json").write_text(json.dumps(protocol, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    round_reports = []
+    for batch in protocol["rounds"]:
+        attempt = run_outer_attempt(
+            root,
+            round_number=batch["round"],
+            attempt_number=1,
+            dataset_root=dataset_root,
+            harness_version=harness_version,
+            evaluator_version=evaluator_version,
+            blender_bin=blender_bin,
+            workers=workers,
+            timeout_s=timeout_s,
+            vlm_model=vlm_model,
+            markdown_path=markdown_path,
+        )
+        overall = run_outer_overall(
+            root,
+            round_number=batch["round"],
+            dataset_root=dataset_root,
+            harness_version=harness_version,
+            evaluator_version=evaluator_version,
+            blender_bin=blender_bin,
+            workers=workers,
+            timeout_s=timeout_s,
+            vlm_model=vlm_model,
+            markdown_path=markdown_path,
+        )
+        round_reports.append({"round": batch["round"], "attempt": attempt, "overall": overall})
+    result = {"protocol": protocol, "rounds": round_reports, "memory_table": str(Path(markdown_path).resolve())}
+    (root / "multi_five_training_report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["protocol", "attempt", "overall", "six-rounds", "existing-rounds", "full-train", "all"],
+        choices=["protocol", "attempt", "overall", "multi-five-rounds", "six-rounds", "existing-rounds", "full-train", "all"],
         required=True,
     )
-    parser.add_argument("--dataset-root", default="dataset/trajectory-v3-hard")
-    parser.add_argument("--round-root", default="out/training/six-rounds-real-v7")
+    parser.add_argument("--dataset-root", default="dataset/trajectory-v4-multi")
+    parser.add_argument("--round-root", default="out/training/multi-five-rounds-v1")
     parser.add_argument("--full-train-root", default="out/training/full-evaluation-real-v6")
     parser.add_argument("--harness-version", default="h-t2-hard-v4")
     parser.add_argument("--evaluator-version", default="real-v4-shared-evidence-separate-scores")
@@ -860,7 +1005,7 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--vlm-model", choices=["gpt-5.6-luna", "gpt-5.6-terra"], default="gpt-5.6-luna")
-    parser.add_argument("--markdown-path", default="docs/t2blendercodeharness-six-round-training-memory-v7.md")
+    parser.add_argument("--markdown-path", default="docs/t2blendercodeharness-multi-training-memory-v1.md")
     parser.add_argument("--round", dest="round_number", type=int)
     parser.add_argument("--attempt", dest="attempt_number", type=int)
     args = parser.parse_args()
@@ -868,10 +1013,10 @@ def main() -> int:
     all_reports: dict[str, Any] = {}
     split_payload = json.loads((dataset_root / "splits.json").read_text(encoding="utf-8"))
     metadata = json.loads((dataset_root / "metadata.json").read_text(encoding="utf-8"))
-    protocol = build_protocol_manifest(
-        split_payload["train"], split_payload["dev"], split_payload["test"], dataset_fingerprint=metadata["fingerprint"]
+    protocol = build_active_protocol_manifest(
+        split_payload["train"], split_payload["dev"], split_payload["test"], dataset_fingerprint=metadata["fingerprint"], dataset_id=metadata.get("dataset_id")
     )
-    protocol_path = Path(args.round_root) / "six_round_protocol.json"
+    protocol_path = Path(args.round_root) / ("multi_five_protocol.json" if protocol["protocol_version"] == "multi-five-rounds-v1" else "six_round_protocol.json")
     protocol_path.parent.mkdir(parents=True, exist_ok=True)
     protocol_path.write_text(json.dumps(protocol, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if args.mode == "protocol":
@@ -911,17 +1056,30 @@ def main() -> int:
             )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    if args.mode in {"six-rounds", "all"}:
-        all_reports["six_rounds"] = run_six_round_protocol(
-            args.round_root,
-            dataset_root=dataset_root,
-            harness_version=args.harness_version,
-            evaluator_version=args.evaluator_version,
-            blender_bin=args.blender_bin,
-            workers=args.workers,
-            timeout_s=args.timeout_s,
-            vlm_model=args.vlm_model,
-        )
+    if args.mode in {"multi-five-rounds", "six-rounds", "all"}:
+        if protocol["protocol_version"] == "multi-five-rounds-v1":
+            all_reports["multi_five_rounds"] = run_multi_five_round_protocol(
+                args.round_root,
+                dataset_root=dataset_root,
+                harness_version=args.harness_version,
+                evaluator_version=args.evaluator_version,
+                blender_bin=args.blender_bin,
+                workers=args.workers,
+                timeout_s=args.timeout_s,
+                vlm_model=args.vlm_model,
+                markdown_path=args.markdown_path,
+            )
+        else:
+            all_reports["six_rounds"] = run_six_round_protocol(
+                args.round_root,
+                dataset_root=dataset_root,
+                harness_version=args.harness_version,
+                evaluator_version=args.evaluator_version,
+                blender_bin=args.blender_bin,
+                workers=args.workers,
+                timeout_s=args.timeout_s,
+                vlm_model=args.vlm_model,
+            )
     if args.mode == "existing-rounds":
         round_root = Path(args.round_root)
         for round_dir in sorted(round_root.glob("round-*")):
