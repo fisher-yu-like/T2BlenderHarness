@@ -85,8 +85,12 @@ exact prompt
 The Director evaluator is independent from the authored dataset oracle for
 multi-entity runs. It checks evidence, assumptions, stable identity,
 dependencies, missing trajectories, path collisions, camera target coverage,
-and telemetry identity. Interaction evaluation separately checks attach,
-transfer, detach, handoff window, contact, final owner, and final support.
+and telemetry identity. Interaction evaluation checks attach, transfer,
+detach, handoff window, contact, final owner, and final support for a true
+handoff. A lifecycle with no `transfer_event_id` and no `receiver_id` is
+carry-only: it requires attach evidence and may legitimately end on a support
+without being marked as an incomplete handoff. This carry-only rule was
+regression-tested before Round 1 scoring.
 
 ## Visual review branch
 
