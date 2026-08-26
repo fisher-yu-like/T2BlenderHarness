@@ -72,7 +72,6 @@ def evaluate_interactions(
         carry_only = (
             lifecycle.transfer_event_id is None
             and lifecycle.receiver_id is None
-            and lifecycle.final_support_id is None
         )
         if carry_only:
             if attach is None:

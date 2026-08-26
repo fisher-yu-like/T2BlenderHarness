@@ -37,6 +37,22 @@ def test_interaction_evaluator_accepts_independent_carry_without_transfer():
     assert findings == []
 
 
+def test_interaction_evaluator_accepts_carry_ending_on_support_without_transfer():
+    from evaluator.interaction_metrics import evaluate_interactions
+    from videoact.director import DirectorAgent
+
+    result = DirectorAgent().plan(
+        "Alice carries the yellow cube and hands the yellow cube to Bob; Bob pauses, returns the yellow cube to Alice, and Alice places the yellow cube.",
+        scene_id="carry-support-only",
+        duration_s=20.0,
+        fps=24,
+    )
+
+    findings = evaluate_interactions(result.director_plan, result.trajectory_plan)
+
+    assert findings == []
+
+
 def test_interaction_evaluator_flags_incomplete_contact_with_precise_root():
     from evaluator.interaction_metrics import evaluate_interactions
 
