@@ -71,6 +71,7 @@ def prepare_jobs(
         )
         contract = director_result.scene_contract
         plan = director_result.trajectory_plan
+        director_plan_hash = director_result.director_plan_hash
         prompt_hash = hash_prompt(record["prompt"])
         plan_hash = hash_payload(plan.model_dump(mode="json"))
         manifest = RealRunManifest(
@@ -79,6 +80,7 @@ def prepare_jobs(
             split=split,
             prompt_hash=prompt_hash,
             plan_hash=plan_hash,
+            director_plan_hash=director_plan_hash,
             harness_version=harness_version,
             evaluator_version=evaluator_version,
             blender_version="pending-mcp",
@@ -89,6 +91,7 @@ def prepare_jobs(
             fingerprint=fingerprint_real_run(
                 prompt_hash=prompt_hash,
                 plan_hash=plan_hash,
+                director_plan_hash=director_plan_hash,
                 harness_version=harness_version,
                 evaluator_version=evaluator_version,
                 blender_version="pending-mcp",
@@ -103,8 +106,27 @@ def prepare_jobs(
         (run_dir / "camera_plan.json").write_text(json.dumps(plan.camera.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
         write_manifest(manifest, run_dir / "run_manifest.json")
         job_path = run_dir / "blender_job.py"
-        job_path.write_text(compile_real_proxy_job(plan, manifest, run_dir, proxy_spec=record.get("proxy_scene")), encoding="utf-8")
-        jobs.append({"case_id": case_id, "run_dir": str(run_dir), "job_path": str(job_path), "plan_hash": plan_hash})
+        job_path.write_text(
+            compile_real_proxy_job(
+                plan,
+                manifest,
+                run_dir,
+                director_plan=director_result.director_plan,
+                director_trajectories=director_result.director_trajectories,
+                director_camera=director_result.director_camera,
+                proxy_spec=record.get("proxy_scene"),
+            ),
+            encoding="utf-8",
+        )
+        jobs.append(
+            {
+                "case_id": case_id,
+                "run_dir": str(run_dir),
+                "job_path": str(job_path),
+                "plan_hash": plan_hash,
+                "director_plan_hash": director_plan_hash,
+            }
+        )
     index = {"split": split, "harness_version": harness_version, "evaluator_version": evaluator_version, "case_count": len(jobs), "jobs": jobs}
     (output / "job_index.json").write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
     return index

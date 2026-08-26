@@ -20,6 +20,7 @@ class RealRunManifest(BaseModel):
     split: Literal["calibration", "train", "dev", "test"]
     prompt_hash: str
     plan_hash: str
+    director_plan_hash: str | None = None
     harness_version: str
     evaluator_version: str
     blender_version: str
@@ -210,6 +211,25 @@ class RealArtifactGate:
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 failures.append(f"invalid_manifest:{type(exc).__name__}")
 
+        director_plan_path = root / "director_plan.json"
+        if director_plan_path.is_file():
+            hashes["director_plan.json"] = _sha256(director_plan_path)
+            if manifest is not None and manifest.director_plan_hash:
+                try:
+                    director_payload = json.loads(director_plan_path.read_text(encoding="utf-8"))
+                    encoded = json.dumps(
+                        director_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    actual_hash = hashlib.sha256(encoded).hexdigest()
+                    if actual_hash != manifest.director_plan_hash:
+                        failures.append("director_plan_hash_mismatch")
+                except (OSError, ValueError, json.JSONDecodeError):
+                    failures.append("invalid_director_plan")
+        elif manifest is not None and manifest.director_plan_hash:
+            failures.append("missing_artifact:director_plan.json")
+
         readable = 0
         for frame_path in sample_frame_paths(root):
             try:
@@ -243,6 +263,7 @@ def fingerprint_real_run(
     *,
     prompt_hash: str,
     plan_hash: str,
+    director_plan_hash: str | None = None,
     harness_version: str,
     evaluator_version: str,
     blender_version: str,
@@ -251,6 +272,7 @@ def fingerprint_real_run(
     payload = {
         "prompt_hash": prompt_hash,
         "plan_hash": plan_hash,
+        "director_plan_hash": director_plan_hash,
         "harness_version": harness_version,
         "evaluator_version": evaluator_version,
         "blender_version": blender_version,

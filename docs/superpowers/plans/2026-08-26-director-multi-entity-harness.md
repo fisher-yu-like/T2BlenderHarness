@@ -199,11 +199,11 @@ return projector.project(director_plan)
 - Modify: `src/videoact/real_artifacts.py`
 - Create: `tests/test_multi_entity_blender_job.py`
 
-- [ ] Write a failing generated-job test for two actors and two props. Require every stable ID, per-entity animation, transfer constraints, multi-target camera data, current-owner telemetry, visibility, and interaction state.
-- [ ] Change entity kind/role lookup to DirectorPlan or proxy specification; never infer character kind from `entity_id == "character"`.
-- [ ] Animate every trajectory. Compile transfer as a validated giver detach plus receiver attach in the same handoff window.
-- [ ] Extend telemetry and artifact fingerprinting with the DirectorPlan hash.
-- [ ] Run multi-job, real-job, and artifact tests; expect pass.
+- [x] Write a failing generated-job test for two actors and two props. Require every stable ID, per-entity animation, transfer constraints, multi-target camera data, current-owner telemetry, visibility, and interaction state.
+- [x] Change entity kind/role lookup to DirectorPlan or proxy specification; never infer character kind from `entity_id == "character"`.
+- [x] Animate every trajectory. Compile transfer as a validated giver detach plus receiver attach in the same handoff window.
+- [x] Extend telemetry and artifact fingerprinting with the DirectorPlan hash.
+- [x] Run multi-job, real-job, and artifact tests; expect pass.
 - [ ] Commit with `git commit -m "feat: compile and audit multi-entity Blender jobs"`.
 
 ### Task 10: Add Director and interaction evaluator layers

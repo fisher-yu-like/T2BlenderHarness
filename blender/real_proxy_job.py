@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from videoact.contracts import RunManifest, TrajectoryPlan
+from videoact.contracts import CameraPlan, RunManifest, TrajectoryPlan
+from videoact.director_contracts import DirectorPlan
+from videoact.director_trajectory import DirectorTrajectories
 
 
 def choose_render_engine(preferred: str, available: list[str] | tuple[str, ...]) -> str:
@@ -24,34 +26,71 @@ def compile_real_proxy_job(
     *,
     sample_frames: tuple[int, ...] = (1, 12, 24),
     proxy_spec: dict | None = None,
+    director_plan: DirectorPlan | None = None,
+    director_trajectories: DirectorTrajectories | None = None,
+    director_camera: CameraPlan | None = None,
 ) -> str:
     output = Path(output_dir).resolve()
     plan_json = json.dumps(plan.model_dump(mode="json"), sort_keys=True)
     manifest_json = json.dumps(manifest.model_dump(mode="json"), sort_keys=True)
     proxy_json = json.dumps(proxy_spec or {}, sort_keys=True)
+    director_plan_json = json.dumps(
+        director_plan.model_dump(mode="json") if director_plan is not None else {},
+        sort_keys=True,
+    )
+    director_trajectories_json = json.dumps(
+        director_trajectories.model_dump(mode="json") if director_trajectories is not None else {},
+        sort_keys=True,
+    )
+    director_camera_json = json.dumps(
+        director_camera.model_dump(mode="json") if director_camera is not None else {},
+        sort_keys=True,
+    )
     samples_json = json.dumps(list(sample_frames))
-    # The authored proxy scene is authoritative for geometry semantics.  Plan
-    # entities are added only as a compatibility fallback so this renderer
-    # patch does not rewrite the frozen SceneContract/TrajectoryPlan.
+    # The authored proxy scene and DirectorPlan are authoritative for geometry
+    # semantics. Legacy TrajectoryPlan entities are only a compatibility
+    # fallback; no stable ID is interpreted as a character by name.
     proxy_entities = []
     authored_by_id = {
-        str(entity.get("id")): {"id": str(entity.get("id")), "kind": str(entity.get("kind", "prop"))}
+        str(entity.get("id")): {
+            "id": str(entity.get("id")),
+            "kind": str(entity.get("kind", "prop")),
+            "role": str(entity.get("role", "target_object")),
+            **{
+                key: value
+                for key, value in entity.items()
+                if key not in {"id", "kind", "role"}
+            },
+        }
         for entity in (proxy_spec or {}).get("entities", [])
         if entity.get("id")
     }
     for entity_id, entity in authored_by_id.items():
         proxy_entities.append(entity)
+    director_kind = {
+        "actor": "character",
+        "prop": "prop",
+        "support": "support",
+        "occluder": "occluder",
+        "camera": "camera",
+    }
+    if director_plan is not None:
+        for entity in director_plan.entities:
+            if entity.id not in authored_by_id:
+                proxy_entities.append(
+                    {
+                        "id": entity.id,
+                        "kind": director_kind.get(entity.kind, entity.kind),
+                        "role": entity.role,
+                        "label": entity.label,
+                    }
+                )
     for entity_id in plan.entities:
-        if entity_id not in authored_by_id:
+        if entity_id not in authored_by_id and not any(item["id"] == entity_id for item in proxy_entities):
             proxy_entities.append({
                 "id": entity_id,
-                "kind": (
-                    "character"
-                    if entity_id == "character"
-                    else "support"
-                    if entity_id in {"table", "support", "surface", "platform", "drop_zone"}
-                    else "prop"
-                ),
+                "kind": "support" if entity_id in {"table", "support", "surface", "platform", "drop_zone", "support_surface"} else "prop",
+                "role": "environment" if entity_id in {"table", "support", "surface", "platform", "drop_zone", "support_surface"} else "target_object",
             })
     return f'''"""Generated real Blender MCP proxy job. Source is hash-bound by run_manifest.json."""
 from pathlib import Path
@@ -67,6 +106,9 @@ FRAMES_DIR = OUTPUT_DIR / "frames"
 PLAN = json.loads({plan_json!r})
 INITIAL_MANIFEST = json.loads({manifest_json!r})
 PROXY_SPEC = json.loads({proxy_json!r})
+DIRECTOR_PLAN = json.loads({director_plan_json!r})
+DIRECTOR_TRAJECTORIES = json.loads({director_trajectories_json!r})
+DIRECTOR_CAMERA = json.loads({director_camera_json!r})
 SAMPLE_FRAMES = {samples_json}
 
 
@@ -290,22 +332,36 @@ def add_entity(entity_id, entity_spec, material):
         return detailed_support(entity_id, kind, material, drop=entity_id == "drop_zone")
     elif kind == "occluder":
         return detailed_occluder(entity_id, kind, material)
-    elif entity_id == "opening":
+    elif kind == "opening":
         return detailed_opening(entity_id, kind, material)
     return detailed_prop(entity_id, kind, material)
 
 
-def initial_location(entity_id, kind):
+def initial_location(entity_id, entity_spec):
+    director_entity = DIRECTOR_TRAJECTORIES.get("entities", {{}}).get(entity_id, {{}})
+    states = director_entity.get("states", [])
+    if states:
+        return tuple(states[0]["position"])
+    kind = entity_spec.get("kind", "prop")
     layout = PROXY_SPEC.get("layout", {{}})
     support = layout.get("support_position", (2.0, 0.0, 0.0))
     if kind == "character":
-        if entity_id == "character":
-            return tuple(layout.get("character_start_position", (-3.0, -2.0, 0.0)))
-        return (float(support[0]) + 1.8, float(support[1]) + 1.8, 0.0)
-    if entity_id == "table":
+        actor_positions = layout.get("actor_start_positions", {{}})
+        if entity_id in actor_positions:
+            return tuple(actor_positions[entity_id])
+        actor_index = sum(
+            1 for entity in PROXY_SPEC.get("entities", [])
+            if entity.get("kind") == "character" and entity.get("id") <= entity_id
+        ) - 1
+        return (
+            float(support[0]) + 1.8,
+            float(support[1]) + 1.8 + actor_index * 1.8,
+            0.0,
+        )
+    if entity_spec.get("role") == "environment" or kind == "support":
+        if entity_spec.get("id") == "drop_zone":
+            return tuple(layout.get("drop_zone_position", (0.0, 2.0, 0.0)))
         return tuple(layout.get("support_position", (0.0, 0.0, 0.0)))
-    if entity_id == "drop_zone":
-        return tuple(layout.get("drop_zone_position", (0.0, 2.0, 0.0)))
     if kind == "occluder":
         support = layout.get("support_position", (0.0, 0.0, 0.0))
         return (float(support[0]) + 0.5, float(support[1]) + 0.5, 1.0)
@@ -372,11 +428,13 @@ def animate_entities(objects):
 
 
 def animate_camera(camera, objects):
-    shots = PLAN["camera"]["shots"]
+    shots = (DIRECTOR_CAMERA or PLAN["camera"]).get("shots", [])
     for shot in shots:
-        target_id = (shot.get("target_ids") or ["character"])[0]
-        target = objects.get(target_id, objects["character"])
-        target_point = tuple(target.location)
+        target_ids = [target_id for target_id in shot.get("target_ids", []) if target_id in objects]
+        if not target_ids:
+            continue
+        target_points = [Vector(objects[target_id].location) for target_id in target_ids]
+        target_point = tuple(sum(point[index] for point in target_points) / len(target_points) for index in range(3))
         trajectory_type = shot.get("trajectory_type", "hold")
         if trajectory_type == "dolly" or shot["shot_id"].endswith("closeup"):
             start_location, end_location = (7.0, -8.0, 5.0), (3.5, -4.0, 2.8)
@@ -397,12 +455,56 @@ def animate_camera(camera, objects):
         camera.data.keyframe_insert(data_path="lens", frame=int(shot["end_frame"]))
 
 
+def validate_transfer(prop_id, interaction, event_by_id, attachment_events):
+    transfer_event = event_by_id.get(interaction.get("transfer_event_id"))
+    if transfer_event is None:
+        return {{"valid": False, "reason": "missing_transfer_event"}}
+    fps = int(INITIAL_MANIFEST["fps"])
+    window_start = max(1, round(float(transfer_event["start"]) * fps) + 1)
+    window_end = max(window_start, round(float(transfer_event["end"]) * fps) + 1)
+    giver_id = interaction.get("giver_id")
+    receiver_id = interaction.get("receiver_id")
+    in_window = [
+        item for item in attachment_events
+        if item.get("subject_id") == prop_id and window_start <= int(item.get("frame", 0)) <= window_end
+    ]
+    transfer = next((item for item in in_window if item.get("action") == "transfer"), None)
+    # The single transfer marker is compiled as a validated atomic pair: the
+    # giver releases and the receiver acquires on the same handoff frame.
+    return {{
+        "valid": bool(transfer and transfer.get("object_id") == receiver_id and giver_id and receiver_id),
+        "window": [window_start, window_end],
+        "giver_detach": {{"actor_id": giver_id, "frame": window_start}},
+        "receiver_attach": {{"actor_id": receiver_id, "frame": window_start}},
+        "observed_attachment": transfer,
+    }}
+
+
 def write_telemetry(objects, camera, manifest):
+    event_by_id = {{event["id"]: event for event in DIRECTOR_PLAN.get("events", [])}}
+    interaction_state = {{}}
+    transfer_constraints = []
+    for interaction in DIRECTOR_PLAN.get("interactions", []):
+        prop_id = interaction["prop_id"]
+        attachment_events = PLAN["entities"].get(prop_id, {{}}).get("attachment_events", [])
+        transfer_state = validate_transfer(prop_id, interaction, event_by_id, attachment_events)
+        interaction_state[interaction["id"]] = {{
+            "prop_id": prop_id,
+            "giver_id": interaction.get("giver_id"),
+            "receiver_id": interaction.get("receiver_id"),
+            "final_owner_id": interaction.get("final_owner_id"),
+            "final_support_id": interaction.get("final_support_id"),
+            "transfer": transfer_state,
+        }}
+        if interaction.get("transfer_event_id"):
+            transfer_constraints.append(transfer_state)
+    camera_payload = DIRECTOR_CAMERA or PLAN["camera"]
     telemetry = {{
         "blender_version": bpy.app.version_string,
         "frame_start": manifest["frame_start"],
         "frame_end": manifest["frame_end"],
         "fps": manifest["fps"],
+        "director_plan_hash": manifest.get("director_plan_hash"),
         "objects": {{
             entity_id: {{
                 "kind": obj.get("entity_kind", "unknown"),
@@ -418,8 +520,28 @@ def write_telemetry(objects, camera, manifest):
             "path_shape": PROXY_SPEC.get("layout", {{}}).get("path_shape"),
         }},
         "camera_shots": [
-            {{"shot_id": shot["shot_id"], "trajectory_type": shot.get("trajectory_type", "hold")}}
-            for shot in PLAN["camera"].get("shots", [])
+            {{
+                "shot_id": shot["shot_id"],
+                "trajectory_type": shot.get("trajectory_type", "hold"),
+                "target_ids": shot.get("target_ids", []),
+                "required_event_ids": shot.get("required_event_ids", []),
+                "visibility": shot.get("visibility_predicates", {{}}),
+                "max_occlusion": shot.get("max_occlusion", 1.0),
+            }}
+            for shot in camera_payload.get("shots", [])
+        ],
+        "current_owner_by_event": DIRECTOR_TRAJECTORIES.get("current_owner_by_event", {{}}),
+        "final_support_by_prop": DIRECTOR_TRAJECTORIES.get("final_support_by_prop", {{}}),
+        "interaction_state": interaction_state,
+        "transfer_constraints": transfer_constraints,
+        "visibility": [
+            {{
+                "shot_id": shot["shot_id"],
+                "target_ids": shot.get("target_ids", []),
+                "predicates": shot.get("visibility_predicates", {{}}),
+                "max_occlusion": shot.get("max_occlusion", 1.0),
+            }}
+            for shot in camera_payload.get("shots", [])
         ],
         "event_observability": PLAN.get("event_observability", []),
         "render_settings": manifest["render_settings"],
@@ -446,6 +568,7 @@ def update_manifest(manifest):
     manifest["fingerprint"] = canonical_hash({{
         "prompt_hash": manifest["prompt_hash"],
         "plan_hash": manifest["plan_hash"],
+        "director_plan_hash": manifest.get("director_plan_hash"),
         "harness_version": manifest["harness_version"],
         "evaluator_version": manifest["evaluator_version"],
         "blender_version": manifest["blender_version"],
@@ -464,16 +587,26 @@ objects = {{
     entity["id"]: add_entity(entity["id"], entity, material)
     for entity in {json.dumps(proxy_entities, sort_keys=True)}
 }}
+entity_specs = {{
+    entity["id"]: entity
+    for entity in {json.dumps(proxy_entities, sort_keys=True)}
+}}
 for entity_id, obj in objects.items():
-    entity_kind = obj.get("entity_kind", "prop")
-    obj.location = initial_location(entity_id, entity_kind)
-    if entity_id == "table":
+    entity_spec = entity_specs[entity_id]
+    entity_kind = entity_spec.get("kind", obj.get("entity_kind", "prop"))
+    obj.location = initial_location(entity_id, entity_spec)
+    if entity_spec.get("role") == "environment" and entity_kind == "support":
         obj.scale = tuple(PROXY_SPEC.get("layout", {{}}).get("support_scale", obj.scale))
     elif entity_kind == "prop":
         obj.scale = tuple(PROXY_SPEC.get("layout", {{}}).get("object_scale", obj.scale))
 add_light(material)
 camera = add_camera()
 configure_render(scene, INITIAL_MANIFEST)
+if DIRECTOR_PLAN:
+    (OUTPUT_DIR / "director_plan.json").write_text(
+        json.dumps(DIRECTOR_PLAN, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 animate_entities(objects)
 animate_camera(camera, objects)
 write_telemetry(objects, camera, INITIAL_MANIFEST)

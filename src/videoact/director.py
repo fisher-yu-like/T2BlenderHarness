@@ -15,10 +15,13 @@ from .director_projection import DirectorProjection
 from .director_prompt import DeterministicPromptInterpreter
 from .director_schedule import EventScheduler
 from .director_trajectory import MultiEntityTrajectoryComposer
+from .director_trajectory import DirectorTrajectories
 
 
 class DirectorPlanningResult(ContractModel):
     director_plan: DirectorPlan
+    director_trajectories: DirectorTrajectories
+    director_camera: CameraPlan
     scene_contract: SceneContract
     trajectory_plan: TrajectoryPlan
     camera_plan: CameraPlan
@@ -108,9 +111,15 @@ class DirectorAgent:
             trajectories=trajectories,
             camera=camera,
         )
-        scene_contract, trajectory_plan, camera_plan = self.projector.project(director_plan)
+        scene_contract, trajectory_plan, camera_plan = self.projector.project(
+            director_plan,
+            director_trajectories=trajectories,
+            director_camera=camera,
+        )
         return DirectorPlanningResult(
             director_plan=director_plan,
+            director_trajectories=trajectories,
+            director_camera=camera,
             scene_contract=scene_contract,
             trajectory_plan=trajectory_plan,
             camera_plan=camera_plan,

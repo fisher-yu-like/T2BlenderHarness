@@ -79,7 +79,9 @@ class MultiEntityTrajectoryComposer:
                 event_frame = frame(event.end)
                 if event.action == "carry":
                     owner = event.participant_ids[0]
-                    states.append(EntityState(frame=event_frame, position=self._hand_position(lanes[owner])))
+                    hand_position = self._hand_position(lanes[owner])
+                    states.append(EntityState(frame=frame(event.start), position=hand_position))
+                    states.append(EntityState(frame=event_frame, position=hand_position))
                     attachments.append(
                         AttachmentEvent(
                             frame=frame(event.start),
