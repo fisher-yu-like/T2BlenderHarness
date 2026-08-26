@@ -210,6 +210,88 @@ def test_training_memory_markdown_contains_required_natural_language_columns(tmp
     ) in content
 
 
+def test_training_memory_markdown_escapes_pipes_and_newlines(tmp_path: Path):
+    from scripts.train_real_harness import write_training_memory_markdown
+
+    destination = tmp_path / "training.md"
+    write_training_memory_markdown(
+        destination,
+        [
+            {
+                "prompt": "carry | cup\nto marker",
+                "detected_problem": "camera | intent\nis missing",
+                "fix_location": "src/videoact/director|camera.py\nmodule",
+                "fix_method": "add | handoff\ntwo-shot",
+                "handling": "accepted | retain\npatch",
+            }
+        ],
+    )
+
+    content = destination.read_text(encoding="utf-8")
+    assert "carry \\| cup to marker" in content
+    assert "camera \\| intent is missing" in content
+    assert "src/videoact/director\\|camera.py module: add \\| handoff two-shot" in content
+    assert "accepted \\| retain patch" in content
+
+
+def test_training_memory_markdown_renders_missing_and_none_scores_as_unavailable(tmp_path: Path):
+    from scripts.train_real_harness import write_training_memory_markdown
+
+    destination = tmp_path / "training.md"
+    write_training_memory_markdown(
+        destination,
+        [{"director_plan_score": None, "realism_score": None}],
+    )
+
+    row = destination.read_text(encoding="utf-8").splitlines()[-1]
+    cells = row[2:-2].split(" | ")
+    assert cells[6:9] == ["unavailable", "unavailable", "unavailable"]
+    assert "0" not in cells[6:9]
+
+
+def test_training_memory_markdown_uses_deterministic_legacy_task_score_precedence(tmp_path: Path):
+    from scripts.train_real_harness import write_training_memory_markdown
+
+    destination = tmp_path / "training.md"
+    write_training_memory_markdown(
+        destination,
+        [
+            {"case_id": "explicit", "task_score": 91, "video_score": 82, "score": 73},
+            {"case_id": "video", "task_final_score": 99, "video_score": 82, "score": 73},
+            {"case_id": "score", "score": 73},
+        ],
+    )
+
+    data_rows = destination.read_text(encoding="utf-8").splitlines()[-3:]
+    cells_by_case = {cells[3]: cells for cells in (row[2:-2].split(" | ") for row in data_rows)}
+    assert cells_by_case["explicit"][6:9] == ["unavailable", "91", "unavailable"]
+    assert cells_by_case["video"][6:9] == ["unavailable", "82", "unavailable"]
+    assert cells_by_case["score"][6:9] == ["unavailable", "73", "unavailable"]
+
+
+def test_training_memory_markdown_composes_review_and_prefers_explicit_review(tmp_path: Path):
+    from scripts.train_real_harness import write_training_memory_markdown
+
+    destination = tmp_path / "training.md"
+    write_training_memory_markdown(
+        destination,
+        [
+            {"case_id": "composed", "review_source": "gpt-5.6-Luna", "review_confidence": 0.83},
+            {
+                "case_id": "explicit",
+                "review": "manual review confidence=0.91",
+                "review_source": "gpt-5.6-Luna",
+                "review_confidence": 0.83,
+            },
+        ],
+    )
+
+    data_rows = destination.read_text(encoding="utf-8").splitlines()[-2:]
+    cells_by_case = {cells[3]: cells for cells in (row[2:-2].split(" | ") for row in data_rows)}
+    assert cells_by_case["composed"][9] == "gpt-5.6-Luna confidence=0.83"
+    assert cells_by_case["explicit"][9] == "manual review confidence=0.91"
+
+
 def test_anti_overfit_gate_requires_train_gain_and_paired_and_overall_dev_non_regression():
     from scripts.train_real_harness import anti_overfit_gate
 
