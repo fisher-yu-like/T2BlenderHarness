@@ -1,0 +1,170 @@
+"""Assemble real proxy videos and run artifact plus deterministic evaluation."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from evaluator.deterministic import DeterministicEvaluator  # noqa: E402
+from evaluator.independent_oracle import evaluate_independent_oracle  # noqa: E402
+from evaluator.findings import deduplicate_findings  # noqa: E402
+from evaluator.realism import REALISM_EVALUATOR_VERSION  # noqa: E402
+from videoact.contracts import SceneContract, TrajectoryPlan  # noqa: E402
+from videoact.real_artifacts import RealArtifactGate  # noqa: E402
+from videoact.real_pipeline import RealRunStateMachine  # noqa: E402
+from videoact.real_video import assemble_mp4_from_pngs  # noqa: E402
+from scripts.evaluate_proxy_realism import audit_run  # noqa: E402
+
+
+def discover_run_dirs(root: str | Path) -> list[Path]:
+    """Find prepared real runs without assuming a synthetic ``case-*`` prefix."""
+    directory = Path(root)
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_dir() and (path / "run_manifest.json").is_file()
+    )
+
+
+def evaluate_real_run(
+    run_dir: str | Path,
+    *,
+    record: dict[str, Any] | None = None,
+    blender_bin: str | Path | None = None,
+) -> dict[str, Any]:
+    root = Path(run_dir)
+    manifest = json.loads((root / "run_manifest.json").read_text(encoding="utf-8"))
+    contract = SceneContract.model_validate(json.loads((root / "scene_contract.json").read_text(encoding="utf-8")))
+    plan = TrajectoryPlan.model_validate(json.loads((root / "trajectory.json").read_text(encoding="utf-8")))
+    telemetry = json.loads((root / "telemetry.json").read_text(encoding="utf-8"))
+    machine = RealRunStateMachine(root, case_id=manifest["case_id"])
+    if machine.state == "executing":
+        machine.record_mcp_response({"status": "success", "blender_version": telemetry.get("blender_version")})
+
+    animation_frames = sorted((root / "frames" / "animation").glob("frame_*.png"))
+    if not (root / "proxy.mp4").exists() and animation_frames:
+        assemble_mp4_from_pngs(animation_frames, root / "proxy.mp4", fps=manifest["fps"])
+
+    artifacts = machine.validate_artifacts(RealArtifactGate())
+    report = DeterministicEvaluator().evaluate_real(contract, plan, telemetry, artifacts)
+    if record is not None:
+        oracle_findings = evaluate_independent_oracle(record, contract, plan)
+        all_findings = deduplicate_findings([*report.findings, *oracle_findings])
+        report = report.model_copy(
+            update={
+                "evaluator_version": "real-v3-declarative-independent-oracle",
+                "terminal_status": "fail" if any(finding.severity == "hard" for finding in all_findings) else "pass",
+                "hard_gate_failed": any(finding.severity == "hard" for finding in all_findings),
+                "score": DeterministicEvaluator._score_findings(all_findings),
+                "findings": all_findings,
+                "metrics": {
+                    **report.metrics,
+                    "independent_oracle_finding_count": float(len(oracle_findings)),
+                    "finding_count": float(len(all_findings)),
+                    "hard_count": float(sum(finding.severity == "hard" for finding in all_findings)),
+                    "error_count": float(sum(finding.severity == "error" for finding in all_findings)),
+                    "warning_count": float(sum(finding.severity == "warning" for finding in all_findings)),
+                    "unique_root_cause_count": float(len(all_findings)),
+                },
+            }
+        )
+    (root / "deterministic_report.json").write_text(
+        json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8"
+    )
+    # Geometry and sampled-frame evidence share this real-run pass.  It is
+    # deliberately separate from the task score and never calls a VLM.
+    realism = {
+        "evaluator_version": REALISM_EVALUATOR_VERSION,
+        "status": "unavailable",
+        "reason": "proxy.blend or configured Blender binary is unavailable",
+        "score": None,
+        "score_kind": "artifact_only_proxy_unavailable",
+    }
+    blender_path = Path(blender_bin) if blender_bin else None
+    if (root / "proxy.blend").is_file() and blender_path and blender_path.is_file():
+        try:
+            audit = audit_run(root, blender_bin=str(blender_path))
+            realism = audit.get("realism") or realism
+        except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            realism["reason"] = f"combined realism audit failed: {type(exc).__name__}: {exc}"
+    (root / "combined_evaluator.json").write_text(
+        json.dumps(
+            {
+                "evaluator_version": "real-v4-shared-evidence-separate-scores",
+                "deterministic_report": str((root / "deterministic_report.json").resolve()),
+                "geometry_report": str((root / "geometry_report.json").resolve()) if (root / "geometry_report.json").is_file() else None,
+                "visual_evidence": str((root / "visual_evidence.json").resolve()) if (root / "visual_evidence.json").is_file() else None,
+                "realism_report": str((root / "realism_report.json").resolve()) if (root / "realism_report.json").is_file() else None,
+                "vlm_policy": "one shared VLM call only after artifact, deterministic, geometry, and MP4 gates",
+                "scores_are_added": False,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    if report.terminal_status == "pass" and machine.state == "artifact_valid":
+        machine.transition("evaluated", {"score": report.score})
+    elif report.terminal_status == "fail" and machine.state not in {"failed", "evaluated"}:
+        machine.transition("failed", {"findings": [finding.failure_id for finding in report.findings]})
+    return {
+        "case_id": manifest["case_id"],
+        "status": report.terminal_status,
+        "score": report.score,
+        "state": machine.state,
+        "artifact_status": artifacts.artifact_status,
+        "hard_failures": artifacts.hard_failures,
+        "findings": [finding.failure_id for finding in report.findings],
+        "finding_details": [finding.model_dump(mode="json") for finding in report.findings],
+        "realism": realism,
+    }
+
+
+def evaluate_real_split(
+    root: str | Path,
+    dataset_root: str | Path | None = None,
+    *,
+    blender_bin: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    if dataset_root is not None:
+        records = {
+            record["case_id"]: record
+            for record in (
+                json.loads(line)
+                for line in (Path(dataset_root) / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+        }
+    return [
+        evaluate_real_run(
+            path,
+            record=records.get(json.loads((path / "run_manifest.json").read_text(encoding="utf-8")).get("case_id")),
+            blender_bin=blender_bin,
+        )
+        for path in discover_run_dirs(root)
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-root", required=True)
+    parser.add_argument("--dataset-root", default="dataset/trajectory-v3-hard")
+    args = parser.parse_args()
+    print(json.dumps(evaluate_real_split(args.run_root, args.dataset_root), indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

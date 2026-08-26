@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://text-to-blender.local/schemas/scene-contract.schema.json",
+  "title": "SceneContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scene_id", "duration_s", "fps", "entities", "events", "relations", "must_show", "physics_constraints", "camera_constraints"],
+  "properties": {
+    "scene_id": {"type": "string", "minLength": 1},
+    "duration_s": {"type": "number", "exclusiveMinimum": 0},
+    "fps": {"type": "integer", "exclusiveMinimum": 0},
+    "entities": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/entity"}
+    },
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/event"}
+    },
+    "relations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/relation"}
+    },
+    "must_show": {"type": "array", "items": {"type": "string"}},
+    "physics_constraints": {"type": "array", "items": {"type": "string"}},
+    "camera_constraints": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "role"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "start", "end", "description", "target_ids"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "start": {"type": "number", "minimum": 0},
+        "end": {"type": "number", "minimum": 0},
+        "description": {"type": "string"},
+        "target_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "subject", "object"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "subject": {"type": "string", "minLength": 1},
+        "object": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "cases": 120,
+  "dataset_id": "trajectory-v3-single",
+  "excluded_by_reason": {
+    "multiple_objects": 10,
+    "multiple_people": 10
+  },
+  "excluded_case_count": 20,
+  "families": 12,
+  "fingerprint": "b86b25c3d4b94b2c12ec56a881acd05ffd0973df85f9b4297db4cbc15c1978a6",
+  "schema_version": "trajectory-dataset-v3-single",
+  "selection_policy": "exactly one character entity and one prop entity in proxy_scene.entities",
+  "source_dataset": "dataset/trajectory-v3-hard",
+  "splits": {
+    "dev": 50,
+    "test": 20,
+    "train": 50
+  },
+  "test_policy": "frozen test remains single-character/single-prop and is never used for patch selection"
+}

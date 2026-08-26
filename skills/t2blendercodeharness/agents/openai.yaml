@@ -1,0 +1,4 @@
+interface:
+  display_name: "T2Blendercodeharness"
+  short_description: "Run and evolve the T2Blendercodeharness proxy pipeline"
+  default_prompt: "Use $t2blendercodeharness to evaluate this text-to-Blender scene through the safe proxy pipeline."

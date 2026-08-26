@@ -1,0 +1,16 @@
+{
+  "cases": 140,
+  "dataset_id": "trajectory-v3-hard",
+  "families": 14,
+  "fingerprint": "2ed28907457420530dc0d276098ddda33322ecd6403d74e33721dad795706978",
+  "oracle_policy": "independent_expectations_not_derived_from_runtime_plan",
+  "oracle_repair": "hard-03 labels repaired from literal prompt: red_cup + blue_cube",
+  "proxy_policy": "white_material_geometry_and_artifact_contract_per_case",
+  "schema_version": "trajectory-dataset-v3-hard",
+  "split_policy": "template_family_holdout_compositional",
+  "splits": {
+    "dev": 60,
+    "test": 20,
+    "train": 60
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "dataset_id": "complex-realism-v1",
+  "purpose": "Frozen no-Harness-change probe for story complexity, multi-actor choreography, and geometric realism.",
+  "case_count": 8,
+  "render_policy": {
+    "resolution": [
+      512,
+      512
+    ],
+    "samples": 64,
+    "blender_binary": "D:/blender/blender.exe"
+  },
+  "geometry_policy": "detail_required=true; primitive stand-ins are hard failures; minimum 256 vertices and 128 faces per required mesh."
+}

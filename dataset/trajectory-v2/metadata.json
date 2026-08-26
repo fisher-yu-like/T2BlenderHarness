@@ -1,0 +1,12 @@
+{
+  "cases": 80,
+  "dataset_id": "trajectory-v2",
+  "families": 10,
+  "fingerprint": "0c4ea75a6823b60ef22dcf1b5f75db6595c1baf951068140b8ef97ec8876800a",
+  "schema_version": "trajectory-dataset-v2",
+  "splits": {
+    "dev": 20,
+    "test": 10,
+    "train": 50
+  }
+}

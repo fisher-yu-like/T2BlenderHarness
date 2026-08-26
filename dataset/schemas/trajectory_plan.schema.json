@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://text-to-blender.local/schemas/trajectory-plan.schema.json",
+  "title": "TrajectoryPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timebase", "entities", "camera", "event_observability", "validation_intents"],
+  "properties": {
+    "timebase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fps", "frame_start", "frame_end"],
+      "properties": {
+        "fps": {"type": "integer", "exclusiveMinimum": 0},
+        "frame_start": {"type": "integer", "minimum": 1},
+        "frame_end": {"type": "integer", "minimum": 1}
+      }
+    },
+    "entities": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/entityTrajectory"}
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shots"],
+      "properties": {"shots": {"type": "array", "items": {"$ref": "#/$defs/shot"}}}
+    },
+    "event_observability": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/observability"}
+    },
+    "validation_intents": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "entityTrajectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["states", "motion_primitives", "attachment_events"],
+      "properties": {
+        "states": {"type": "array", "items": {"type": "object"}},
+        "motion_primitives": {"type": "array", "items": {"type": "object"}},
+        "attachment_events": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "shot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shot_id", "start_frame", "end_frame", "target_ids", "intent", "lens_mm", "distance_range", "required_event_ids", "trajectory_type"],
+      "properties": {
+        "shot_id": {"type": "string", "minLength": 1},
+        "start_frame": {"type": "integer", "minimum": 1},
+        "end_frame": {"type": "integer", "minimum": 1},
+        "target_ids": {"type": "array", "items": {"type": "string"}},
+        "intent": {"type": "string", "minLength": 1},
+        "lens_mm": {"type": "number", "exclusiveMinimum": 0},
+        "distance_range": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "minItems": 2, "maxItems": 2},
+        "required_event_ids": {"type": "array", "items": {"type": "string"}},
+        "trajectory_type": {"enum": ["hold", "follow", "orbit", "dolly"]}
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "covered_by_shots", "target_visible_predicate"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "covered_by_shots": {"type": "array", "items": {"type": "string"}},
+        "target_visible_predicate": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

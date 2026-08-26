@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://text-to-blender.local/schemas/run-manifest.schema.json",
+  "title": "RunManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "scene_id", "prompt_hash", "harness_version", "evaluator_version", "plan_hash", "backend", "frame_start", "frame_end", "artifacts"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1},
+    "scene_id": {"type": "string", "minLength": 1},
+    "prompt_hash": {"type": "string", "minLength": 1},
+    "harness_version": {"type": "string", "minLength": 1},
+    "evaluator_version": {"type": "string", "minLength": 1},
+    "plan_hash": {"type": "string", "minLength": 1},
+    "backend": {"enum": ["fake", "cli", "mcp"]},
+    "blender_version": {"type": ["string", "null"]},
+    "frame_start": {"type": "integer", "minimum": 1},
+    "frame_end": {"type": "integer", "minimum": 1},
+    "artifacts": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

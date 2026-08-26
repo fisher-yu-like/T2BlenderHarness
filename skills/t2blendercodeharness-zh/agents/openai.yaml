@@ -1,0 +1,4 @@
+interface:
+  display_name: "T2Blendercodeharness 中文版"
+  short_description: "用中文运行和进化 Text-to-Blender 轨迹 Harness"
+  default_prompt: "使用 $t2blendercodeharness-zh，将复杂 prompt 经过 contract、轨迹、相机、Blender proxy 和 evaluator 流程。"

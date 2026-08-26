@@ -1,0 +1,4 @@
+interface:
+  display_name: "T2Blendercodeharness Training"
+  short_description: "Run real Blender video harness training and evaluation"
+  default_prompt: "Use $t2blendercodeharness-training to run five real Blender rounds over the single-character/single-prop phase-1 dataset, then produce the Markdown memory table."

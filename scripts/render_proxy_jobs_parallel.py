@@ -1,0 +1,243 @@
+"""Render immutable Blender proxy jobs in parallel with Blender CLI.
+
+Each case has an isolated working directory.  The script never merges cases,
+so one failed render cannot overwrite another case's artifacts.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from videoact.real_pipeline import RealRunStateMachine  # noqa: E402
+from videoact.real_artifacts import probe_mp4  # noqa: E402
+from videoact.real_video import assemble_mp4_from_pngs  # noqa: E402
+
+
+def build_blender_command(job_dir: str | Path, blender_bin: str) -> list[str]:
+    root = Path(job_dir).resolve()
+    return [blender_bin, "-b", "--python", str((root / "blender_job.py").resolve())]
+
+
+def classify_render_status(return_code: int, render_artifacts_ready: bool) -> str:
+    return "success" if return_code == 0 and render_artifacts_ready else "failed"
+
+
+def mark_render_state(job_dir: str | Path, *, return_code: int, blender_version: str | None = None) -> None:
+    """Persist the CLI outcome in the same state machine used by real evaluation."""
+    root = Path(job_dir)
+    machine = RealRunStateMachine(root, case_id=root.name)
+    if machine.state == "prepared":
+        machine.transition("executing", {"backend": "blender-cli"})
+    response = {
+        "status": "success" if return_code == 0 else "failed",
+        "return_code": return_code,
+        "backend": "blender-cli",
+    }
+    if blender_version:
+        response["blender_version"] = blender_version
+    machine.record_mcp_response(response)
+
+
+def _clear_render_outputs(job_dir: Path) -> None:
+    """Clear only generated render outputs before a retry; keep immutable inputs."""
+    for relative in ("proxy.blend", "proxy.mp4", "telemetry.json"):
+        path = job_dir / relative
+        if path.is_file():
+            path.unlink()
+    frames_dir = job_dir / "frames"
+    if frames_dir.is_dir():
+        shutil.rmtree(frames_dir)
+
+
+def _render_artifacts_ready(job_dir: Path) -> bool:
+    required = (
+        job_dir / "proxy.blend",
+        job_dir / "telemetry.json",
+        job_dir / "frames" / "index.json",
+    )
+    animation_frames = sorted((job_dir / "frames" / "animation").glob("frame_*.png"))
+    return all(path.is_file() and path.stat().st_size > 0 for path in required) and bool(animation_frames)
+
+
+def _assemble_and_probe_video(job_dir: Path) -> dict[str, Any]:
+    animation_frames = sorted((job_dir / "frames" / "animation").glob("frame_*.png"))
+    if animation_frames and not (job_dir / "proxy.mp4").is_file():
+        try:
+            fps = 24
+            manifest_path = job_dir / "run_manifest.json"
+            if manifest_path.is_file():
+                try:
+                    fps = int(json.loads(manifest_path.read_text(encoding="utf-8")).get("fps") or fps)
+                except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                    pass
+            assemble_mp4_from_pngs(animation_frames, job_dir / "proxy.mp4", fps=fps)
+        except (OSError, RuntimeError, ValueError) as exc:
+            return {"playable": False, "error": f"assembly:{type(exc).__name__}:{exc}"}
+    return probe_mp4(job_dir / "proxy.mp4", minimum_frames=3)
+
+
+def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int = 2) -> dict[str, Any]:
+    job_dir = job_dir.resolve()
+    job_path = job_dir / "blender_job.py"
+    if not job_path.is_file():
+        return {"case_id": job_dir.name, "status": "missing_job", "job_dir": str(job_dir.resolve())}
+    command = build_blender_command(job_dir, blender_bin)
+    if max_retries < 0:
+        raise ValueError("max_retries must be non-negative")
+    attempts: list[dict[str, Any]] = []
+    for attempt_number in range(1, max_retries + 2):
+        started = time.monotonic()
+        if attempt_number > 1:
+            _clear_render_outputs(job_dir)
+        completed = None
+        error = None
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(job_dir),
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            error = f"timeout:{exc}"
+        except OSError as exc:
+            error = f"oserror:{exc}"
+        render_artifacts_ready = _render_artifacts_ready(job_dir)
+        video_probe = _assemble_and_probe_video(job_dir) if render_artifacts_ready else {
+            "playable": False,
+            "error": "render_artifacts_incomplete",
+        }
+        return_code = completed.returncode if completed is not None else None
+        attempt_result = {
+            "attempt": attempt_number,
+            "return_code": return_code,
+            "render_artifacts_ready": render_artifacts_ready,
+            "video_probe": video_probe,
+            "duration_s": time.monotonic() - started,
+            "stdout_tail": (completed.stdout or "")[-2000:] if completed is not None else "",
+            "stderr_tail": (completed.stderr or "")[-2000:] if completed is not None else "",
+            "error": error,
+        }
+        attempts.append(attempt_result)
+        if return_code == 0 and render_artifacts_ready and video_probe.get("playable"):
+            result = {
+                "case_id": job_dir.name,
+                "status": "success",
+                "job_dir": str(job_dir.resolve()),
+                "command": command,
+                "return_code": return_code,
+                "render_artifacts_ready": True,
+                "video_probe": video_probe,
+                "retry_count": attempt_number - 1,
+                "attempts": attempts,
+                "proxy_video": str((job_dir / "proxy.mp4").resolve()),
+            }
+            mark_render_state(job_dir, return_code=0, blender_version=(completed.stdout or "")[:120])
+            (job_dir / "render_attempts.json").write_text(json.dumps(attempts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            return result
+    last = attempts[-1]
+    result = {
+        "case_id": job_dir.name,
+        "status": "timeout" if str(last.get("error", "")).startswith("timeout:") else "failed",
+        "job_dir": str(job_dir.resolve()),
+        "command": command,
+        "return_code": last.get("return_code"),
+        "render_artifacts_ready": last.get("render_artifacts_ready", False),
+        "video_probe": last.get("video_probe", {}),
+        "retry_count": len(attempts) - 1,
+        "attempts": attempts,
+        "proxy_video": str((job_dir / "proxy.mp4").resolve()) if (job_dir / "proxy.mp4").exists() else None,
+    }
+    mark_render_state(job_dir, return_code=1, blender_version="")
+    (job_dir / "render_attempts.json").write_text(json.dumps(attempts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
+def render_jobs(
+    run_root: str | Path,
+    *,
+    blender_bin: str = "blender",
+    workers: int | None = None,
+    timeout_s: int = 900,
+    max_retries: int = 2,
+) -> dict[str, Any]:
+    if max_retries < 0:
+        raise ValueError("max_retries must be non-negative")
+    root = Path(run_root)
+    job_dirs = sorted(path.parent for path in root.glob("*/blender_job.py"))
+    workers = max(1, workers or min(4, os.cpu_count() or 1))
+    resolved_blender = shutil.which(blender_bin) or (blender_bin if Path(blender_bin).is_file() else None)
+    if resolved_blender is None:
+        report = {
+            "status": "unavailable",
+            "reason": f"Blender CLI not found: {blender_bin}",
+            "run_root": str(root.resolve()),
+            "job_count": len(job_dirs),
+            "workers": workers,
+            "results": [
+                {"case_id": job_dir.name, "status": "not_started", "job_dir": str(job_dir.resolve())}
+                for job_dir in job_dirs
+            ],
+        }
+    else:
+        results: list[dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(_run_one, job_dir, resolved_blender, timeout_s, max_retries): job_dir.name
+                for job_dir in job_dirs
+            }
+            for future in as_completed(futures):
+                results.append(future.result())
+        results.sort(key=lambda item: item["case_id"])
+        report = {
+            "status": "completed",
+            "blender_bin": resolved_blender,
+            "run_root": str(root.resolve()),
+            "job_count": len(job_dirs),
+            "workers": workers,
+            "max_render_retries": max_retries,
+            "success_count": sum(item["status"] == "success" for item in results),
+            "results": results,
+        }
+    (root / "cli_render_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-root", required=True)
+    parser.add_argument("--blender-bin", default="blender")
+    parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--timeout-s", type=int, default=900)
+    parser.add_argument("--max-render-retries", type=int, default=2)
+    args = parser.parse_args()
+    report = render_jobs(
+        args.run_root,
+        blender_bin=args.blender_bin,
+        workers=args.workers,
+        timeout_s=args.timeout_s,
+        max_retries=args.max_render_retries,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report["status"] in {"completed", "unavailable"} else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
