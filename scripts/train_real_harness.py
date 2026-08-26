@@ -26,6 +26,24 @@ from scripts.evaluate_real_videos import evaluate_split  # noqa: E402
 from scripts.prepare_real_jobs import prepare_jobs  # noqa: E402
 from scripts.render_proxy_jobs_parallel import render_jobs  # noqa: E402
 
+_MISSING = object()
+
+
+def _is_missing(value: Any) -> bool:
+    return value is _MISSING or value is None or (isinstance(value, str) and not value.strip())
+
+
+def _first_non_missing(*values: Any) -> Any:
+    return next((value for value in values if not _is_missing(value)), _MISSING)
+
+
+def _numbered_path_part(parts: tuple[str, ...], prefix: str) -> Any:
+    part = next((part for part in parts if part.startswith(prefix)), None)
+    if part is None:
+        return _MISSING
+    suffix = part.removeprefix(prefix)
+    return int(suffix) if suffix.isdigit() else part
+
 
 def _group_case_ids(case_ids: list[str], *, expected_groups: int = 6) -> list[list[str]]:
     groups: dict[str, list[str]] = {}
@@ -177,15 +195,12 @@ def write_training_memory_markdown(destination: str | Path, rows: list[dict[str,
     """Write one UTF-8 Markdown table containing the complete Harness training memory."""
 
     def cell(value: Any) -> str:
-        if value is None:
+        if _is_missing(value):
             value = "unavailable"
         return str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ").replace("|", "\\|")
 
     def first_available(row: dict[str, Any], *keys: str) -> Any:
-        for key in keys:
-            if key in row and row[key] is not None:
-                return row[key]
-        return "unavailable"
+        return _first_non_missing(*(row.get(key, _MISSING) for key in keys))
 
     lines = [
         "# T2Blendercodeharness 训练记忆表",
@@ -198,20 +213,20 @@ def write_training_memory_markdown(destination: str | Path, rows: list[dict[str,
     for row in rows:
         fix_location = first_available(row, "fix_location")
         fix_method = first_available(row, "fix_method")
-        if fix_location == "unavailable":
+        if fix_location is _MISSING:
             fix_summary = fix_method
-        elif fix_method == "unavailable":
+        elif fix_method is _MISSING:
             fix_summary = fix_location
         else:
             fix_summary = f"{fix_location}: {fix_method}"
 
         review = first_available(row, "review")
-        if review == "unavailable":
+        if review is _MISSING:
             review_source = first_available(row, "review_source")
             review_confidence = first_available(row, "review_confidence")
-            if review_source != "unavailable" and review_confidence != "unavailable":
+            if review_source is not _MISSING and review_confidence is not _MISSING:
                 review = f"{review_source} confidence={review_confidence}"
-            elif review_source != "unavailable":
+            elif review_source is not _MISSING:
                 review = review_source
 
         values = (
@@ -344,14 +359,6 @@ def _render_retry_count(run_dir: Path) -> int:
         return max(0, len(attempts) - 1) if isinstance(attempts, list) else 0
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return 0
-
-
-def _severity_root_summary(case: dict[str, Any]) -> str:
-    details = case.get("deterministic_finding_details") or []
-    return ", ".join(
-        f"{item.get('severity', 'unknown')}:{item.get('root_cause_id') or item.get('failure_id', 'unknown')}"
-        for item in details
-    ) or "none"
 
 
 def _dataset_records(dataset_root: str | Path) -> dict[str, dict[str, Any]]:
@@ -513,12 +520,7 @@ def summarize_real_reports(reports: list[dict[str, Any]], *, scope: str) -> dict
 def _load_patch_metadata(round_root: Path) -> dict[str, Any]:
     path = round_root / "patch_manifest.json"
     if not path.is_file():
-        return {
-            "detected_problem": "patch metadata not recorded",
-            "fix_location": "not recorded",
-            "fix_method": "no patch metadata; preserve evidence and do not infer a fix",
-            "handling": "This case is retained as evidence. No unrecorded Harness change is accepted.",
-        }
+        return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -575,34 +577,61 @@ def _protocol_round(dataset_root: str | Path, round_number: int) -> dict[str, An
 
 def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path) -> list[dict[str, Any]]:
     records = _dataset_records(dataset_root)
+    output = Path(output_root)
     rows: list[dict[str, Any]] = []
-    for report_path in sorted(Path(output_root).rglob("real_unified_score.json")):
+    for report_path in sorted(output.rglob("real_unified_score.json")):
         try:
             report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, json.JSONDecodeError):
             continue
-        relative_parts = report_path.relative_to(Path(output_root)).parts
-        round_label = "/".join(relative_parts[: max(1, min(3, len(relative_parts) - 2))])
-        patch = _load_patch_metadata(report_path.parent.parent if "overall" in relative_parts else report_path.parent.parent.parent)
+        relative_parts = report_path.relative_to(output).parts
+        round_number = _first_non_missing(report.get("round", _MISSING), _numbered_path_part(relative_parts, "round-"))
+        attempt_number = _first_non_missing(
+            report.get("attempt", _MISSING), _numbered_path_part(relative_parts, "attempt-")
+        )
+        path_split = report_path.parent.name if report_path.parent.name in {"train", "dev", "test"} else _MISSING
+        round_index = next(
+            (index for index, part in enumerate(relative_parts) if part.startswith("round-")),
+            None,
+        )
+        patch_root = output.joinpath(*relative_parts[: round_index + 1]) if round_index is not None else report_path.parent
+        patch = _load_patch_metadata(patch_root)
         for case in report.get("cases", []):
             record = records.get(case["case_id"], {})
+            task_score = _first_non_missing(
+                case.get("task_final_score", _MISSING),
+                case.get("video_score", _MISSING),
+                case.get("score", _MISSING),
+            )
             rows.append(
                 {
-                    "round": round_label,
-                    "prompt": record.get("prompt", ""),
-                    "proxy_video": case.get("proxy_video", "unavailable"),
-                    "score": case.get("video_score"),
-                    "task_score": case.get("task_final_score", case.get("video_score")),
-                    "realism_score": case.get("realism_score"),
-                    "review_source": case.get("review_source"),
-                    "review_confidence": case.get("review_confidence"),
-                    "severity_root_cause": _severity_root_summary(case),
-                    "render_retry_count": case.get("render_retry_count", 0),
-                    "detected_problem": ", ".join(case.get("deterministic_findings", [])) or patch["detected_problem"],
-                    "fix_location": patch["fix_location"],
-                    "fix_method": patch["fix_method"],
-                    "delta": patch.get("delta", "not available until paired before/after attempt"),
-                    "handling": patch["handling"],
+                    "round": round_number,
+                    "attempt": attempt_number,
+                    "split": _first_non_missing(
+                        case.get("split", _MISSING), report.get("split", _MISSING), path_split
+                    ),
+                    "case_id": case["case_id"],
+                    "prompt": record.get("prompt", _MISSING),
+                    "proxy_video": case.get("proxy_video", _MISSING),
+                    "director_plan_score": _first_non_missing(
+                        case.get("director_plan_score", _MISSING),
+                        record.get("director_plan_score", _MISSING),
+                        report.get("director_plan_score", _MISSING),
+                    ),
+                    "task_score": task_score,
+                    "realism_score": case.get("realism_score", _MISSING),
+                    "review": case.get("review", _MISSING),
+                    "review_source": case.get("review_source", _MISSING),
+                    "review_confidence": case.get("review_confidence", _MISSING),
+                    "detected_problem": _first_non_missing(
+                        ", ".join(case.get("deterministic_findings", [])),
+                        patch.get("detected_problem", _MISSING),
+                    ),
+                    "owner": _first_non_missing(case.get("owner", _MISSING), patch.get("owner", _MISSING)),
+                    "fix_location": patch.get("fix_location", _MISSING),
+                    "fix_method": patch.get("fix_method", _MISSING),
+                    "delta": patch.get("delta", _MISSING),
+                    "handling": patch.get("handling", _MISSING),
                 }
             )
     return rows
@@ -752,21 +781,37 @@ def run_six_round_protocol(
             patch = _load_patch_metadata(root / f"round-{batch['round']:02d}")
             for case in report["cases"]:
                 record = records[case["case_id"]]
+                task_score = _first_non_missing(
+                    case.get("task_final_score", _MISSING),
+                    case.get("video_score", _MISSING),
+                    case.get("score", _MISSING),
+                )
                 memory_rows.append(
                     {
                         "round": batch["round"],
+                        "split": split,
+                        "case_id": case["case_id"],
                         "prompt": record["prompt"],
-                        "proxy_video": case["proxy_video"],
-                        "score": case["video_score"],
-                        "review_source": case.get("review_source"),
-                        "review_confidence": case.get("review_confidence"),
-                        "severity_root_cause": _severity_root_summary(case),
-                        "render_retry_count": case.get("render_retry_count", 0),
-                        "detected_problem": ", ".join(case["deterministic_findings"]) or patch["detected_problem"],
-                        "fix_location": patch["fix_location"],
-                        "fix_method": patch["fix_method"],
-                        "delta": patch.get("delta", "not available without a paired before run"),
-                        "handling": patch["handling"],
+                        "proxy_video": case.get("proxy_video", _MISSING),
+                        "director_plan_score": _first_non_missing(
+                            case.get("director_plan_score", _MISSING),
+                            record.get("director_plan_score", _MISSING),
+                            report.get("director_plan_score", _MISSING),
+                        ),
+                        "task_score": task_score,
+                        "realism_score": case.get("realism_score", _MISSING),
+                        "review": case.get("review", _MISSING),
+                        "review_source": case.get("review_source", _MISSING),
+                        "review_confidence": case.get("review_confidence", _MISSING),
+                        "detected_problem": _first_non_missing(
+                            ", ".join(case.get("deterministic_findings", [])),
+                            patch.get("detected_problem", _MISSING),
+                        ),
+                        "owner": _first_non_missing(case.get("owner", _MISSING), patch.get("owner", _MISSING)),
+                        "fix_location": patch.get("fix_location", _MISSING),
+                        "fix_method": patch.get("fix_method", _MISSING),
+                        "delta": patch.get("delta", _MISSING),
+                        "handling": patch.get("handling", _MISSING),
                     }
                 )
             write_training_memory_markdown(root / "harness_training_memory.md", memory_rows)

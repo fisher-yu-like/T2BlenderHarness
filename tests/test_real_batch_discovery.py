@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from PIL import Image
@@ -232,6 +233,8 @@ def test_training_memory_markdown_escapes_pipes_and_newlines(tmp_path: Path):
     assert "camera \\| intent is missing" in content
     assert "src/videoact/director\\|camera.py module: add \\| handoff two-shot" in content
     assert "accepted \\| retain patch" in content
+    data_row = content.splitlines()[-1]
+    assert len(re.split(r"(?<!\\)\|", data_row)[1:-1]) == 15
 
 
 def test_training_memory_markdown_renders_missing_and_none_scores_as_unavailable(tmp_path: Path):
@@ -240,13 +243,18 @@ def test_training_memory_markdown_renders_missing_and_none_scores_as_unavailable
     destination = tmp_path / "training.md"
     write_training_memory_markdown(
         destination,
-        [{"director_plan_score": None, "realism_score": None}],
+        [
+            {"case_id": "none", "director_plan_score": None, "task_score": None, "realism_score": None},
+            {"case_id": "missing"},
+            {"case_id": "blank", "director_plan_score": "", "task_score": "   ", "realism_score": "\t"},
+        ],
     )
 
-    row = destination.read_text(encoding="utf-8").splitlines()[-1]
-    cells = row[2:-2].split(" | ")
-    assert cells[6:9] == ["unavailable", "unavailable", "unavailable"]
-    assert "0" not in cells[6:9]
+    data_rows = destination.read_text(encoding="utf-8").splitlines()[-3:]
+    cells_by_case = {cells[3]: cells for cells in (row[2:-2].split(" | ") for row in data_rows)}
+    for case_id in ("none", "missing", "blank"):
+        assert cells_by_case[case_id][6:9] == ["unavailable", "unavailable", "unavailable"]
+        assert "0" not in cells_by_case[case_id][6:9]
 
 
 def test_training_memory_markdown_uses_deterministic_legacy_task_score_precedence(tmp_path: Path):
@@ -290,6 +298,67 @@ def test_training_memory_markdown_composes_review_and_prefers_explicit_review(tm
     cells_by_case = {cells[3]: cells for cells in (row[2:-2].split(" | ") for row in data_rows)}
     assert cells_by_case["composed"][9] == "gpt-5.6-Luna confidence=0.83"
     assert cells_by_case["explicit"][9] == "manual review confidence=0.91"
+
+
+def test_update_training_memory_table_preserves_real_report_traceability_and_scores(tmp_path: Path):
+    from scripts.train_real_harness import update_training_memory_table
+
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    (dataset_root / "manifest.jsonl").write_text(
+        json.dumps({"case_id": "single-01-01", "prompt": "Carry the red cup to the marker."}) + "\n",
+        encoding="utf-8",
+    )
+    output_root = tmp_path / "runs"
+    round_root = output_root / "round-01"
+    report_root = round_root / "attempt-03" / "real" / "train"
+    report_root.mkdir(parents=True)
+    (round_root / "patch_manifest.json").write_text(
+        json.dumps(
+            {
+                "owner": "director_camera",
+                "detected_problem": "fallback problem",
+                "fix_location": "src/videoact/director_camera.py",
+                "fix_method": "add a handoff two-shot",
+                "delta": "train +7.0; paired dev +1.0; overall dev +0.2",
+                "handling": "Accepted after the paired holdout gate passed.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    proxy_video = report_root / "single-01-01" / "proxy.mp4"
+    (report_root / "real_unified_score.json").write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case_id": "single-01-01",
+                        "proxy_video": str(proxy_video),
+                        "director_plan_score": 88,
+                        "task_final_score": 82,
+                        "video_score": 80,
+                        "realism_score": 71,
+                        "review": "manual review confidence=0.91",
+                        "review_source": "gpt-5.6-Luna",
+                        "review_confidence": 0.83,
+                        "deterministic_findings": ["camera intent missing"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    destination = tmp_path / "training.md"
+
+    update_training_memory_table(output_root, dataset_root, destination)
+
+    content = destination.read_text(encoding="utf-8")
+    assert (
+        f"| 1 | 3 | train | single-01-01 | Carry the red cup to the marker. | {proxy_video} | "
+        "88 | 82 | 71 | manual review confidence=0.91 | camera intent missing | director_camera | "
+        "src/videoact/director_camera.py: add a handoff two-shot | "
+        "train +7.0; paired dev +1.0; overall dev +0.2 | Accepted after the paired holdout gate passed. |"
+    ) in content
 
 
 def test_anti_overfit_gate_requires_train_gain_and_paired_and_overall_dev_non_regression():
