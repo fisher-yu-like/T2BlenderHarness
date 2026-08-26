@@ -188,6 +188,10 @@ class CameraShot(ContractModel):
     distance_range: tuple[float, float]
     required_event_ids: list[str] = Field(default_factory=list)
     trajectory_type: Literal["hold", "follow", "orbit", "dolly"] = "hold"
+    visibility_predicates: dict[str, str] = Field(default_factory=dict)
+    max_occlusion: float = Field(default=1.0, ge=0, le=1)
+    continuity_group: str | None = None
+    innovation_intent_evidence_id: str | None = None
 
     @model_validator(mode="after")
     def validate_interval_and_distance(self) -> "CameraShot":

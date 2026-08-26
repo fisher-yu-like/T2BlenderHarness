@@ -153,11 +153,11 @@ class InteractionLifecycle(ContractModel):
 - Create: `tests/test_director_camera.py`
 - Modify: `src/videoact/contracts.py`
 
-- [ ] Write failing tests for a giver/receiver/prop handoff two-shot, concurrent action coverage, bounded occlusion/reveal, axis continuity, and all must-show events.
-- [ ] Extend camera shot fields with visibility predicates, maximum occlusion, continuity group, and evidence-backed innovation intent.
-- [ ] Implement `MultiTargetCameraChoreographer.compose(request, interpretation, schedule, trajectories)` without inferring quality from shot names.
-- [ ] Run camera, trajectory-planner, and evaluator-completeness tests; expect pass.
-- [ ] Commit with `git commit -m "feat: choreograph multi-target cameras"`.
+- [x] Write failing tests for a giver/receiver/prop handoff two-shot, concurrent action coverage, bounded occlusion/reveal, axis continuity, and all must-show events.
+- [x] Extend camera shot fields with visibility predicates, maximum occlusion, continuity group, and evidence-backed innovation intent.
+- [x] Implement `MultiTargetCameraChoreographer.compose(request, interpretation, schedule, trajectories)` without inferring quality from shot names.
+- [x] Run camera, trajectory-planner, and evaluator-completeness tests; expect pass.
+- [x] Commit with `git commit -m "feat: choreograph multi-target cameras"`.
 
 ### Task 8: Build the DirectorAgent facade and compatibility projection
 
