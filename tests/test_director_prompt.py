@@ -61,3 +61,19 @@ def test_interpreter_marks_pause_resume_and_return_without_inventing_hard_facts(
     assert interpretation.directives[-1].receiver_id == "actor_a"
     assert interpretation.uncertainties
     assert all(uncertainty.severity == "soft" for uncertainty in interpretation.uncertainties)
+
+
+def test_interpreter_resolves_elliptical_reveal_carry_and_handoff():
+    from videoact.director_prompt import DeterministicPromptInterpreter
+
+    request = _request(
+        "Alice reveals the green book, then carries the green book and hands the green book to Carla; "
+        "Carla places the green book while the yellow ball remains visible."
+    )
+    interpretation = DeterministicPromptInterpreter().interpret(request)
+
+    assert [(item.action, item.actor_id, item.prop_id, item.receiver_id) for item in interpretation.directives] == [
+        ("carry", "actor_a", "green_book", None),
+        ("handoff", "actor_a", "green_book", "actor_b"),
+        ("place", "actor_b", "green_book", None),
+    ]

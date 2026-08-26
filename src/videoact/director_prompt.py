@@ -120,6 +120,34 @@ class DeterministicPromptInterpreter:
                         span=(carry_match.start(), carry_match.end()),
                     )
                 )
+            else:
+                reveal_match = re.search(
+                    r"\b(?P<actor>[A-Z][a-z]+)\s+reveals\s+the\s+"
+                    r"(?P<prop>(?:red|blue|green|yellow)\s+\w+)\b",
+                    prompt,
+                )
+                implied_carry = None
+                if reveal_match:
+                    suffix = prompt[reveal_match.end() :]
+                    suffix_match = re.search(
+                        r"\bthen\s+carries\s+the\s+(?P<prop>(?:red|blue|green|yellow)\s+\w+)\b",
+                        suffix,
+                    )
+                    if suffix_match:
+                        implied_carry = (suffix_match, reveal_match.end())
+                if reveal_match and implied_carry:
+                    carry_match, carry_offset = implied_carry
+                    directives.append(
+                        self._directive(
+                            prompt,
+                            evidence,
+                            action="carry",
+                            actor_id=actor_ids[reveal_match.group("actor")],
+                            prop_id=prop_ids[carry_match.group("prop").lower()],
+                            evidence_label="implied carry after reveal",
+                            span=(reveal_match.start(), carry_offset + carry_match.end()),
+                        )
+                    )
 
         if re.search(r"\bpauses?\b", prompt, re.IGNORECASE):
             span = self._find_regex_span(prompt, r"\bpauses?\b")
@@ -154,20 +182,59 @@ class DeterministicPromptInterpreter:
                     span=(handoff_match.start(), handoff_match.end()),
                 )
             )
-        elif directives and directives[0].receiver_id and "returns" in prompt:
-            first = directives[0]
-            directives.append(
-                self._directive(
-                    prompt,
-                    evidence,
-                    action="handoff",
-                    actor_id=first.actor_id,
-                    prop_id=first.prop_id,
-                    receiver_id=first.receiver_id,
-                    evidence_label="implied handoff",
-                    span=(0, min(len(prompt), prompt.find("returns") if "returns" in prompt else len(prompt))),
-                )
+        else:
+            implied_handoff = re.search(
+                r"\b(?:and\s+)?hands\s+the\s+(?P<prop>(?:red|blue|green|yellow)\s+\w+)\s+"
+                r"to\s+(?P<receiver>[A-Z][a-z]+)",
+                prompt,
             )
+            if implied_handoff:
+                prop_id = prop_ids[implied_handoff.group("prop").lower()]
+                giver = next(
+                    (directive.actor_id for directive in reversed(directives) if directive.prop_id == prop_id),
+                    None,
+                )
+                if giver is None:
+                    prior_actor_matches = list(
+                        re.finditer(r"\b[A-Z][a-z]+\b", prompt[: implied_handoff.start()])
+                    )
+                    prior_actor = next(
+                        (
+                            match.group(0)
+                            for match in reversed(prior_actor_matches)
+                            if match.group(0) in actor_ids
+                        ),
+                        None,
+                    )
+                    giver = actor_ids.get(prior_actor or "")
+                receiver = actor_ids.get(implied_handoff.group("receiver"))
+                if giver and receiver:
+                    directives.append(
+                        self._directive(
+                            prompt,
+                            evidence,
+                            action="handoff",
+                            actor_id=giver,
+                            prop_id=prop_id,
+                            receiver_id=receiver,
+                            evidence_label="implied handoff",
+                            span=(implied_handoff.start(), implied_handoff.end()),
+                        )
+                    )
+            elif directives and directives[0].receiver_id and "returns" in prompt:
+                first = directives[0]
+                directives.append(
+                    self._directive(
+                        prompt,
+                        evidence,
+                        action="handoff",
+                        actor_id=first.actor_id,
+                        prop_id=first.prop_id,
+                        receiver_id=first.receiver_id,
+                        evidence_label="implied handoff",
+                        span=(0, min(len(prompt), prompt.find("returns") if "returns" in prompt else len(prompt))),
+                    )
+                )
 
         return_match = re.search(
             r"\b(?P<actor>[A-Z][a-z]+)\s+returns\s+the\s+"

@@ -686,6 +686,17 @@ def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path)
             None,
         )
         patch_root = output.joinpath(*relative_parts[: round_index + 1]) if round_index is not None else report_path.parent
+        # Attempt reports have their own patch decision.  Prefer it over the
+        # round-level accepted patch so baseline rows cannot inherit the
+        # candidate's fix metadata in the long-term memory table.
+        attempt_index = next(
+            (index for index, part in enumerate(relative_parts) if part.startswith("attempt-")),
+            None,
+        )
+        if attempt_index is not None:
+            attempt_root = output.joinpath(*relative_parts[: attempt_index + 1])
+            if (attempt_root / "patch_manifest.json").is_file():
+                patch_root = attempt_root
         patch = _load_patch_metadata(patch_root)
         for case in report.get("cases", []):
             record = records.get(case["case_id"], {})
