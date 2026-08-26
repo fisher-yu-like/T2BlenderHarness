@@ -51,12 +51,17 @@ realism、spatial consistency、motion naturalness、visual presentation。五�
 |---:|---|---:|---:|---:|---:|---|
 | 1 | 10 train + 60 all-dev overall | 70 | 100% pass | train 65.6393 / dev 62.8292 | train 59.2108 / dev 56.6084 | none |
 | 2 | 20 cumulative train + 60 all-dev overall | 80 | 100% pass | train 65.6393 / dev 62.8292 | train 59.2157 / dev 56.6084 | none |
+| 3 | 30 cumulative train + 60 all-dev overall | 90 | 100% pass | train 66.2084 / dev 62.8292 | train 58.9371 / dev 56.6084 | none |
 
 Round 2 attempt 1 的新 paired dev task 均值为 67.3466，较其 fingerprint-identical
 Round 1 artifact 基线不变；因此没有可归因于 Harness 的提升。详细逐案例表格、prompt、
 真实 proxy 视频地址、task/realism 分数、问题和处理说明位于：
 
 [t2blendercodeharness-multi-training-memory-v1.md](t2blendercodeharness-multi-training-memory-v1.md)
+
+Round 3 attempt 1 同样没有重复的 train-side Harness 根因；新 train task 均值为
+67.3466，paired dev 为 65.6253，整体 dev 仍为 62.8292。累计 train 均值因加入
+`concurrent_independent_work` 家族下降到 66.2084，但这不是可接受的 patch 证据。
 
 ## evaluator 误报修正
 
