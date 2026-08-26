@@ -7,7 +7,13 @@ name = "text-to-blender-proxy-harness"
 version = "0.1.0"
 description = "Deterministic contracts and orchestration for text-to-Blender proxy evaluation"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.0,<3.0"]
+dependencies = [
+    "pydantic>=2.0,<3.0",
+    "typing-extensions>=4.12",
+    "Pillow>=10.0",
+    "imageio>=2.34",
+    "imageio-ffmpeg>=0.5",
+]
 
 [project.optional-dependencies]
 test = ["pytest>=8.0"]
