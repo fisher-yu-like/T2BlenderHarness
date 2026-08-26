@@ -52,6 +52,54 @@ def _summary(report_root: Path, round_number: int) -> dict:
     report = json.loads(_report_path(report_root, round_number).read_text(encoding="utf-8"))
     cases = report.get("cases", [])
     summary = {"round": round_number}
+    if not cases and report.get("splits"):
+        # Rounds 1-3 were written by the earlier unified-report shape, where
+        # the case rows remain under split reports.  Read the same aggregate
+        # channels so the final curve does not silently drop those rounds.
+        for split in ("train", "dev"):
+            split_report = report["splits"].get(split, {})
+            aggregate = split_report.get("aggregate", {})
+            summary[f"{split}_director"] = None
+            summary[f"{split}_task"] = _number(
+                aggregate,
+                "mean_task_final_score",
+                "mean_final_score",
+            )
+            summary[f"{split}_realism"] = _number(
+                aggregate,
+                "mean_artifact_only_realism_score",
+            )
+            summary[f"{split}_deterministic"] = _number(
+                aggregate,
+                "mean_deterministic_score",
+            )
+            rows = split_report.get("cases", [])
+            summary[f"{split}_pass_rate"] = (
+                sum(row.get("deterministic_status") == "pass" for row in rows) / len(rows) * 100.0
+                if rows
+                else None
+            )
+            summary[f"{split}_artifact_completion"] = (
+                sum(
+                    100.0
+                    if row.get("artifact_status") == "complete" or row.get("video_exists") is True
+                    else 0.0
+                    for row in rows
+                )
+                / len(rows)
+                if rows
+                else None
+            )
+        summary["scored_count"] = sum(
+            split_report.get("aggregate", {}).get("realism_scored_count", 0)
+            for split_report in report.get("splits", {}).values()
+        )
+        summary["video_count"] = sum(
+            bool(row.get("video_exists"))
+            for split_report in report.get("splits", {}).values()
+            for row in split_report.get("cases", [])
+        )
+        return summary
     channels = {
         "director": ("director_plan_score",),
         "task": ("task_final_score", "video_score", "task_score"),

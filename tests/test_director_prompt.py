@@ -77,3 +77,22 @@ def test_interpreter_resolves_elliptical_reveal_carry_and_handoff():
         ("handoff", "actor_a", "green_book", "actor_b"),
         ("place", "actor_b", "green_book", None),
     ]
+
+
+def test_interpreter_preserves_explicit_handoff_pause_return_order_and_pause_actor():
+    from videoact.director_prompt import DeterministicPromptInterpreter
+
+    request = _request(
+        "Alice carries the green ball and hands the green ball to Dana; "
+        "Dana pauses, returns the green ball to Alice, and Alice places the green ball."
+    )
+    interpretation = DeterministicPromptInterpreter().interpret(request)
+
+    assert [item.action for item in interpretation.directives] == [
+        "carry",
+        "handoff",
+        "pause",
+        "return",
+        "place",
+    ]
+    assert interpretation.directives[2].actor_id == "actor_b"

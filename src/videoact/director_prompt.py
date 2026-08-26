@@ -152,12 +152,22 @@ class DeterministicPromptInterpreter:
         if re.search(r"\bpauses?\b", prompt, re.IGNORECASE):
             span = self._find_regex_span(prompt, r"\bpauses?\b")
             last = directives[-1] if directives else None
+            pause_actor_match = re.search(
+                r"\b(?P<actor>[A-Z][a-z]+)\s+pauses?\b",
+                prompt,
+            )
             directives.append(
                 self._directive(
                     prompt,
                     evidence,
                     action="pause",
-                    actor_id=last.actor_id if last else (actors[0].id if actors else None),
+                    actor_id=(
+                        actor_ids.get(pause_actor_match.group("actor"))
+                        if pause_actor_match
+                        else last.actor_id
+                        if last
+                        else (actors[0].id if actors else None)
+                    ),
                     prop_id=last.prop_id if last else (props[0].id if props else None),
                     evidence_label="pause",
                     span=span,
@@ -191,7 +201,11 @@ class DeterministicPromptInterpreter:
             if implied_handoff:
                 prop_id = prop_ids[implied_handoff.group("prop").lower()]
                 giver = next(
-                    (directive.actor_id for directive in reversed(directives) if directive.prop_id == prop_id),
+                    (
+                        directive.actor_id
+                        for directive in reversed(directives)
+                        if directive.prop_id == prop_id and directive.action in {"carry", "handoff"}
+                    ),
                     None,
                 )
                 if giver is None:
@@ -223,6 +237,8 @@ class DeterministicPromptInterpreter:
                     )
             elif directives and directives[0].receiver_id and "returns" in prompt:
                 first = directives[0]
+                return_anchor = re.search(r"\b[A-Z][a-z]+\s+returns?\b", prompt)
+                inferred_start = return_anchor.start() if return_anchor else 0
                 directives.append(
                     self._directive(
                         prompt,
@@ -232,7 +248,10 @@ class DeterministicPromptInterpreter:
                         prop_id=first.prop_id,
                         receiver_id=first.receiver_id,
                         evidence_label="implied handoff",
-                        span=(0, min(len(prompt), prompt.find("returns") if "returns" in prompt else len(prompt))),
+                        span=(
+                            inferred_start,
+                            min(len(prompt), return_anchor.end() if return_anchor else len(prompt)),
+                        ),
                     )
                 )
 
@@ -241,19 +260,62 @@ class DeterministicPromptInterpreter:
             r"(?P<prop>(?:red|blue|green|yellow)\s+\w+)\s+to\s+(?P<receiver>[A-Z][a-z]+)",
             prompt,
         )
-        if return_match:
-            directives.append(
-                self._directive(
-                    prompt,
-                    evidence,
-                    action="return",
-                    actor_id=actor_ids[return_match.group("actor")],
-                    prop_id=prop_ids[return_match.group("prop").lower()],
-                    receiver_id=actor_ids[return_match.group("receiver")],
-                    evidence_label="return",
-                    span=(return_match.start(), return_match.end()),
-                )
+        if return_match is None:
+            subjectless_return = re.search(
+                r"\b(?:and\s+)?returns\s+the\s+"
+                r"(?P<prop>(?:red|blue|green|yellow)\s+\w+)\s+to\s+(?P<receiver>[A-Z][a-z]+)",
+                prompt,
             )
+            if subjectless_return:
+                prop_id = prop_ids[subjectless_return.group("prop").lower()]
+                prior_handoff = next(
+                    (
+                        directive
+                        for directive in reversed(directives)
+                        if directive.action == "handoff" and directive.prop_id == prop_id
+                    ),
+                    None,
+                )
+                return_actor = prior_handoff.receiver_id if prior_handoff else None
+                if return_actor is None:
+                    prior_pause = next(
+                        (
+                            directive
+                            for directive in reversed(directives)
+                            if directive.action == "pause" and directive.prop_id == prop_id
+                        ),
+                        None,
+                    )
+                    return_actor = prior_pause.actor_id if prior_pause else None
+                receiver = actor_ids.get(subjectless_return.group("receiver"))
+                if return_actor and receiver:
+                    return_match = subjectless_return
+                    directives.append(
+                        self._directive(
+                            prompt,
+                            evidence,
+                            action="return",
+                            actor_id=return_actor,
+                            prop_id=prop_id,
+                            receiver_id=receiver,
+                            evidence_label="implied return",
+                            span=(return_match.start(), return_match.end()),
+                        )
+                    )
+        if return_match:
+            if return_match.groupdict().get("actor"):
+                directives.append(
+                    self._directive(
+                        prompt,
+                        evidence,
+                        action="return",
+                        actor_id=actor_ids[return_match.group("actor")],
+                        prop_id=prop_ids[return_match.group("prop").lower()],
+                        receiver_id=actor_ids[return_match.group("receiver")],
+                        evidence_label="return",
+                        span=(return_match.start(), return_match.end()),
+                    )
+                )
 
         place_match = re.search(
             r"\b(?P<actor>[A-Z][a-z]+)\s+places\s+the\s+"
@@ -272,6 +334,18 @@ class DeterministicPromptInterpreter:
                     span=(place_match.start(), place_match.end()),
                 )
             )
+
+        evidence_by_id = {item.id: item for item in evidence}
+        directives.sort(
+            key=lambda directive: (
+                evidence_by_id[directive.evidence_id].prompt_span[0]
+                if evidence_by_id[directive.evidence_id].prompt_span is not None
+                else len(prompt),
+                evidence_by_id[directive.evidence_id].prompt_span[1]
+                if evidence_by_id[directive.evidence_id].prompt_span is not None
+                else len(prompt),
+            )
+        )
 
         uncertainties = [
             DirectorUncertainty(
