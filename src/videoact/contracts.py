@@ -134,7 +134,19 @@ class EntityState(ContractModel):
 
 
 class MotionPrimitive(ContractModel):
-    type: Literal["linear", "ease_in_out", "hold", "look_at", "follow", "orbit", "dolly"]
+    type: Literal[
+        "linear",
+        "ease_in_out",
+        "hold",
+        "look_at",
+        "follow",
+        "orbit",
+        "dolly",
+        "arc",
+        "s_curve",
+        "zigzag",
+        "bezier",
+    ]
     start_frame: int = Field(ge=1)
     end_frame: int = Field(ge=1)
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -150,7 +162,7 @@ class AttachmentEvent(ContractModel):
     frame: int = Field(ge=1)
     subject_id: str = Field(min_length=1)
     object_id: str = Field(min_length=1)
-    action: Literal["attach", "detach"]
+    action: Literal["attach", "transfer", "detach"]
 
 
 class EntityTrajectory(ContractModel):

@@ -139,12 +139,12 @@ class InteractionLifecycle(ContractModel):
 - Create: `tests/test_director_trajectory.py`
 - Modify: `src/videoact/contracts.py`
 
-- [ ] Add failing tests for per-entity paths, concurrent lane separation, attach/transfer/detach, current owner, final support, and collision failure.
-- [ ] Extend `AttachmentEvent.action` to `attach | transfer | detach` and motion primitives only with tested values needed by the dataset (`arc`, `s_curve`, `zigzag`, `bezier`).
-- [ ] Implement `MultiEntityTrajectoryComposer` using proxy-scene transforms, independent actor lanes, prop-to-owner coupling, explicit transfers, and fail-closed conflict resolution.
-- [ ] Remove all new-code assumptions that the only actor ID is `character`.
-- [ ] Run `tests/test_director_trajectory.py`, `tests/test_trajectory_planner.py`, and `tests/test_contracts.py`; expect pass.
-- [ ] Commit with `git commit -m "feat: compose multi-entity trajectories"`.
+- [x] Add failing tests for per-entity paths, concurrent lane separation, attach/transfer/detach, current owner, final support, and collision failure.
+- [x] Extend `AttachmentEvent.action` to `attach | transfer | detach` and motion primitives only with tested values needed by the dataset (`arc`, `s_curve`, `zigzag`, `bezier`).
+- [x] Implement `MultiEntityTrajectoryComposer` using proxy-scene transforms, independent actor lanes, prop-to-owner coupling, explicit transfers, and fail-closed conflict resolution.
+- [x] Remove all new-code assumptions that the only actor ID is `character`.
+- [x] Run `tests/test_director_trajectory.py`, `tests/test_trajectory_planner.py`, and `tests/test_contracts.py`; expect pass.
+- [x] Commit with `git commit -m "feat: compose multi-entity trajectories"`.
 
 ### Task 7: Choreograph multi-target cameras
 
