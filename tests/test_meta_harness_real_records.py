@@ -46,7 +46,7 @@ def test_meta_harness_records_train_dev_acceptance_and_patch_diff(tmp_path):
     from videoact.meta_harness import MetaHarnessOptimizer
 
     optimizer = MetaHarnessOptimizer(output_dir=tmp_path)
-    proposal = optimizer.propose([failure_record("case-01")])
+    proposal = optimizer.propose([failure_record("case-01"), failure_record("case-02")])
     record = optimizer.record_acceptance(
         proposal,
         before={"train_score": 60, "dev_score": 58},

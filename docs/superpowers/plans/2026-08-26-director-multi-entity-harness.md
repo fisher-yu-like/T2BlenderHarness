@@ -244,12 +244,12 @@ ALLOWED_OWNERS = {
 - Modify: `tests/test_meta_harness_real_records.py`
 - Modify: `tests/test_outer_loop_acceptance.py`
 
-- [ ] Add failing tests that group by failure ID, owner, category, severity, and root cause; require two distinct train cases; reject mixed-owner proposals; and refuse artifact-rate regression.
-- [ ] Update `OWNER_FILES` to the approved Director/Blender/evaluator taxonomy.
-- [ ] Require strict paired-train improvement, non-regressing paired dev and overall dev, zero hard regressions, and non-regressing artifact completion.
-- [ ] For renderer/realism patches, require realism improvement with no task-score regression.
-- [ ] Persist every failed check in the acceptance record.
-- [ ] Run focused evolution and Memory tests; expect pass.
+- [x] Add failing tests that group by failure ID, owner, category, severity, and root cause; require two distinct train cases; reject mixed-owner proposals; and refuse artifact-rate regression.
+- [x] Update `OWNER_FILES` to the approved Director/Blender/evaluator taxonomy.
+- [x] Require strict paired-train improvement, non-regressing paired dev and overall dev, zero hard regressions, and non-regressing artifact completion.
+- [x] For renderer/realism patches, require realism improvement with no task-score regression.
+- [x] Persist every failed check in the acceptance record.
+- [x] Run focused evolution and Memory tests; expect pass.
 - [ ] Commit with `git commit -m "feat: enforce multi-entity one-owner acceptance"`.
 
 ### Task 12: Canonicalize Luna/Terra reporting
