@@ -1,0 +1,64 @@
+{
+  "attempt": 3,
+  "dev_count": 10,
+  "round": 1,
+  "run_root": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\training\\single-five-rounds-v1",
+  "source_report": {
+    "path": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\out\\training\\single-five-rounds-v1\\round-01\\attempt_report.json",
+    "sha256": "2f719f927dc6354a4f9dd7720c6b8d3497cd1584581c47047b0908189dbd3e5a"
+  },
+  "source_report_sha256": "2f719f927dc6354a4f9dd7720c6b8d3497cd1584581c47047b0908189dbd3e5a",
+  "splits": {
+    "dev": {
+      "aggregate": {
+        "failure_counts": {},
+        "mean_artifact_only_realism_score": 68.3419,
+        "mean_deterministic_score": 100.0,
+        "mean_final_score": null,
+        "mean_task_final_score": null,
+        "realism_scored_count": 10
+      },
+      "case_count": 10,
+      "mean_artifact_only_realism_score": 68.3419,
+      "mean_deterministic_score": 100.0,
+      "mean_final_score": null,
+      "mean_task_final_score": null,
+      "scoring_mode": "real_blender_video_vlm",
+      "status": "incomplete_vlm_scoring",
+      "task_score": null,
+      "visual_review_status": "unavailable",
+      "vlm_call_policy": "one VLM call per eligible case; geometry/PNG realism is local and separate",
+      "vlm_model": "gpt-5.6-luna",
+      "vlm_scored_count": 0
+    },
+    "train": {
+      "aggregate": {
+        "failure_counts": {},
+        "mean_artifact_only_realism_score": 68.6689,
+        "mean_deterministic_score": 100.0,
+        "mean_final_score": null,
+        "mean_task_final_score": null,
+        "realism_scored_count": 10
+      },
+      "case_count": 10,
+      "mean_artifact_only_realism_score": 68.6689,
+      "mean_deterministic_score": 100.0,
+      "mean_final_score": null,
+      "mean_task_final_score": null,
+      "scoring_mode": "real_blender_video_vlm",
+      "status": "incomplete_vlm_scoring",
+      "task_score": null,
+      "visual_review_status": "unavailable",
+      "vlm_call_policy": "one VLM call per eligible case; geometry/PNG realism is local and separate",
+      "vlm_model": "gpt-5.6-luna",
+      "vlm_scored_count": 0
+    }
+  },
+  "task_score": null,
+  "train_count": 10,
+  "visual_review": {
+    "scored_count": 0,
+    "status": "unavailable"
+  },
+  "visual_review_status": "unavailable"
+}

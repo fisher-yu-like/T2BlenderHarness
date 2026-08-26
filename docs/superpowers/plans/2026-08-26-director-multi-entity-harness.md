@@ -18,9 +18,9 @@ Do not start batch training until the full test suite, capability check, dataset
 - Modify: `pyproject.toml`
 - Create: `tests/test_project_runtime.py`
 
-- [ ] Write a failing test that parses `pyproject.toml` and requires `pydantic`, `typing-extensions`, `Pillow`, `imageio`, and `imageio-ffmpeg` in project dependencies.
-- [ ] Run `uv run --extra test python -m pytest tests/test_project_runtime.py -q -p no:cacheprovider --basetemp .pytest-tmp-runtime`; expect failure for missing packages.
-- [ ] Set runtime dependencies to:
+- [x] Write a failing test that parses `pyproject.toml` and requires `pydantic`, `typing-extensions`, `Pillow`, `imageio`, and `imageio-ffmpeg` in project dependencies.
+- [x] Run `uv run --extra test python -m pytest tests/test_project_runtime.py -q -p no:cacheprovider --basetemp .pytest-tmp-runtime`; expect failure for missing packages.
+- [x] Set runtime dependencies to:
 
 ```toml
 dependencies = [
@@ -35,8 +35,8 @@ dependencies = [
 test = ["pytest>=8.0"]
 ```
 
-- [ ] Re-run the test and `uv run --extra test python -c "from PIL import Image; import imageio; import pydantic; print('runtime-ok')"`; expect pass and `runtime-ok`.
-- [ ] Commit with `git commit -m "build: declare real video runtime dependencies"`.
+- [x] Re-run the test and `uv run --extra test python -c "from PIL import Image; import imageio; import pydantic; print('runtime-ok')"`; expect pass and `runtime-ok`.
+- [x] Commit with `git commit -m "build: declare real video runtime dependencies"`.
 
 ### Task 2: Consolidate the Memory writer and restore a green baseline
 
@@ -44,7 +44,7 @@ test = ["pytest>=8.0"]
 - Modify: `scripts/train_real_harness.py`
 - Modify: `tests/test_real_batch_discovery.py`
 
-- [ ] Update the existing Memory test to require these exact headers:
+- [x] Update the existing Memory test to require these exact headers:
 
 ```python
 required = (
@@ -54,11 +54,11 @@ required = (
 )
 ```
 
-- [ ] Use a row containing round, attempt, split, case ID, exact prompt, real video path, three separate scores, review source/confidence, one owner, fix, delta, and natural-language decision.
-- [ ] Run the focused test; expect failure because five duplicate writer definitions exist and the active schema is incomplete.
-- [ ] Delete four duplicate `write_training_memory_markdown` definitions and retain one implementation. Escape pipes/newlines and render missing scores as `unavailable`, never `0`.
-- [ ] Run `uv run --extra test python -m pytest -q -p no:cacheprovider --basetemp .pytest-tmp-health`; expect at least 140 passed and zero failures.
-- [ ] Commit with `git commit -m "fix: consolidate Harness training memory writer"`.
+- [x] Use a row containing round, attempt, split, case ID, exact prompt, real video path, three separate scores, review source/confidence, one owner, fix, delta, and natural-language decision.
+- [x] Run the focused test; expect failure because five duplicate writer definitions exist and the active schema is incomplete.
+- [x] Delete four duplicate `write_training_memory_markdown` definitions and retain one implementation. Escape pipes/newlines and render missing scores as `unavailable`, never `0`.
+- [x] Run `uv run --extra test python -m pytest -q -p no:cacheprovider --basetemp .pytest-tmp-health`; expect at least 140 passed and zero failures.
+- [x] Commit with `git commit -m "fix: consolidate Harness training memory writer"`.
 
 ### Task 3: Index the retained baseline truthfully
 
@@ -67,17 +67,17 @@ required = (
 - Create: `scripts/index_training_baseline.py`
 - Create: `tests/test_training_baseline.py`
 
-- [ ] Write a failing test requiring run root `out/training/single-five-rounds-v1`, round 1, attempt 3, 10 train, 10 dev, deterministic means 100, unavailable visual review, null task score, and a 64-character source-report SHA-256.
-- [ ] Implement an indexer that reads `round-01/attempt_report.json`, validates the expected identity/counts, computes its hash, and writes only the summary JSON.
-- [ ] Run:
+- [x] Write a failing test requiring run root `out/training/single-five-rounds-v1`, round 1, attempt 3, 10 train, 10 dev, deterministic means 100, unavailable visual review, null task score, and a 64-character source-report SHA-256.
+- [x] Implement an indexer that reads `round-01/attempt_report.json`, validates the expected identity/counts, computes its hash, and writes only the summary JSON.
+- [x] Run:
 
 ```powershell
 uv run python scripts/index_training_baseline.py --run-root out/training/single-five-rounds-v1 --out training/baselines/single-v1-round01-attempt03.json
 uv run --extra test python -m pytest tests/test_training_baseline.py -q -p no:cacheprovider --basetemp .pytest-tmp-baseline
 ```
 
-- [ ] Stop instead of inventing values if source evidence is missing.
-- [ ] Commit with `git commit -m "docs: index retained single-entity baseline"`.
+- [x] Stop instead of inventing values if source evidence is missing.
+- [x] Commit with `git commit -m "docs: index retained single-entity baseline"`.
 
 ### Task 4: Add strict DirectorAgent contracts
 
