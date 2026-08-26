@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from .contracts import AttachmentEvent, EntityState, EntityTrajectory, MotionPrimitive, Timebase
 from .director_contracts import ContractModel, DirectorRequest
@@ -19,12 +19,6 @@ class DirectorTrajectories(ContractModel):
     entities: dict[str, EntityTrajectory]
     current_owner_by_event: dict[str, str] = Field(default_factory=dict)
     final_support_by_prop: dict[str, str] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def validate_entities(self) -> "DirectorTrajectories":
-        if not self.entities:
-            raise ValueError("director trajectories require at least one entity")
-        return self
 
 
 class MultiEntityTrajectoryComposer:

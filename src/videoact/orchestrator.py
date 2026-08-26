@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from .blender_adapter import BlenderAdapter
+from .director import DirectorAgent
 from .inner_loop import run_inner_loop
 from .run_manifest import hash_prompt
-from .scene_contract import SceneContractBuilder
-from .trajectory import TrajectoryPlanner
 
 
 class Orchestrator:
@@ -51,12 +50,12 @@ class Orchestrator:
             )
 
         # Validate the contract and plan before delegating to any execution adapter.
-        contract = SceneContractBuilder().build(
+        DirectorAgent().plan(
             prompt,
+            scene_id=str(case.get("case_id", "case")),
             duration_s=float(case.get("duration_s", 10.0)),
             fps=int(case.get("fps", 24)),
         )
-        TrajectoryPlanner().plan(contract)
         self.stage_order = list(self.STAGES)
         return run_inner_loop(
             case,

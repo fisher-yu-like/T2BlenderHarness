@@ -11,9 +11,8 @@ from evaluator.deterministic import DeterministicEvaluator
 
 from .blender_adapter import BlenderAdapter
 from .contracts import RunManifest, RunResult
+from .director import DirectorAgent
 from .run_manifest import hash_payload, hash_prompt, write_manifest
-from .scene_contract import SceneContractBuilder
-from .trajectory import TrajectoryPlanner
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -40,8 +39,14 @@ def run_inner_loop(
     attempts_root = root / "attempts"
     attempts_root.mkdir(parents=True, exist_ok=True)
 
-    contract = SceneContractBuilder().build(prompt, duration_s=duration_s, fps=fps)
-    plan = TrajectoryPlanner().plan(contract)
+    director_result = DirectorAgent().plan(
+        prompt,
+        scene_id=case_id,
+        duration_s=duration_s,
+        fps=fps,
+    )
+    contract = director_result.scene_contract
+    plan = director_result.trajectory_plan
     prompt_hash = hash_prompt(prompt)
     plan_hash = hash_payload(plan.model_dump(mode="json"))
     run_id = f"{case_id}-{prompt_hash[:10]}"
@@ -65,12 +70,14 @@ def run_inner_loop(
             frame_end=plan.timebase.frame_end,
             artifacts={
                 "plan": "plan.json",
+                "director_plan": "director_plan.json",
                 "trajectory": "trajectory.json",
                 "camera_plan": "camera_plan.json",
                 "blender_script": "blender_script.py",
                 "deterministic_report": "deterministic_report.json",
             },
         )
+        _write_json(attempt_dir / "director_plan.json", director_result.director_plan.model_dump(mode="json"))
         _write_json(attempt_dir / "plan.json", plan.model_dump(mode="json"))
         _write_json(attempt_dir / "trajectory.json", plan.model_dump(mode="json"))
         _write_json(attempt_dir / "camera_plan.json", plan.camera.model_dump(mode="json"))
@@ -113,6 +120,7 @@ def run_inner_loop(
                     "prompt_hash": prompt_hash,
                     "harness_version": harness_version,
                     "plan_hash": plan_hash,
+                    "director_plan_hash": director_result.director_plan_hash,
                     "attempt_manifest": str(attempt_dir / "attempt_manifest.json"),
                 },
             )

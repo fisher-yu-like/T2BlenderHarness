@@ -169,8 +169,8 @@ class InteractionLifecycle(ContractModel):
 - Modify: `src/videoact/inner_loop.py`
 - Modify: `scripts/prepare_real_jobs.py`
 
-- [ ] Write failing tests that require exact-prompt preservation, provider/policy fingerprints, a DirectorPlan, and compatible SceneContract/TrajectoryPlan outputs. Reject unresolved hard uncertainty before Blender compilation.
-- [ ] Implement the facade in this order:
+- [x] Write failing tests that require exact-prompt preservation, provider/policy fingerprints, a DirectorPlan, and compatible SceneContract/TrajectoryPlan outputs. Reject unresolved hard uncertainty before Blender compilation.
+- [x] Implement the facade in this order:
 
 ```python
 interpretation = interpreter.interpret(request)
@@ -187,10 +187,10 @@ director_plan = critic.validate_and_repair(
 return projector.project(director_plan)
 ```
 
-- [ ] Persist `director_plan.json`, `scene_contract.json`, `trajectory.json`, and `camera_plan.json`.
-- [ ] Route Orchestrator, inner loop, and real-job preparation exclusively through DirectorAgent while retaining legacy compatibility projections.
-- [ ] Run Director, orchestrator, real-job, and proxy-scene tests; expect pass.
-- [ ] Commit with `git commit -m "feat: route planning through DirectorAgent"`.
+- [x] Persist `director_plan.json`, `scene_contract.json`, `trajectory.json`, and `camera_plan.json`.
+- [x] Route Orchestrator, inner loop, and real-job preparation exclusively through DirectorAgent while retaining legacy compatibility projections.
+- [x] Run Director, orchestrator, real-job, and proxy-scene tests; expect pass.
+- [x] Commit with `git commit -m "feat: route planning through DirectorAgent"`.
 
 ### Task 9: Generalize Blender compilation and telemetry
 

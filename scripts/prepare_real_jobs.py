@@ -15,10 +15,9 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from blender.real_proxy_job import compile_real_proxy_job
+from videoact.director import DirectorAgent
 from videoact.real_artifacts import RealRunManifest, fingerprint_real_run
 from videoact.run_manifest import hash_payload, hash_prompt, write_manifest
-from videoact.scene_contract import SceneContractBuilder
-from videoact.trajectory import TrajectoryPlanner
 
 
 RENDER_SETTINGS = {"engine": "BLENDER_EEVEE_NEXT", "resolution": [256, 256], "samples": 16}
@@ -55,8 +54,7 @@ def prepare_jobs(
         raise ValueError("split must be calibration, train, dev, or test")
     output = Path(out_dir)
     output.mkdir(parents=True, exist_ok=True)
-    planner = TrajectoryPlanner()
-    builder = SceneContractBuilder()
+    director = DirectorAgent()
     effective_render_settings = {**RENDER_SETTINGS, **(render_settings or {})}
     jobs = []
     for record in _load_records(dataset_root, split, case_ids):
@@ -65,8 +63,14 @@ def prepare_jobs(
         if run_dir.exists() and any(run_dir.iterdir()):
             raise FileExistsError(f"real run directory already contains artifacts: {run_dir}")
         run_dir.mkdir(parents=True, exist_ok=True)
-        contract = builder.build(record["prompt"], duration_s=record["duration_s"], fps=record["fps"])
-        plan = planner.plan(contract)
+        director_result = director.plan(
+            record["prompt"],
+            scene_id=case_id,
+            duration_s=record["duration_s"],
+            fps=record["fps"],
+        )
+        contract = director_result.scene_contract
+        plan = director_result.trajectory_plan
         prompt_hash = hash_prompt(record["prompt"])
         plan_hash = hash_payload(plan.model_dump(mode="json"))
         manifest = RealRunManifest(
@@ -92,6 +96,7 @@ def prepare_jobs(
             ),
             state="prepared",
         )
+        (run_dir / "director_plan.json").write_text(json.dumps(director_result.director_plan.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
         (run_dir / "scene_contract.json").write_text(json.dumps(contract.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
         (run_dir / "proxy_scene.json").write_text(json.dumps(record.get("proxy_scene", {}), indent=2, sort_keys=True), encoding="utf-8")
         (run_dir / "trajectory.json").write_text(json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
