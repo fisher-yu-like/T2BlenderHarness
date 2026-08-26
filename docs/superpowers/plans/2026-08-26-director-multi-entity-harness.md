@@ -86,10 +86,10 @@ uv run --extra test python -m pytest tests/test_training_baseline.py -q -p no:ca
 - Create: `tests/test_director_contracts.py`
 - Modify: `src/videoact/__init__.py`
 
-- [ ] Write tests for two actors, two props, concurrency, handoff lifecycle, assumptions, uncertainties, evidence, and fingerprints. Add rejection tests for unknown references, duplicate IDs, unsupported assumptions, dependency cycles, and invalid final owners.
-- [ ] Run the test and verify `ModuleNotFoundError`.
-- [ ] Implement `DirectorRequest`, `DirectorEntity`, `DirectorEvent`, `InteractionLifecycle`, `DirectorDecisionEvidence`, `DirectorPlan`, and `DirectorResult` as Pydantic models with `extra="forbid"`.
-- [ ] Use these key fields:
+- [x] Write tests for two actors, two props, concurrency, handoff lifecycle, assumptions, uncertainties, evidence, and fingerprints. Add rejection tests for unknown references, duplicate IDs, unsupported assumptions, dependency cycles, and invalid final owners.
+- [x] Run the test and verify `ModuleNotFoundError`.
+- [x] Implement `DirectorRequest`, `DirectorEntity`, `DirectorEvent`, `InteractionLifecycle`, `DirectorDecisionEvidence`, `DirectorPlan`, and `DirectorResult` as Pydantic models with `extra="forbid"`.
+- [x] Use these key fields:
 
 ```python
 class DirectorEvent(ContractModel):
@@ -114,8 +114,8 @@ class InteractionLifecycle(ContractModel):
     final_support_id: str | None = None
 ```
 
-- [ ] Run `tests/test_director_contracts.py`; expect all pass.
-- [ ] Commit with `git commit -m "feat: add strict DirectorAgent contracts"`.
+- [x] Run `tests/test_director_contracts.py`; expect all pass.
+- [x] Commit with `git commit -m "feat: add strict DirectorAgent contracts"`.
 
 ### Task 5: Interpret prompts and schedule event graphs
 
