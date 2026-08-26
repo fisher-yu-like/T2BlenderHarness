@@ -125,12 +125,12 @@ class InteractionLifecycle(ContractModel):
 - Create: `tests/test_director_prompt.py`
 - Create: `tests/test_director_schedule.py`
 
-- [ ] Write failing interpretation tests using named actors and repeated prop kinds. Require stable IDs such as `actor_a`, `actor_b`, `red_cube`, and `blue_cube`, explicit giver/receiver roles, and evidence linked to prompt spans.
-- [ ] Write failing scheduler tests for sequential transfer, concurrent independent carrying, handoff, pause/resume, and return; require acyclic dependencies and bounded timing.
-- [ ] Implement `DeterministicPromptInterpreter.interpret(request)` without coordinates or camera shots.
-- [ ] Implement `EventScheduler.schedule(request, interpretation)` returning events and interaction lifecycles without trajectories.
-- [ ] Run both test files; expect pass.
-- [ ] Commit with `git commit -m "feat: interpret and schedule multi-entity prompts"`.
+- [x] Write failing interpretation tests using named actors and repeated prop kinds. Require stable IDs such as `actor_a`, `actor_b`, `red_cube`, and `blue_cube`, explicit giver/receiver roles, and evidence linked to prompt spans.
+- [x] Write failing scheduler tests for sequential transfer, concurrent independent carrying, handoff, pause/resume, and return; require acyclic dependencies and bounded timing.
+- [x] Implement `DeterministicPromptInterpreter.interpret(request)` without coordinates or camera shots.
+- [x] Implement `EventScheduler.schedule(request, interpretation)` returning events and interaction lifecycles without trajectories.
+- [x] Run both test files; expect pass.
+- [x] Commit with `git commit -m "feat: interpret and schedule multi-entity prompts"`.
 
 ### Task 6: Compose collision-aware multi-entity trajectories
 
