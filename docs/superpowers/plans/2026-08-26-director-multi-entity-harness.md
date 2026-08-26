@@ -349,6 +349,12 @@ uv run python scripts/validate_multi_entity_dataset.py --dataset-root dataset/tr
 
 ### Task 16: Execute five real training rounds
 
+Detailed execution plan and current approval state: `docs/t2blendercodeharness-multi-training-plan-v1.md`.
+Batch training is intentionally paused until the user approves that plan and
+chooses the visual-review branch. The smoke endpoint probe listed models but
+returned HTTP 403/error 1010 for image requests; this is recorded as
+`unavailable`, never as a numeric score.
+
 **Files:**
 - Generate: `out/training/multi-five-rounds-v1/`
 - Generate/update: `docs/t2blendercodeharness-multi-training-memory-v1.md`
@@ -356,7 +362,9 @@ uv run python scripts/validate_multi_entity_dataset.py --dataset-root dataset/tr
 - Generate: `docs/figures/multi-training-curves-v1.png`
 
 - [ ] Freeze dataset, evaluator, Director provider, Blender, render-setting, and Harness fingerprints with protocol mode.
+- [ ] Receive explicit user approval after reviewing the architecture, dataset, score formulas, and visual-review branch.
 - [ ] For each round 1–5, run attempt 1 with 10 unique train, 10 paired dev, real Blender, 12 workers, and `gpt-5.6-Luna`.
+- [ ] If external `gpt-5.6-luna`/`gpt-5.6-terra` is unavailable, create auditable Codex local review requests; only explicit frame-grounded review payloads may produce numeric visual scores.
 - [ ] Immediately verify the Markdown received 20 rows or explicit `NOT_RENDERED` rows.
 - [ ] Aggregate only repeated train failures affecting at least two distinct cases.
 - [ ] Apply at most one owner patch using `superpowers:test-driven-development`; do not edit dataset labels or evaluator policy to gain score.
