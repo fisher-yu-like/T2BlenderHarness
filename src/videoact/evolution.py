@@ -44,8 +44,13 @@ OWNER_FILES = {
     "scene_parser": ["src/videoact/scene_contract.py"],
     "trajectory_planner": ["src/videoact/trajectory.py"],
     "camera_planner": ["src/videoact/camera.py"],
-    "physics_validator": ["evaluator/physics_metrics.py"],
+    "director_prompt_interpreter": ["src/videoact/director_prompt.py"],
+    "director_event_scheduler": ["src/videoact/director_schedule.py"],
+    "director_trajectory": ["src/videoact/director_trajectory.py"],
+    "director_camera": ["src/videoact/director_camera.py"],
+    "blender_code_agent": ["blender/real_proxy_job.py"],
     "blender_executor": ["src/videoact/blender_adapter.py"],
+    "proxy_renderer": ["src/videoact/real_artifacts.py"],
     "evaluator": ["evaluator/deterministic.py"],
 }
 

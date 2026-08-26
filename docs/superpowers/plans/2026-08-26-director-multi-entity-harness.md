@@ -217,10 +217,10 @@ return projector.project(director_plan)
 - Create: `tests/test_director_evaluator.py`
 - Create: `tests/test_interaction_evaluator.py`
 
-- [ ] Write failing tests for unsupported assumptions, missing evidence, dependency mismatch, identity swap, incomplete handoff contact, wrong final owner, path collision, and multi-target invisibility.
-- [ ] Require interaction-specific roots such as `attachment_lifecycle:actor_b:blue_cube:handoff_02`.
-- [ ] Add an independent `director_plan_score`; do not add it to deterministic, task, or realism scores.
-- [ ] Route failures only to:
+- [x] Write failing tests for unsupported assumptions, missing evidence, dependency mismatch, identity swap, incomplete handoff contact, wrong final owner, path collision, and multi-target invisibility.
+- [x] Require interaction-specific roots such as `attachment_lifecycle:actor_b:blue_cube:handoff_02`.
+- [x] Add an independent `director_plan_score`; do not add it to deterministic, task, or realism scores.
+- [x] Route failures only to:
 
 ```python
 ALLOWED_OWNERS = {
@@ -229,8 +229,8 @@ ALLOWED_OWNERS = {
 }
 ```
 
-- [ ] Remove `physics_validator` as a patch owner; route a physics finding to the component that produced the invalid behavior.
-- [ ] Run all evaluator, failure-aggregation, and policy tests; expect pass.
+- [x] Remove `physics_validator` as a patch owner; route a physics finding to the component that produced the invalid behavior.
+- [x] Run all evaluator, failure-aggregation, and policy tests; expect pass.
 - [ ] Commit with `git commit -m "feat: evaluate Director plans and interactions"`.
 
 ### Task 11: Strengthen one-owner evolution and anti-overfit gates

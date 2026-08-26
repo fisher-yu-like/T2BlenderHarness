@@ -11,6 +11,10 @@ def _distance(first: tuple[float, float, float], second: tuple[float, float, flo
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second)))
 
 
+def _trajectory_owner(plan: TrajectoryPlan) -> str:
+    return "director_trajectory" if "multi_entity_collision_free_lanes" in plan.validation_intents else "trajectory_planner"
+
+
 def _state_at_frame(plan: TrajectoryPlan, entity_id: str, frame: int):
     trajectory = plan.entities.get(entity_id)
     if trajectory is None or not trajectory.states:
@@ -44,7 +48,7 @@ def check_support_before_grasp(contract: SceneContract, plan: TrajectoryPlan) ->
         return [
             Finding(
                 failure_id="support_before_grasp",
-                owner="physics_validator",
+                owner=_trajectory_owner(plan),
                 category="support_relation",
                 severity="hard",
                 root_cause_id="support_grasp_causality",
@@ -81,7 +85,7 @@ def check_attachment_contact(plan: TrajectoryPlan) -> list[Finding]:
                 return [
                     Finding(
                         failure_id="attachment_without_contact",
-                        owner="physics_validator",
+                        owner=_trajectory_owner(plan),
                         category="attachment_relation",
                         severity="hard",
                         root_cause_id=f"attachment_contact:{attachment.subject_id}:{attachment.object_id}",

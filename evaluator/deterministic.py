@@ -8,6 +8,7 @@ from typing_extensions import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from videoact.contracts import ExecutionResult, Finding, SceneContract, TrajectoryPlan
+from videoact.director_contracts import DirectorPlan
 
 from .camera_metrics import check_camera_coverage, check_camera_motion_intent
 from .physics_metrics import (
@@ -18,6 +19,8 @@ from .physics_metrics import (
 from .prompt_predicates import check_event_order, check_required_event_coverage
 from .trajectory_metrics import check_trajectory_phase_alignment
 from .findings import deduplicate_findings, score_findings
+from .director_metrics import evaluate_director_plan
+from .interaction_metrics import evaluate_interactions
 
 
 class DeterministicReport(BaseModel):
@@ -28,6 +31,9 @@ class DeterministicReport(BaseModel):
     hard_gate_failed: bool
     score: float = Field(ge=0, le=100)
     findings: list[Finding] = Field(default_factory=list)
+    director_plan_score: float | None = Field(default=None, ge=0, le=100)
+    director_findings: list[Finding] = Field(default_factory=list)
+    interaction_findings: list[Finding] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
 
 
@@ -38,6 +44,8 @@ class DeterministicEvaluator:
         plan: TrajectoryPlan,
         *,
         execution: ExecutionResult | None = None,
+        director_plan: DirectorPlan | None = None,
+        telemetry: dict[str, Any] | None = None,
     ) -> DeterministicReport:
         findings: list[Finding] = []
         if execution is not None and execution.status != "success":
@@ -65,11 +73,29 @@ class DeterministicEvaluator:
         findings = deduplicate_findings(findings)
         hard_gate_failed = any(finding.severity == "hard" for finding in findings)
         score = self._score_findings(findings)
+        director_score = None
+        director_findings: list[Finding] = []
+        if director_plan is not None:
+            director_report = evaluate_director_plan(
+                director_plan,
+                plan,
+                telemetry=telemetry,
+            )
+            director_findings = director_report.findings
+            interaction_findings = deduplicate_findings(
+                evaluate_interactions(director_plan, plan, telemetry=telemetry)
+            )
+            director_score = director_report.director_plan_score
+        else:
+            interaction_findings = []
         return DeterministicReport(
             terminal_status="fail" if hard_gate_failed else "pass",
             hard_gate_failed=hard_gate_failed,
             score=score,
             findings=findings,
+            director_plan_score=director_score,
+            director_findings=director_findings,
+            interaction_findings=interaction_findings,
             metrics={
                 "required_event_coverage": self._coverage(contract, plan),
                 "finding_count": float(len(findings)),
@@ -86,9 +112,10 @@ class DeterministicEvaluator:
         plan: TrajectoryPlan,
         telemetry: dict[str, Any],
         artifacts: Any,
+        director_plan: DirectorPlan | None = None,
     ) -> DeterministicReport:
         """Evaluate a real Blender run after the ordinary plan-level checks."""
-        base = self.evaluate(contract, plan)
+        base = self.evaluate(contract, plan, director_plan=director_plan, telemetry=telemetry)
         findings = list(base.findings)
         if getattr(artifacts, "artifact_status", None) != "complete":
             failures = list(getattr(artifacts, "hard_failures", []))
@@ -179,6 +206,9 @@ class DeterministicEvaluator:
             terminal_status="fail" if hard_gate_failed else "pass",
             hard_gate_failed=hard_gate_failed,
             score=self._score_findings(findings),
+            director_plan_score=base.director_plan_score,
+            director_findings=base.director_findings,
+            interaction_findings=base.interaction_findings,
             findings=findings,
             metrics={
                 "required_event_coverage": self._coverage(contract, plan),
