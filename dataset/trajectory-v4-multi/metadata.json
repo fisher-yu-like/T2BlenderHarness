@@ -1,0 +1,37 @@
+{
+  "cases": 140,
+  "dataset_id": "trajectory-v4-multi",
+  "dev_policy": "harder unseen actor/prop compositions; paired dev is never allowed to regress",
+  "families": {
+    "dev": [
+      "dev_three_actor_two_prop",
+      "dev_two_actor_three_prop",
+      "dev_three_actor_three_prop",
+      "dev_role_reversal",
+      "dev_occlusion_countermotion",
+      "dev_four_prop_camera_constraint"
+    ],
+    "test": [
+      "test_role_reversal_final_owner",
+      "test_counterfactual_camera_visibility",
+      "test_prohibited_crossing_support"
+    ],
+    "train": [
+      "sequential_transfers",
+      "repeated_handoffs",
+      "concurrent_independent_work",
+      "occlusion_reveal",
+      "role_swap_pause_return_crossing"
+    ]
+  },
+  "fingerprint": "7f5e6546064d74b65a282cf06a38a20e6518e1b17f33da2895048c750fc49c46",
+  "generator_version": "director-multi-v1",
+  "schema_version": "trajectory-dataset-v4-multi",
+  "splits": {
+    "dev": 60,
+    "test": 30,
+    "train": 50
+  },
+  "test_policy": "frozen role reversals, counterfactual camera constraints, prohibited crossings, and final-owner/support checks; never used for patch selection",
+  "train_policy": "five authored ten-case families; repeated failures must affect two distinct cases before a patch"
+}

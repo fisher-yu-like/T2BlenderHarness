@@ -287,11 +287,11 @@ VLM_MODELS = {
 - Generate: `dataset/trajectory-v4-multi/splits.json`
 - Generate: `dataset/trajectory-v4-multi/metadata.json`
 
-- [ ] Write failing tests requiring exactly 50 train, 60 dev, and 30 test cases; unique hashes; no family/composition leakage; authored event graphs/interactions/camera evidence/negative constraints; and a harder dev/test distribution.
-- [ ] Implement five ten-case train families: sequential transfers, repeated handoffs, concurrent independent work, occlusion/reveal, and role-swap/pause/return/crossing paths.
-- [ ] Give dev two to three actors and two to four props with unseen compositions. Freeze test with role reversals, counterfactual camera constraints, prohibited crossings, and combined final-owner/final-support requirements.
-- [ ] Sort canonical JSON by case ID and compute a reproducible dataset fingerprint.
-- [ ] Run:
+- [x] Write failing tests requiring exactly 50 train, 60 dev, and 30 test cases; unique hashes; no family/composition leakage; authored event graphs/interactions/camera evidence/negative constraints; and a harder dev/test distribution.
+- [x] Implement five ten-case train families: sequential transfers, repeated handoffs, concurrent independent work, occlusion/reveal, and role-swap/pause/return/crossing paths.
+- [x] Give dev two to three actors and two to four props with unseen compositions. Freeze test with role reversals, counterfactual camera constraints, prohibited crossings, and combined final-owner/final-support requirements.
+- [x] Sort canonical JSON by case ID and compute a reproducible dataset fingerprint.
+- [x] Run:
 
 ```powershell
 uv run python scripts/build_multi_entity_dataset.py --out dataset/trajectory-v4-multi
@@ -299,7 +299,7 @@ uv run python scripts/validate_multi_entity_dataset.py --dataset-root dataset/tr
 uv run --extra test python -m pytest tests/test_multi_entity_dataset.py -q -p no:cacheprovider --basetemp .pytest-tmp-dataset
 ```
 
-- [ ] Rebuild in a temporary directory and assert the fingerprint is identical.
+- [x] Rebuild in a temporary directory and assert the fingerprint is identical.
 - [ ] Commit with `git commit -m "feat: add frozen multi-entity trajectory dataset"`.
 
 ### Task 14: Package the protocol and Skills
