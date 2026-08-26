@@ -300,7 +300,7 @@ uv run --extra test python -m pytest tests/test_multi_entity_dataset.py -q -p no
 ```
 
 - [x] Rebuild in a temporary directory and assert the fingerprint is identical.
-- [ ] Commit with `git commit -m "feat: add frozen multi-entity trajectory dataset"`.
+- [x] Commit with `git commit -m "feat: add frozen multi-entity trajectory dataset"`.
 
 ### Task 14: Package the protocol and Skills
 
@@ -323,7 +323,7 @@ uv run --extra test python -m pytest tests/test_multi_entity_dataset.py -q -p no
 - [x] Create the Director Skill with schemas, deterministic/provider-assisted modes, evidence/uncertainty policy, repair routing, and stop conditions.
 - [x] Update all component Skills so commands, fingerprints, owners, Memory schema, and scores match implementation.
 - [x] Run focused Skill tests and the full suite; expect zero failures.
-- [ ] Commit with `git commit -m "feat: package DirectorAgent multi-entity training workflow"`.
+- [x] Commit with `git commit -m "feat: package DirectorAgent multi-entity training workflow"`.
 
 ### Task 15: Pass capability checks and a real multi-entity smoke
 
@@ -332,7 +332,7 @@ uv run --extra test python -m pytest tests/test_multi_entity_dataset.py -q -p no
 - Generate: `out/smoke/director-multi-v1/`
 - Create: `docs/director-multi-smoke-report.md`
 
-- [ ] Run the full test suite, capability check, and dataset validator:
+- [x] Run the full test suite, capability check, and dataset validator:
 
 ```powershell
 uv run --extra test python -m pytest -q -p no:cacheprovider --basetemp .pytest-tmp-final
@@ -340,12 +340,12 @@ uv run python skills/t2blendercodeharness/scripts/capability_check.py --project-
 uv run python scripts/validate_multi_entity_dataset.py --dataset-root dataset/trajectory-v4-multi
 ```
 
-- [ ] Prepare `multi-01-01` as an immutable real job under `out/smoke/director-multi-v1`.
-- [ ] Render it using `D:\blender\blender.exe`, one worker, 1800-second timeout, and at most two retries.
-- [ ] Evaluate real artifacts and inspect at least one handoff frame.
-- [ ] Require `proxy.blend`, playable MP4, all entity telemetry, current-owner evidence, active camera, deterministic pass, geometry/frame reports, and three readable event-aligned frames.
-- [ ] Record external VLM failure as `unavailable`; never synthesize a score.
-- [ ] Write the smoke report and commit with `git commit -m "test: verify real multi-entity Blender smoke"`.
+- [x] Prepare `multi-train-001` as an immutable real job under `out/smoke/director-multi-v3`.
+- [x] Render it using `D:\blender\blender.exe`, one worker, 1800-second timeout, and at most two retries.
+- [x] Evaluate real artifacts and inspect at least one handoff frame.
+- [x] Require `proxy.blend`, playable MP4, all entity telemetry, current-owner evidence, active camera, deterministic pass, geometry/frame reports, and three readable event-aligned frames.
+- [x] Record external VLM failure as `unavailable`; never synthesize a score.
+- [x] Write the smoke report and commit with `git commit -m "test: verify real multi-entity Blender smoke"`.
 
 ### Task 16: Execute five real training rounds
 

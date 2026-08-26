@@ -180,13 +180,13 @@ def _make_prompt(actors: list[str], props: list[str], family: str, variant: int)
         else ""
     )
     if family in {"concurrent_independent_work", "dev_three_actor_two_prop", "dev_three_actor_three_prop"}:
-        action = f"{a0} carries the {props[0]} while {a1} carries the {props[1]}, then they exchange the marked object without crossing lanes"
+        action = f"{a0} carries the {props[0]} while {a1} carries the {props[1]}, then {a0} hands the {props[0]} to {a1} and {a1} places the {props[0]} without crossing lanes"
     elif family in {"occlusion_reveal", "dev_occlusion_countermotion", "test_counterfactual_camera_visibility"}:
-        action = f"{a0} reveals the {props[0]}, carries it to {a1}, and {a1} places it while the {props[1]} remains visible"
+        action = f"{a0} reveals the {props[0]}, then carries the {props[0]} and hands the {props[0]} to {a1}; {a1} places the {props[0]} while the {props[1]} remains visible"
     elif family in {"role_swap_pause_return_crossing", "dev_role_reversal", "test_role_reversal_final_owner"}:
-        action = f"{a0} carries the {props[0]} to {a1}, {a1} hands it back after a pause, and {a0} returns it to the support"
+        action = f"{a0} carries the {props[0]} and hands the {props[0]} to {a1}; {a1} pauses, returns the {props[0]} to {a0}, and {a0} places the {props[0]}"
     else:
-        action = f"{a0} carries the {props[0]} to {a1}, {a1} places it, then {a1} carries the {props[1]} through a separate lane"
+        action = f"{a0} carries the {props[0]}, then {a0} hands the {props[0]} to {a1} and {a1} places the {props[0]}; then {a1} carries the {props[1]} and places the {props[1]} through a separate lane"
     return (
         f"{action}. The scene contains {prop_text}; use {rhythm}. {detail}. "
         f"{additional_actor} "

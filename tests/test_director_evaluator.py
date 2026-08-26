@@ -28,6 +28,23 @@ def test_director_evaluator_returns_independent_perfect_score_for_valid_plan():
     assert report.findings == []
 
 
+def test_director_evaluator_rounds_decimal_event_boundaries_like_trajectory_composer():
+    from evaluator.director_metrics import evaluate_director_plan
+    from videoact.director import DirectorAgent
+
+    result = DirectorAgent().plan(
+        "Alice carries the green ball, then Alice hands the green ball to Carla and Carla places the green ball.",
+        scene_id="decimal-boundary",
+        duration_s=20.0,
+        fps=24,
+    )
+
+    report = evaluate_director_plan(result.director_plan, result.trajectory_plan)
+
+    assert report.director_plan_score == 100.0
+    assert "director_path_collision" not in {finding.failure_id for finding in report.findings}
+
+
 @pytest.mark.parametrize(
     ("mutate", "failure_id"),
     [

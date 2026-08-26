@@ -153,8 +153,8 @@ def _collision_findings(plan: DirectorPlan, trajectory: TrajectoryPlan) -> list[
     findings: list[Finding] = []
     handoff_windows = [
         (
-            event.start * trajectory.timebase.fps + 1,
-            event.end * trajectory.timebase.fps + 1,
+            round(event.start * trajectory.timebase.fps) + 1,
+            round(event.end * trajectory.timebase.fps) + 1,
             set(event.participant_ids),
         )
         for event in plan.events

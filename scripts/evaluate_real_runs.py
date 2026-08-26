@@ -15,10 +15,13 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from evaluator.deterministic import DeterministicEvaluator  # noqa: E402
+from evaluator.director_metrics import evaluate_director_plan  # noqa: E402
 from evaluator.independent_oracle import evaluate_independent_oracle  # noqa: E402
+from evaluator.interaction_metrics import evaluate_interactions  # noqa: E402
 from evaluator.findings import deduplicate_findings  # noqa: E402
 from evaluator.realism import REALISM_EVALUATOR_VERSION  # noqa: E402
 from videoact.contracts import SceneContract, TrajectoryPlan  # noqa: E402
+from videoact.director_contracts import DirectorPlan  # noqa: E402
 from videoact.real_artifacts import RealArtifactGate  # noqa: E402
 from videoact.real_pipeline import RealRunStateMachine  # noqa: E402
 from videoact.real_video import assemble_mp4_from_pngs  # noqa: E402
@@ -47,6 +50,10 @@ def evaluate_real_run(
     manifest = json.loads((root / "run_manifest.json").read_text(encoding="utf-8"))
     contract = SceneContract.model_validate(json.loads((root / "scene_contract.json").read_text(encoding="utf-8")))
     plan = TrajectoryPlan.model_validate(json.loads((root / "trajectory.json").read_text(encoding="utf-8")))
+    director_plan = None
+    director_plan_path = root / "director_plan.json"
+    if director_plan_path.is_file():
+        director_plan = DirectorPlan.model_validate(json.loads(director_plan_path.read_text(encoding="utf-8")))
     telemetry = json.loads((root / "telemetry.json").read_text(encoding="utf-8"))
     machine = RealRunStateMachine(root, case_id=manifest["case_id"])
     if machine.state == "executing":
@@ -57,28 +64,57 @@ def evaluate_real_run(
         assemble_mp4_from_pngs(animation_frames, root / "proxy.mp4", fps=manifest["fps"])
 
     artifacts = machine.validate_artifacts(RealArtifactGate())
-    report = DeterministicEvaluator().evaluate_real(contract, plan, telemetry, artifacts)
+    report = DeterministicEvaluator().evaluate_real(
+        contract,
+        plan,
+        telemetry,
+        artifacts,
+        director_plan=director_plan,
+    )
+    director_findings = []
+    interaction_findings = []
     if record is not None:
-        oracle_findings = evaluate_independent_oracle(record, contract, plan)
-        all_findings = deduplicate_findings([*report.findings, *oracle_findings])
-        report = report.model_copy(
-            update={
-                "evaluator_version": "real-v3-declarative-independent-oracle",
-                "terminal_status": "fail" if any(finding.severity == "hard" for finding in all_findings) else "pass",
-                "hard_gate_failed": any(finding.severity == "hard" for finding in all_findings),
-                "score": DeterministicEvaluator._score_findings(all_findings),
-                "findings": all_findings,
-                "metrics": {
-                    **report.metrics,
-                    "independent_oracle_finding_count": float(len(oracle_findings)),
-                    "finding_count": float(len(all_findings)),
-                    "hard_count": float(sum(finding.severity == "hard" for finding in all_findings)),
-                    "error_count": float(sum(finding.severity == "error" for finding in all_findings)),
-                    "warning_count": float(sum(finding.severity == "warning" for finding in all_findings)),
-                    "unique_root_cause_count": float(len(all_findings)),
-                },
-            }
-        )
+        if director_plan is not None:
+            director_report = evaluate_director_plan(director_plan, plan, telemetry=telemetry)
+            interaction_findings = evaluate_interactions(director_plan, plan, telemetry=telemetry)
+            director_findings = deduplicate_findings([*director_report.findings, *interaction_findings])
+            all_hard = [finding for finding in director_findings if finding.severity == "hard"]
+            report = report.model_copy(
+                update={
+                    "evaluator_version": "real-v4-director-interaction-separate",
+                    "terminal_status": "fail" if report.hard_gate_failed or all_hard else "pass",
+                    "hard_gate_failed": report.hard_gate_failed or bool(all_hard),
+                        "director_plan_score": director_report.director_plan_score,
+                        "director_findings": director_report.findings,
+                        "interaction_findings": interaction_findings,
+                    "metrics": {
+                        **report.metrics,
+                        "director_finding_count": float(len(director_report.findings)),
+                        "interaction_finding_count": float(len(interaction_findings)),
+                    },
+                }
+            )
+        else:
+            oracle_findings = evaluate_independent_oracle(record, contract, plan)
+            all_findings = deduplicate_findings([*report.findings, *oracle_findings])
+            report = report.model_copy(
+                update={
+                    "evaluator_version": "real-v3-declarative-independent-oracle",
+                    "terminal_status": "fail" if any(finding.severity == "hard" for finding in all_findings) else "pass",
+                    "hard_gate_failed": any(finding.severity == "hard" for finding in all_findings),
+                    "score": DeterministicEvaluator._score_findings(all_findings),
+                    "findings": all_findings,
+                    "metrics": {
+                        **report.metrics,
+                        "independent_oracle_finding_count": float(len(oracle_findings)),
+                        "finding_count": float(len(all_findings)),
+                        "hard_count": float(sum(finding.severity == "hard" for finding in all_findings)),
+                        "error_count": float(sum(finding.severity == "error" for finding in all_findings)),
+                        "warning_count": float(sum(finding.severity == "warning" for finding in all_findings)),
+                        "unique_root_cause_count": float(len(all_findings)),
+                    },
+                }
+            )
     (root / "deterministic_report.json").write_text(
         json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8"
     )
@@ -117,7 +153,15 @@ def evaluate_real_run(
     if report.terminal_status == "pass" and machine.state == "artifact_valid":
         machine.transition("evaluated", {"score": report.score})
     elif report.terminal_status == "fail" and machine.state not in {"failed", "evaluated"}:
-        machine.transition("failed", {"findings": [finding.failure_id for finding in report.findings]})
+        machine.transition(
+            "failed",
+            {
+                "findings": [
+                    finding.failure_id
+                    for finding in [*report.findings, *director_findings]
+                ]
+            },
+        )
     return {
         "case_id": manifest["case_id"],
         "status": report.terminal_status,
@@ -127,6 +171,9 @@ def evaluate_real_run(
         "hard_failures": artifacts.hard_failures,
         "findings": [finding.failure_id for finding in report.findings],
         "finding_details": [finding.model_dump(mode="json") for finding in report.findings],
+        "director_plan_score": report.director_plan_score,
+        "director_findings": [finding.model_dump(mode="json") for finding in report.director_findings],
+        "interaction_findings": [finding.model_dump(mode="json") for finding in report.interaction_findings],
         "realism": realism,
     }
 
