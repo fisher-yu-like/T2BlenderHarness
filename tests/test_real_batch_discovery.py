@@ -168,26 +168,46 @@ def test_training_memory_markdown_contains_required_natural_language_columns(tmp
     from scripts.train_real_harness import write_training_memory_markdown
 
     destination = tmp_path / "training.md"
+    prompt = "A character carries a red cup to a marked destination."
+    proxy_video = tmp_path / "single-01-01" / "proxy.mp4"
+    proxy_video.parent.mkdir()
+    proxy_video.write_bytes(b"real proxy video")
+    handling = "Accepted because train improved while paired and overall dev did not regress."
     write_training_memory_markdown(
         destination,
         [
             {
                 "round": 1,
-                "prompt": "A character carries a red cup to a marked destination.",
-                "proxy_video": "C:/runs/hard-01-01/proxy.mp4",
-                "score": 82.0,
+                "attempt": 3,
+                "split": "train",
+                "case_id": "single-01-01",
+                "prompt": prompt,
+                "proxy_video": str(proxy_video),
+                "director_plan_score": 88,
+                "task_score": 82,
+                "realism_score": 71,
+                "review": "gpt-5.6-Luna confidence=0.83",
                 "detected_problem": "camera intent missing",
-                "fix_location": "src/videoact/scene_contract.py",
-                "fix_method": "normalize rotate to orbit",
-                "delta": 7.0,
-                "handling": "The patch was retained because train improved and paired dev did not regress.",
+                "owner": "director_camera",
+                "fix_location": "src/videoact/director_camera.py",
+                "fix_method": "add a handoff two-shot",
+                "delta": "train +7.0; paired dev +1.0; overall dev +0.2",
+                "handling": handling,
             }
         ],
     )
     content = destination.read_text(encoding="utf-8")
-    for column in ("轮数", "Prompt", "Proxy 视频地址", "打分", "检测出的 Harness 问题", "修复位置/方法", "提升或下降", "自然语言处理"):
-        assert column in content
-    assert "camera intent missing" in content
+    assert (
+        "| 轮数 | Attempt | Split | Case ID | Prompt | Proxy 视频地址 | Director plan 分 | "
+        "Task score | Realism score | Review | 检测出的 Harness 问题 | Owner | 修复位置/方法 | "
+        "提升或下降 | 自然语言处理 |"
+    ) in content
+    assert (
+        f"| 1 | 3 | train | single-01-01 | {prompt} | {proxy_video} | 88 | 82 | 71 | "
+        "gpt-5.6-Luna confidence=0.83 | camera intent missing | director_camera | "
+        "src/videoact/director_camera.py: add a handoff two-shot | "
+        f"train +7.0; paired dev +1.0; overall dev +0.2 | {handling} |"
+    ) in content
 
 
 def test_anti_overfit_gate_requires_train_gain_and_paired_and_overall_dev_non_regression():

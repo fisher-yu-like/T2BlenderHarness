@@ -174,164 +174,65 @@ def anti_overfit_gate(
 
 
 def write_training_memory_markdown(destination: str | Path, rows: list[dict[str, Any]]) -> None:
-    """Write the user-facing natural-language memory table for every evaluated case."""
+    """Write one UTF-8 Markdown table containing the complete Harness training memory."""
+
+    def cell(value: Any) -> str:
+        if value is None:
+            value = "unavailable"
+        return str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ").replace("|", "\\|")
+
+    def first_available(row: dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            if key in row and row[key] is not None:
+                return row[key]
+        return "unavailable"
+
     lines = [
         "# T2Blendercodeharness 训练记忆表",
         "",
-        "本表只接受真实 Blender 生成的 proxy 视频和真实 VLM/real evaluator 结果；每一行保留 round、prompt、视频地址、问题、修复和处理结论。",
+        "每一行保留真实 proxy 视频、独立评分通道、Harness 问题、修复和自然语言处理结论。",
         "",
-        "| 轮数 | Prompt | Proxy 视频地址 | 打分 | 评审来源/置信度 | Severity/Root cause | 渲染重试 | 检测出的 Harness 问题 | 修复位置/方法 | 修复后提升或下降 | 自然语言处理 |",
-        "|---:|---|---|---:|---|---|---:|---|---|---:|---|",
+        "| 轮数 | Attempt | Split | Case ID | Prompt | Proxy 视频地址 | Director plan 分 | Task score | Realism score | Review | 检测出的 Harness 问题 | Owner | 修复位置/方法 | 提升或下降 | 自然语言处理 |",
+        "|---:|---:|---|---|---|---|---:|---:|---:|---|---|---|---|---|---|",
     ]
     for row in rows:
-        prompt = str(row.get("prompt", "")).replace("|", "\\|").replace("\n", " ")
-        problem = str(row.get("detected_problem", "无 repeated actionable failure")).replace("|", "\\|")
-        fix = f"{row.get('fix_location', '无 patch')}：{row.get('fix_method', '无') }".replace("|", "\\|")
-        if "score_before" in row or "score_after" in row:
-            score = f"{row.get('score_before')} → {row.get('score_after')}"
+        fix_location = first_available(row, "fix_location")
+        fix_method = first_available(row, "fix_method")
+        if fix_location == "unavailable":
+            fix_summary = fix_method
+        elif fix_method == "unavailable":
+            fix_summary = fix_location
         else:
-            score = str(row.get("score", "unavailable"))
-        realism_score = row.get("realism_score", "unavailable")
-        score = f"task={score}; realism_artifact_only={realism_score}"
-        delta = row.get("delta", "unavailable")
-        video = Path(str(row.get("proxy_video", "unavailable")))
-        video_cell = f"[{video.name}]({video.as_posix()})" if video.is_file() else str(row.get("proxy_video", "unavailable"))
-        handling = str(row.get("handling", "未处理：保留失败证据，等待下一轮单 owner 分析。")).replace("|", "\\|")
-        review = f"{row.get('review_source', 'unavailable')} / {row.get('review_confidence', 'unavailable')}"
-        severity_root = str(row.get("severity_root_cause", "none")).replace("|", "\\|")
-        lines.append(
-            f"| {row.get('round', 'unavailable')} | {prompt} | {video_cell} | {score} | {review} | {severity_root} | {row.get('render_retry_count', 0)} | {problem} | {fix} | {delta} | {handling} |"
+            fix_summary = f"{fix_location}: {fix_method}"
+
+        review = first_available(row, "review")
+        if review == "unavailable":
+            review_source = first_available(row, "review_source")
+            review_confidence = first_available(row, "review_confidence")
+            if review_source != "unavailable" and review_confidence != "unavailable":
+                review = f"{review_source} confidence={review_confidence}"
+            elif review_source != "unavailable":
+                review = review_source
+
+        values = (
+            first_available(row, "round"),
+            first_available(row, "attempt"),
+            first_available(row, "split"),
+            first_available(row, "case_id"),
+            first_available(row, "prompt"),
+            first_available(row, "proxy_video"),
+            first_available(row, "director_plan_score"),
+            first_available(row, "task_score", "task_final_score", "video_score", "score"),
+            first_available(row, "realism_score"),
+            review,
+            first_available(row, "detected_problem"),
+            first_available(row, "owner"),
+            fix_summary,
+            first_available(row, "delta"),
+            first_available(row, "handling"),
         )
-    output = Path(destination)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        lines.append("| " + " | ".join(cell(value) for value in values) + " |")
 
-
-# Final clean definition used by the active runner.  It deliberately keeps
-# task/trajectory and realism as separate public channels; neither is hidden
-# inside a single overloaded score column.
-def write_training_memory_markdown(destination: str | Path, rows: list[dict[str, Any]]) -> None:
-    lines = [
-        "# T2Blendercodeharness 训练记忆表",
-        "",
-        "每一行都对应真实 Blender 生成的 proxy 视频；轨迹分数与真实性分数来自同一批采样帧的两个独立通道，不相加。Harness 问题、修改和处理结论必须使用自然语言记录。",
-        "",
-        "| 轮数 | Prompt | Proxy 视频地址 | 轨迹分数（打分） | 真实性分数 | Harness 错误点（检测出的 Harness 问题，自然语言） | Harness 修改点（修复位置/方法，自然语言） | 修复后提升/下降 | 处理结论（自然语言处理） |",
-        "|---:|---|---|---:|---:|---|---|---:|---|",
-    ]
-    for row in rows:
-        prompt = str(row.get("prompt", "")).replace("|", "\\|").replace("\n", " ")
-        video_raw = str(row.get("proxy_video", "unavailable"))
-        video = Path(video_raw)
-        video_cell = f"[{video.name}]({video.as_posix()})" if video.is_file() else video_raw
-        error = str(row.get("detected_problem", "尚未发现可归因的重复 Harness 失败；保留视频证据继续观察。"))
-        fix = str(row.get("fix_method") or row.get("fix_location") or "本轮没有修改 Harness；未满足单组件修复的证据门槛。")
-        handling = str(row.get("handling", "保留真实视频、评分和采样帧，等待跨样本重复模式后再决定是否修复。"))
-        for value in (error, fix, handling):
-            value.replace("|", "\\|")
-        error = error.replace("|", "\\|")
-        fix = fix.replace("|", "\\|")
-        handling = handling.replace("|", "\\|")
-        task_score = row.get("task_score", row.get("score", "unavailable"))
-        realism_score = row.get("realism_score", "unavailable")
-        delta = row.get("delta", "unavailable")
-        lines.append(
-            f"| {row.get('round', 'unavailable')} | {prompt} | {video_cell} | {task_score} | {realism_score} | {error} | {fix} | {delta} | {handling} |"
-        )
-    output = Path(destination)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-# Keep a clean UTF-8 implementation below the legacy generated-text version
-# above.  The later definition is the one used by the runner.
-def write_training_memory_markdown(destination: str | Path, rows: list[dict[str, Any]]) -> None:
-    """Write the user-facing Chinese memory table for every evaluated case."""
-    lines = [
-        "# T2Blendercodeharness 训练记忆表",
-        "",
-        "本表只接收真实 Blender 生成的 proxy 视频和真实 evaluator/视觉复核结果；每行保留 round、prompt、视频地址、分数、问题、修复和自然语言处理结论。",
-        "",
-        "| 轮数 | Prompt | Proxy 视频地址 | 打分 | 评审来源/置信度 | Severity/Root cause | 渲染重试 | 检测出的 Harness 问题 | 修复位置/方法 | 修复后提升或下降 | 自然语言处理 |",
-        "|---:|---|---|---:|---|---|---:|---|---|---:|---|",
-    ]
-    for row in rows:
-        prompt = str(row.get("prompt", "")).replace("|", "\\|").replace("\n", " ")
-        problem = str(row.get("detected_problem", "无重复的可执行失败")).replace("|", "\\|")
-        fix = f"{row.get('fix_location', '无 patch')}：{row.get('fix_method', '无')}".replace("|", "\\|")
-        if "score_before" in row or "score_after" in row:
-            score = f"{row.get('score_before')} → {row.get('score_after')}"
-        else:
-            score = str(row.get("score", "unavailable"))
-        delta = row.get("delta", "unavailable")
-        video = Path(str(row.get("proxy_video", "unavailable")))
-        video_cell = f"[{video.name}]({video.as_posix()})" if video.is_file() else str(row.get("proxy_video", "unavailable"))
-        handling = str(row.get("handling", "未处理：保留失败证据，等待下一轮单 owner 分析。")).replace("|", "\\|")
-        review = f"{row.get('review_source', 'unavailable')} / {row.get('review_confidence', 'unavailable')}"
-        severity_root = str(row.get("severity_root_cause", "none")).replace("|", "\\|")
-        lines.append(
-            f"| {row.get('round', 'unavailable')} | {prompt} | {video_cell} | {score} | {review} | {severity_root} | {row.get('render_retry_count', 0)} | {problem} | {fix} | {delta} | {handling} |"
-        )
-    output = Path(destination)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-# Override legacy generated-text definitions with the UTF-8 memory schema used
-# by the active five-round protocol.
-def write_training_memory_markdown(destination: str | Path, rows: list[dict[str, Any]]) -> None:
-    lines = [
-        "# T2Blendercodeharness 训练记忆表",
-        "",
-        "每一行对应真实 Blender 生成的 proxy 视频。轨迹分数与真实性分数来自两个独立通道，不相加；Harness 错误点、修改点和处理结论使用自然语言记录。",
-        "",
-        "| 轮数 | Prompt | Proxy 视频地址 | 轨迹分数 | 真实性分数 | Harness 错误点（自然语言） | Harness 修改点（自然语言） | 修复后提升/下降 | 处理结论 |",
-        "|---:|---|---|---:|---:|---|---|---:|---|",
-    ]
-    for row in rows:
-        prompt = str(row.get("prompt", "")).replace("|", "\\|").replace("\n", " ")
-        video_raw = str(row.get("proxy_video", "unavailable"))
-        video = Path(video_raw)
-        video_cell = f"[{video.name}]({video.as_posix()})" if video.is_file() else video_raw
-        error = str(row.get("detected_problem", "尚未发现可归因的重复 Harness 失败；保留视频证据继续观察。"))
-        fix = str(row.get("fix_method") or row.get("fix_location") or "本轮没有修改 Harness；未满足单组件修复的证据门槛。")
-        handling = str(row.get("handling", "保留真实视频、评分和采样帧，等待跨样本重复模式后再决定是否修复。"))
-        error = error.replace("|", "\\|")
-        fix = fix.replace("|", "\\|")
-        handling = handling.replace("|", "\\|")
-        task_score = row.get("task_score", row.get("score", "unavailable"))
-        realism_score = row.get("realism_score", "unavailable")
-        delta = row.get("delta", "unavailable")
-        lines.append(
-            f"| {row.get('round', 'unavailable')} | {prompt} | {video_cell} | {task_score} | {realism_score} | {error} | {fix} | {delta} | {handling} |"
-        )
-    output = Path(destination)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-# Last override uses explicit Unicode escapes so the generated Markdown stays
-# valid UTF-8 even when PowerShell's code page is not UTF-8.
-def write_training_memory_markdown(destination: str | Path, rows: list[dict[str, Any]]) -> None:
-    lines = [
-        "# T2Blendercodeharness \u8bad\u7ec3\u8bb0\u5fc6\u8868",
-        "",
-        "\u6bcf\u4e00\u884c\u5bf9\u5e94\u771f\u5b9e Blender \u751f\u6210\u7684 proxy \u89c6\u9891\u3002\u8f68\u8ff9\u5206\u6570\u4e0e\u771f\u5b9e\u6027\u5206\u6570\u6765\u81ea\u4e24\u4e2a\u72ec\u7acb\u901a\u9053\uff0c\u4e0d\u76f8\u52a0\uff1bHarness \u9519\u8bef\u70b9\u3001\u4fee\u6539\u70b9\u548c\u5904\u7406\u7ed3\u8bba\u4f7f\u7528\u81ea\u7136\u8bed\u8a00\u8bb0\u5f55\u3002",
-        "",
-        "| \u8f6e\u6570 | Prompt | Proxy \u89c6\u9891\u5730\u5740 | \u8f68\u8ff9\u5206\u6570\uff08\u6253\u5206\uff09 | \u771f\u5b9e\u6027\u5206\u6570 | Harness \u9519\u8bef\u70b9\uff08\u68c0\u6d4b\u51fa\u7684 Harness \u95ee\u9898\uff0c\u81ea\u7136\u8bed\u8a00\uff09 | Harness \u4fee\u6539\u70b9\uff08\u4fee\u590d\u4f4d\u7f6e/\u65b9\u6cd5\uff0c\u81ea\u7136\u8bed\u8a00\uff09 | \u4fee\u590d\u540e\u63d0\u5347/\u4e0b\u964d | \u5904\u7406\u7ed3\u8bba\uff08\u81ea\u7136\u8bed\u8a00\u5904\u7406\uff09 |",
-        "|---:|---|---|---:|---:|---|---|---:|---|",
-    ]
-    for row in rows:
-        prompt = str(row.get("prompt", "")).replace("|", "\\|").replace("\n", " ")
-        video_raw = str(row.get("proxy_video", "unavailable"))
-        video = Path(video_raw)
-        video_cell = f"[{video.name}]({video.as_posix()})" if video.is_file() else video_raw
-        error = str(row.get("detected_problem", "\u5c1a\u672a\u53d1\u73b0\u53ef\u5f52\u56e0\u7684\u91cd\u590d Harness \u5931\u8d25\uff1b\u4fdd\u7559\u89c6\u9891\u8bc1\u636e\u7ee7\u7eed\u89c2\u5bdf\u3002")).replace("|", "\\|")
-        fix = str(row.get("fix_method") or row.get("fix_location") or "\u672c\u8f6e\u6ca1\u6709\u4fee\u6539 Harness\uff1b\u672a\u6ee1\u8db3\u5355\u7ec4\u4ef6\u4fee\u590d\u7684\u8bc1\u636e\u95e8\u69db\u3002").replace("|", "\\|")
-        handling = str(row.get("handling", "\u4fdd\u7559\u771f\u5b9e\u89c6\u9891\u3001\u8bc4\u5206\u548c\u91c7\u6837\u5e27\uff0c\u7b49\u5f85\u8de8\u6837\u672c\u91cd\u590d\u6a21\u5f0f\u540e\u518d\u51b3\u5b9a\u662f\u5426\u4fee\u590d\u3002")).replace("|", "\\|")
-        lines.append(
-            f"| {row.get('round', 'unavailable')} | {prompt} | {video_cell} | {row.get('task_score', row.get('score', 'unavailable'))} | {row.get('realism_score', 'unavailable')} | {error} | {fix} | {row.get('delta', 'unavailable')} | {handling} |"
-        )
     output = Path(destination)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
