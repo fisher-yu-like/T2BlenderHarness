@@ -82,7 +82,14 @@ def _review_score(independent_review: dict[str, Any] | None) -> tuple[float | No
     if review.get("status") != "complete" or float(review.get("confidence", 0.0) or 0.0) < 0.6:
         return None, None
     source = str(review.get("source") or "")
-    if source not in {"gpt-5.6-luna", "gpt-5.6-terra", "assistant_local_review", "human"}:
+    if source not in {
+        "gpt-5.6-luna",
+        "gpt-5.6-terra",
+        "gpt-5.6-Luna",
+        "gpt-5.6-Terra",
+        "assistant_local_review",
+        "human",
+    }:
         return None, None
     scores = review.get("scores") or {}
     if not all(name in scores for name in INDEPENDENT_REVIEW_WEIGHTS):

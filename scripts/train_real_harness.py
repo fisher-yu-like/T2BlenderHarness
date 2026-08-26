@@ -25,6 +25,7 @@ from scripts.evaluate_real_runs import evaluate_real_split  # noqa: E402
 from scripts.evaluate_real_videos import evaluate_split  # noqa: E402
 from scripts.prepare_real_jobs import prepare_jobs  # noqa: E402
 from scripts.render_proxy_jobs_parallel import render_jobs  # noqa: E402
+from evaluator.openai_vlm import canonical_vlm_name  # noqa: E402
 
 _MISSING = object()
 
@@ -447,7 +448,7 @@ def run_real_batch(
         vlm_results=vlm_results,
     )
     report["render"] = render_report
-    report["vlm_model"] = vlm_model
+    report["vlm_model"] = canonical_vlm_name(vlm_model)
     report["evaluator_version"] = "real-v4-shared-evidence-separate-scores"
     report["vlm_call_policy"] = "one VLM call per eligible case; geometry/PNG realism is local and separate"
     write_unified_outputs(report, dataset_root=dataset_root, report_root=run_root, markdown_path=markdown_path)

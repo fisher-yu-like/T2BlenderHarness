@@ -13,16 +13,31 @@ from typing import Any, Callable
 from .schemas import VLMJudgeResponse
 
 
-VLM_MODEL_ALIASES = {
+VLM_MODELS = {
     "gpt-5.6-Luna": "gpt-5.6-luna",
     "gpt-5.6-Terra": "gpt-5.6-terra",
+}
+
+VLM_MODEL_ALIASES = {
+    **VLM_MODELS,
     "gpt-5.6-luna": "gpt-5.6-luna",
     "gpt-5.6-terra": "gpt-5.6-terra",
 }
 
+_CANONICAL_BY_LOWER = {
+    **{name.lower(): name for name in VLM_MODELS},
+    **{endpoint.lower(): name for name, endpoint in VLM_MODELS.items()},
+}
+
+
+def canonical_vlm_name(model: str) -> str:
+    """Return the stable report/Memory name, preserving unknown model IDs."""
+    return _CANONICAL_BY_LOWER.get(str(model).lower(), model)
+
 
 def normalize_vlm_model(model: str) -> str:
-    return VLM_MODEL_ALIASES.get(model, model)
+    canonical = canonical_vlm_name(model)
+    return VLM_MODELS.get(canonical, VLM_MODEL_ALIASES.get(model, model))
 
 
 class VLMUnavailable(RuntimeError):
@@ -71,7 +86,7 @@ def build_responses_payload(
         )
         content.append({"type": "input_image", "image_url": _image_data_url(path), "detail": "low"})
     return {
-        "model": model,
+        "model": normalize_vlm_model(model),
         "store": False,
         "temperature": 0,
         "max_output_tokens": 800,
@@ -138,7 +153,7 @@ class OpenAIVLMProvider:
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
         requested_model = model or os.getenv("OPENAI_VLM_MODEL") or "gpt-5.6-luna"
-        self.model_alias = requested_model
+        self.model_alias = canonical_vlm_name(requested_model)
         self.model = normalize_vlm_model(requested_model)
         self.timeout_s = timeout_s
         self.opener = opener or urllib.request.urlopen

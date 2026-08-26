@@ -10,6 +10,7 @@ from .aggregate import aggregate_scores
 from .deterministic import DeterministicReport
 from .realism import score_realism
 from .schemas import VLMJudgeResponse
+from .openai_vlm import canonical_vlm_name
 
 
 REALISM_REVIEW_FIELDS = (
@@ -48,16 +49,18 @@ def score_shared_visual_review(
 ) -> dict[str, Any]:
     """Score task and realism from one validated response, without adding them."""
     root = Path(run_dir)
+    report_source = canonical_vlm_name(source)
+    report_model = canonical_vlm_name(model) if model else None
     task_aggregate = aggregate_scores(deterministic, response)
     geometry_path = root / "geometry_report.json"
     visual_path = root / "visual_evidence.json"
     geometry = json.loads(geometry_path.read_text(encoding="utf-8")) if geometry_path.is_file() else {}
     visual = json.loads(visual_path.read_text(encoding="utf-8")) if visual_path.is_file() else {}
-    realism = score_realism(geometry, visual, _review_payload(response, source))
+    realism = score_realism(geometry, visual, _review_payload(response, report_source))
     result = {
         "status": "scored",
-        "review_source": review_source_label or source,
-        "vlm_model": model,
+        "review_source": review_source_label or report_source,
+        "vlm_model": report_model,
         "video_probe": video_probe,
         "vlm_response": response.model_dump(mode="json"),
         "aggregate": task_aggregate.model_dump(mode="json"),

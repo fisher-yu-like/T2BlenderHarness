@@ -261,8 +261,8 @@ ALLOWED_OWNERS = {
 - Modify: `tests/test_vlm_judge_contract.py`
 - Modify: `tests/test_real_video_evaluation.py`
 
-- [ ] Add failing tests for `canonical_vlm_name("gpt-5.6-luna") == "gpt-5.6-Luna"` and the equivalent Terra mapping.
-- [ ] Keep explicit endpoint IDs separate from canonical report names:
+- [x] Add failing tests for `canonical_vlm_name("gpt-5.6-luna") == "gpt-5.6-Luna"` and the equivalent Terra mapping.
+- [x] Keep explicit endpoint IDs separate from canonical report names:
 
 ```python
 VLM_MODELS = {
@@ -271,8 +271,8 @@ VLM_MODELS = {
 }
 ```
 
-- [ ] Ensure request payloads use endpoint IDs while reports, Skills, CLI help, and Markdown use canonical names.
-- [ ] Run VLM payload, schema, and real-video evaluation tests; expect pass.
+- [x] Ensure request payloads use endpoint IDs while reports, Skills, CLI help, and Markdown use canonical names.
+- [x] Run VLM payload, schema, and real-video evaluation tests; expect pass.
 - [ ] Commit with `git commit -m "fix: canonicalize Luna and Terra reporting"`.
 
 ### Task 13: Build and freeze `trajectory-v4-multi`

@@ -21,7 +21,7 @@ from evaluator.assistant_local import (  # noqa: E402
     write_assistant_review_request,
 )
 from evaluator.deterministic import DeterministicReport  # noqa: E402
-from evaluator.openai_vlm import OpenAIVLMProvider, VLMUnavailable  # noqa: E402
+from evaluator.openai_vlm import OpenAIVLMProvider, VLMUnavailable, canonical_vlm_name  # noqa: E402
 from evaluator.shared_review import score_shared_visual_review  # noqa: E402
 from videoact.real_artifacts import probe_mp4, sample_event_aligned_frame_paths  # noqa: E402
 from scripts.evaluate_real_runs import discover_run_dirs  # noqa: E402
@@ -126,11 +126,11 @@ def evaluate_vlm_run(
         root,
         deterministic=deterministic,
         response=vlm_response,
-        source=getattr(provider, "model", None) or "gpt-5.6-luna",
+        source=getattr(provider, "model_alias", None) or canonical_vlm_name(getattr(provider, "model", None) or "gpt-5.6-luna"),
         review_source_label="external_vlm",
         frame_paths=frames,
         video_probe=video_probe,
-        model=getattr(provider, "model", None),
+        model=getattr(provider, "model_alias", None) or getattr(provider, "model", None),
         raw_response_id=raw_response.get("id"),
     )
     result["vlm_model_alias"] = getattr(provider, "model_alias", None)
