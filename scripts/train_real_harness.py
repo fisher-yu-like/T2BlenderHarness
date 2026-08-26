@@ -366,6 +366,9 @@ def merge_real_scores(
                 "deterministic_score": real.get("score"),
                 "deterministic_findings": real.get("findings", []),
                 "deterministic_finding_details": real.get("finding_details", []),
+                "director_plan_score": real.get("director_plan_score"),
+                "director_findings": real.get("director_findings", []),
+                "interaction_findings": real.get("interaction_findings", []),
                 "vlm_status": vlm.get("status"),
                 "review_source": vlm.get("review_source"),
                 "review_confidence": (
@@ -686,6 +689,17 @@ def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path)
         patch = _load_patch_metadata(patch_root)
         for case in report.get("cases", []):
             record = records.get(case["case_id"], {})
+            director_plan_hash = None
+            manifest_path = report_path.parent / case["case_id"] / "run_manifest.json"
+            if manifest_path.is_file():
+                try:
+                    director_plan_hash = json.loads(manifest_path.read_text(encoding="utf-8")).get("director_plan_hash")
+                except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                    director_plan_hash = None
+            handling = patch.get("handling", _MISSING)
+            if director_plan_hash:
+                hash_note = f"DirectorPlan hash={director_plan_hash}"
+                handling = hash_note if _is_missing(handling) else f"{hash_note}; {handling}"
             task_score = _first_non_missing(
                 case.get("task_final_score", _MISSING),
                 case.get("video_score", _MISSING),
@@ -719,7 +733,7 @@ def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path)
                     "fix_location": patch.get("fix_location", _MISSING),
                     "fix_method": patch.get("fix_method", _MISSING),
                     "delta": patch.get("delta", _MISSING),
-                    "handling": patch.get("handling", _MISSING),
+                    "handling": handling,
                 }
             )
     return rows

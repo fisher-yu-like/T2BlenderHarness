@@ -21,6 +21,22 @@ def test_interaction_evaluator_accepts_complete_handoff_lifecycle():
     assert findings == []
 
 
+def test_interaction_evaluator_accepts_independent_carry_without_transfer():
+    from evaluator.interaction_metrics import evaluate_interactions
+    from videoact.director import DirectorAgent
+
+    result = DirectorAgent().plan(
+        "Alice carries the red cube while Bob carries the blue cup, then Alice hands the red cube to Bob and Bob places the red cube.",
+        scene_id="independent-carry",
+        duration_s=20.0,
+        fps=24,
+    )
+
+    findings = evaluate_interactions(result.director_plan, result.trajectory_plan)
+
+    assert findings == []
+
+
 def test_interaction_evaluator_flags_incomplete_contact_with_precise_root():
     from evaluator.interaction_metrics import evaluate_interactions
 

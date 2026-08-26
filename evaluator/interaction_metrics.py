@@ -69,6 +69,22 @@ def evaluate_interactions(
         attach = next((item for item in attachments if item.action == "attach"), None)
         transfer = next((item for item in attachments if item.action == "transfer"), None)
         detach = next((item for item in attachments if item.action == "detach"), None)
+        carry_only = (
+            lifecycle.transfer_event_id is None
+            and lifecycle.receiver_id is None
+            and lifecycle.final_support_id is None
+        )
+        if carry_only:
+            if attach is None:
+                findings.append(
+                    _finding(
+                        "interaction_attach_missing",
+                        f"independent carry {lifecycle.id} has no attach evidence",
+                        root_cause_id=root,
+                        evidence=[lifecycle.id, "attach"],
+                    )
+                )
+            continue
         if attach is None or transfer is None or detach is None or event is None:
             findings.append(
                 _finding(
