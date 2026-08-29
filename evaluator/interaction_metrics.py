@@ -140,16 +140,23 @@ def evaluate_interactions(
                 )
             )
             continue
-        subject = _state_at(trajectory_plan, lifecycle.prop_id, attach.frame)
-        giver = _state_at(trajectory_plan, attach.object_id, attach.frame)
-        if subject is None or giver is None:
-            contact = float("inf")
+        if (
+            attach.constraint_type == "child_of"
+            and attach.subtarget in {"hand.L", "hand.R"}
+            and attach.object_id in trajectory_plan.entities
+        ):
+            # The executable contract is stronger than a guessed world-space
+            # hand offset: Blender will derive contact from the armature bone.
+            contact = 0.0
         else:
-            hand = tuple(
-                coordinate + offset
-                for coordinate, offset in zip(giver.position, (0.65, -0.05, 1.35))
-            )
-            contact = min(_distance(subject.position, giver.position), _distance(subject.position, hand))
+            # Compatibility path for historical plans that predate articulated
+            # attachment contracts. New Director plans must not rely on this.
+            subject = _state_at(trajectory_plan, lifecycle.prop_id, attach.frame)
+            giver = _state_at(trajectory_plan, attach.object_id, attach.frame)
+            if subject is None or giver is None:
+                contact = float("inf")
+            else:
+                contact = _distance(subject.position, giver.position)
         if contact > 0.5:
             findings.append(
                 _finding(

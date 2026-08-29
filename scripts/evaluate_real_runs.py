@@ -20,7 +20,8 @@ from evaluator.independent_oracle import evaluate_independent_oracle  # noqa: E4
 from evaluator.interaction_metrics import evaluate_interactions  # noqa: E402
 from evaluator.findings import deduplicate_findings  # noqa: E402
 from evaluator.realism import REALISM_EVALUATOR_VERSION  # noqa: E402
-from videoact.contracts import SceneContract, TrajectoryPlan  # noqa: E402
+from evaluator.visual_primary import VISUAL_PRIMARY_VERSION  # noqa: E402
+from videoact.contracts import Finding, SceneContract, TrajectoryPlan  # noqa: E402
 from videoact.director_contracts import DirectorPlan  # noqa: E402
 from videoact.real_artifacts import RealArtifactGate  # noqa: E402
 from videoact.real_pipeline import RealRunStateMachine  # noqa: E402
@@ -54,9 +55,22 @@ def evaluate_real_run(
     director_plan_path = root / "director_plan.json"
     if director_plan_path.is_file():
         director_plan = DirectorPlan.model_validate(json.loads(director_plan_path.read_text(encoding="utf-8")))
-    telemetry = json.loads((root / "telemetry.json").read_text(encoding="utf-8"))
+    telemetry_path = root / "telemetry.json"
+    telemetry = {}
+    telemetry_failure: str | None = None
+    if telemetry_path.is_file():
+        try:
+            loaded_telemetry = json.loads(telemetry_path.read_text(encoding="utf-8"))
+            if not isinstance(loaded_telemetry, dict):
+                telemetry_failure = "telemetry_not_an_object"
+            else:
+                telemetry = loaded_telemetry
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            telemetry_failure = f"telemetry_invalid:{type(exc).__name__}"
+    else:
+        telemetry_failure = "telemetry_missing"
     machine = RealRunStateMachine(root, case_id=manifest["case_id"])
-    if machine.state == "executing":
+    if machine.state == "executing" and telemetry_failure is None:
         machine.record_mcp_response({"status": "success", "blender_version": telemetry.get("blender_version")})
 
     animation_frames = sorted((root / "frames" / "animation").glob("frame_*.png"))
@@ -64,6 +78,10 @@ def evaluate_real_run(
         assemble_mp4_from_pngs(animation_frames, root / "proxy.mp4", fps=manifest["fps"])
 
     artifacts = machine.validate_artifacts(RealArtifactGate())
+    (root / "artifact_report.json").write_text(
+        json.dumps(artifacts.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     report = DeterministicEvaluator().evaluate_real(
         contract,
         plan,
@@ -71,31 +89,61 @@ def evaluate_real_run(
         artifacts,
         director_plan=director_plan,
     )
+    if telemetry_failure is not None:
+        telemetry_finding = Finding(
+            failure_id="telemetry_unavailable",
+            owner="blender_executor",
+            category="telemetry",
+            severity="hard",
+            root_cause_id="runtime_telemetry_missing",
+            message=f"real Blender telemetry cannot be read: {telemetry_failure}",
+            evidence=[telemetry_failure],
+            repair_route="runtime_repair",
+        )
+        findings = deduplicate_findings([*report.findings, telemetry_finding])
+        report = report.model_copy(
+            update={
+                "terminal_status": "fail",
+                "hard_gate_failed": True,
+                "score": DeterministicEvaluator._score_findings(findings),
+                "findings": findings,
+                "metrics": {
+                    **report.metrics,
+                    "finding_count": float(len(findings)),
+                    "hard_count": float(sum(finding.severity == "hard" for finding in findings)),
+                },
+            }
+        )
     director_findings = []
     interaction_findings = []
     if record is not None:
+        oracle_findings = evaluate_independent_oracle(record, contract, plan, telemetry=telemetry)
         if director_plan is not None:
             director_report = evaluate_director_plan(director_plan, plan, telemetry=telemetry)
             interaction_findings = evaluate_interactions(director_plan, plan, telemetry=telemetry)
             director_findings = deduplicate_findings([*director_report.findings, *interaction_findings])
-            all_hard = [finding for finding in director_findings if finding.severity == "hard"]
+            all_findings = deduplicate_findings([*report.findings, *director_findings, *oracle_findings])
             report = report.model_copy(
                 update={
-                    "evaluator_version": "real-v4-director-interaction-separate",
-                    "terminal_status": "fail" if report.hard_gate_failed or all_hard else "pass",
-                    "hard_gate_failed": report.hard_gate_failed or bool(all_hard),
-                        "director_plan_score": director_report.director_plan_score,
-                        "director_findings": director_report.findings,
-                        "interaction_findings": interaction_findings,
+                    "evaluator_version": "real-v5-independent-oracle-director",
+                    "terminal_status": "fail" if any(finding.severity == "hard" for finding in all_findings) else "pass",
+                    "hard_gate_failed": any(finding.severity == "hard" for finding in all_findings),
+                    "score": DeterministicEvaluator._score_findings(all_findings),
+                    "findings": all_findings,
+                    "director_plan_score": director_report.director_plan_score,
+                    "director_findings": director_report.findings,
+                    "interaction_findings": interaction_findings,
                     "metrics": {
                         **report.metrics,
                         "director_finding_count": float(len(director_report.findings)),
                         "interaction_finding_count": float(len(interaction_findings)),
+                        "independent_oracle_finding_count": float(len(oracle_findings)),
+                        "finding_count": float(len(all_findings)),
+                        "hard_count": float(sum(finding.severity == "hard" for finding in all_findings)),
                     },
                 }
             )
         else:
-            oracle_findings = evaluate_independent_oracle(record, contract, plan)
             all_findings = deduplicate_findings([*report.findings, *oracle_findings])
             report = report.model_copy(
                 update={
@@ -137,12 +185,16 @@ def evaluate_real_run(
     (root / "combined_evaluator.json").write_text(
         json.dumps(
             {
-                "evaluator_version": "real-v4-shared-evidence-separate-scores",
+                "evaluator_version": VISUAL_PRIMARY_VERSION,
+                "artifact_report": str((root / "artifact_report.json").resolve()),
+                "artifact_hash": artifacts.artifact_hash,
                 "deterministic_report": str((root / "deterministic_report.json").resolve()),
                 "geometry_report": str((root / "geometry_report.json").resolve()) if (root / "geometry_report.json").is_file() else None,
                 "visual_evidence": str((root / "visual_evidence.json").resolve()) if (root / "visual_evidence.json").is_file() else None,
+                "real_video_evidence": str((root / "local_video_evidence.json").resolve()) if (root / "local_video_evidence.json").is_file() else None,
                 "realism_report": str((root / "realism_report.json").resolve()) if (root / "realism_report.json").is_file() else None,
-                "vlm_policy": "one shared VLM call only after artifact, deterministic, geometry, and MP4 gates",
+                "vlm_policy": "one shared local visual review after artifact, deterministic, geometry, and MP4 gates; task, visual, physical, trajectory, camera, and realism channels remain separate",
+                "real_video_evidence": "proxy.mp4 decoded plus Blender runtime_observations; missing either source is unavailable",
                 "scores_are_added": False,
             },
             indent=2,
@@ -169,6 +221,9 @@ def evaluate_real_run(
         "state": machine.state,
         "artifact_status": artifacts.artifact_status,
         "hard_failures": artifacts.hard_failures,
+        "artifact_hash": artifacts.artifact_hash,
+        "artifact_hashes": artifacts.artifact_hashes,
+        "code_hash": manifest.get("code_hash"),
         "findings": [finding.failure_id for finding in report.findings],
         "finding_details": [finding.model_dump(mode="json") for finding in report.findings],
         "director_plan_score": report.director_plan_score,
@@ -207,9 +262,16 @@ def evaluate_real_split(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-root", required=True)
-    parser.add_argument("--dataset-root", default="dataset/trajectory-v3-hard")
+    parser.add_argument("--dataset-root", default="dataset/trajectory-v5-agent-codegen")
+    parser.add_argument("--blender-bin", default=r"D:\blender\blender.exe")
     args = parser.parse_args()
-    print(json.dumps(evaluate_real_split(args.run_root, args.dataset_root), indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            evaluate_real_split(args.run_root, args.dataset_root, blender_bin=args.blender_bin),
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 

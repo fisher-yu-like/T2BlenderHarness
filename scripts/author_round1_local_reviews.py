@@ -1,61 +1,22 @@
-"""Author auditable local visual reviews for round 1 attempt 1.
+"""Create frame-statistics artifacts for legacy round-one review requests.
 
-This is intentionally a small, reproducible bridge for the Codex-local review
-fallback. The scores below were written only after inspecting the eight
-event-aligned frames in each request. They are conservative because the white
-proxy does not make hands or object identity independently legible.
+The old version contained hand-written semantic scores.  This replacement is
+deliberately unable to produce those scores; semantic review must come from a
+real VLM or an explicitly validated human payload.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-def _review_for(request: dict, case_id: str, split: str) -> dict:
-    # The rendered cases in this first batch are visually near-isomorphic proxy
-    # scenes. Keep the rubric stable across variants so round-to-round changes
-    # measure Harness changes, not reviewer drift.
-    scores = {
-        "prompt_compliance": 56,
-        "physical_plausibility": 65,
-        "camera_coverage": 70,
-        "camera_innovation": 74,
-        "character_trajectory": 44,
-        "object_trajectory": 60,
-        "event_timing": 56,
-        "temporal_smoothness": 82,
-        "visual_clarity": 72,
-    }
-    if split == "dev":
-        scores.update({"camera_coverage": 71, "camera_innovation": 75})
-
-    visible_evidence = [
-        "frame_0001: wide establishing view shows two supports, a spherical actor proxy, and a cylindrical prop proxy",
-        "frame_0126: camera has moved into the interaction area and the two proxy silhouettes overlap near the source support",
-        "frame_0283: the spherical proxy is elevated and the camera has opened toward the separated destination support",
-        "frame_0384: final push-in/release composition shows the spherical proxy on the destination support",
-        "chronological samples: framing and support positions change across the sequence, consistent with follow/orbit/dolly intent",
-    ]
-    weaknesses = [
-        "white proxy geometry does not expose hands, grasp contact, or actor-versus-prop identity clearly enough to verify the full semantic chain",
-        "the cylindrical prop is frequently occluded or visually merged with the spherical actor during reach/grasp/lift, so independent object transport is only weakly visible",
-        "sampled frames support camera and gross phase transitions, but cannot prove exact event timing between grasp, lift, place, and release",
-        "the required close-up is visually present as a push-in, while the deterministic report separately flags that the planned shot is not labeled as a close-up",
-    ]
-    out = dict(request)
-    out["scores"] = {
-        **scores,
-        "visible_evidence": visible_evidence,
-        "weaknesses": weaknesses,
-        "confidence": 0.68,
-    }
-    out["review_notes"] = (
-        "Local Codex frame review of all eight chronological samples; conservative scores reflect "
-        "real visual evidence, not telemetry-only assumptions."
-    )
-    return out
+from evaluator.visual_evidence import score_sample_frames  # noqa: E402
 
 
 def main() -> int:
@@ -71,12 +32,24 @@ def main() -> int:
     requests = sorted(run_root.glob("*/assistant_review_request.json"))
     if len(requests) != 10:
         raise SystemExit(f"expected 10 review requests in {run_root}, found {len(requests)}")
-    for path in requests:
-        request = json.loads(path.read_text(encoding="utf-8"))
-        case_id = request["case_id"]
-        review = _review_for(request, case_id, args.split)
-        (output_dir / f"{case_id}.json").write_text(
-            json.dumps(review, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+    for request_path in requests:
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        review = score_sample_frames(list(request.get("sampled_frames") or []))
+        payload = {
+            **request,
+            "review_source": "frame_statistics",
+            "method": "frame_statistics_only-v1",
+            "reviewer": "frame-statistics",
+            "scores": review["scores"],
+            "score": None,
+            "artifact_health": review["artifact_health"],
+            "frame_metrics": review["frame_metrics"],
+            "visible_evidence": ["Only low-level properties of the exact sampled frames were measured."],
+            "weaknesses": ["Semantic, physical, event, camera, and trajectory claims require an independent review."],
+            "confidence": 0.0,
+        }
+        (output_dir / f"{request['case_id']}.json").write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
             encoding="utf-8",
         )
     print(json.dumps({"split": args.split, "count": len(requests), "output_dir": str(output_dir)}))

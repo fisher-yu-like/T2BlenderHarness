@@ -78,3 +78,39 @@ def test_scheduler_supports_pause_resume_return_and_acyclic_dependencies():
 
     graph = {event.id: set(event.depends_on) for event in schedule.events}
     assert all(event_id not in dependencies for event_id, dependencies in graph.items())
+
+
+def test_scheduler_honors_provider_supplied_event_ids_for_dataset_traceability():
+    from videoact.director_contracts import DirectorDecisionEvidence, DirectorEntity, DirectorRequest
+    from videoact.director_prompt import DirectorActionDirective, PromptInterpretation
+    from videoact.director_schedule import EventScheduler
+
+    request = DirectorRequest(
+        prompt="Alice attaches the red cup.",
+        scene_id="explicit-event-id",
+        duration_s=8,
+        fps=24,
+        provider="codex-local",
+        policy="director-v2",
+    )
+    interpretation = PromptInterpretation(
+        request=request,
+        entities=[
+            DirectorEntity(id="actor_a", kind="actor", role="participant", label="Alice"),
+            DirectorEntity(id="red_cup", kind="prop", role="target_object", label="red cup"),
+        ],
+        directives=[
+            DirectorActionDirective(
+                id="attach_01",
+                action="attach",
+                actor_id="actor_a",
+                prop_id="red_cup",
+                evidence_id="ev_action",
+            )
+        ],
+        evidence=[DirectorDecisionEvidence(id="ev_action", source="prompt", claim="attach")],
+    )
+
+    schedule = EventScheduler().schedule(request, interpretation)
+
+    assert [event.id for event in schedule.events] == ["attach_01"]

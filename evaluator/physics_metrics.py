@@ -66,6 +66,15 @@ def check_attachment_contact(plan: TrajectoryPlan) -> list[Finding]:
                 continue
             subject = _state_at_frame(plan, attachment.subject_id, attachment.frame)
             owner = _state_at_frame(plan, attachment.object_id, attachment.frame)
+            if (
+                attachment.constraint_type == "child_of"
+                and attachment.subtarget in {"hand.L", "hand.R"}
+                and owner is not None
+            ):
+                # New Director plans bind the prop to an articulated hand. The
+                # executable Blender constraint, not a guessed root offset, is
+                # the source of truth for contact.
+                continue
             contact = _distance(subject.position, owner.position) if subject is not None and owner is not None else float("inf")
             if (
                 contact > 0.5

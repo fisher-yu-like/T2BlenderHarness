@@ -85,6 +85,140 @@ def test_cli_render_retries_failed_blender_execution_and_records_attempts(tmp_pa
     assert saved[1]["return_code"] == 0
 
 
+def test_cli_renderer_caps_parallel_workers_at_twelve(tmp_path: Path):
+    from scripts.render_proxy_jobs_parallel import render_jobs
+
+    report = render_jobs(tmp_path, blender_bin="missing-blender", workers=64)
+
+    assert report["workers"] == 12
+
+
+def test_cli_renderer_can_select_one_serial_group_of_case_ids(tmp_path: Path, monkeypatch):
+    import scripts.render_proxy_jobs_parallel as renderer
+
+    for case_id in ("case-01", "case-02", "case-03"):
+        case_dir = tmp_path / case_id
+        case_dir.mkdir()
+        (case_dir / "blender_job.py").write_text("# frozen job", encoding="utf-8")
+
+    monkeypatch.setattr(renderer, "_run_one", lambda job_dir, *args: {
+        "case_id": Path(job_dir).name,
+        "status": "success",
+    })
+    report = renderer.render_jobs(
+        tmp_path,
+        blender_bin="missing-blender",
+        workers=2,
+        case_ids=["case-01", "case-03"],
+    )
+
+    assert report["job_count"] == 2
+    assert [item["case_id"] for item in report["results"]] == ["case-01", "case-03"]
+    assert report["workers"] == 2
+
+
+def test_cli_renderer_fails_closed_if_frozen_job_source_changes_during_retry(tmp_path: Path, monkeypatch):
+    import subprocess
+    import scripts.render_proxy_jobs_parallel as renderer
+
+    job_dir = tmp_path / "case-source-change"
+    job_dir.mkdir()
+    job_path = job_dir / "blender_job.py"
+    job_path.write_text("# immutable source", encoding="utf-8")
+    calls = {"count": 0}
+
+    def fake_run(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            job_path.write_text("# changed source", encoding="utf-8")
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(renderer.subprocess, "run", fake_run)
+    result = renderer._run_one(job_dir, "blender", timeout_s=10, max_retries=1)
+
+    assert result["status"] == "failed"
+    assert result["attempts"][0]["source_unchanged"] is False
+
+
+def test_cli_renderer_fails_closed_if_rendered_manifest_loses_source_hash(tmp_path: Path, monkeypatch):
+    import hashlib
+    import subprocess
+    import scripts.render_proxy_jobs_parallel as renderer
+
+    job_dir = tmp_path / "manifest-source-hash"
+    job_dir.mkdir()
+    job_path = job_dir / "blender_job.py"
+    job_path.write_text("# immutable job", encoding="utf-8")
+    source_hash = hashlib.sha256(job_path.read_bytes()).hexdigest()
+    (job_dir / "run_manifest.json").write_text(json.dumps({"code_hash": source_hash}), encoding="utf-8")
+
+    def fake_run(*args, **kwargs):
+        frames = job_dir / "frames" / "animation"
+        frames.mkdir(parents=True)
+        for number in (1, 2, 3):
+            Image.new("RGB", (8, 8), (number, 0, 0)).save(frames / f"frame_{number:06d}.png")
+        (job_dir / "frames" / "index.json").write_text(json.dumps({"frames": []}), encoding="utf-8")
+        (job_dir / "proxy.blend").write_bytes(b"blend")
+        (job_dir / "telemetry.json").write_text("{}", encoding="utf-8")
+        (job_dir / "run_manifest.json").write_text(json.dumps({"code_hash": None}), encoding="utf-8")
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(renderer.subprocess, "run", fake_run)
+    result = renderer._run_one(job_dir, "blender", timeout_s=10, max_retries=0)
+
+    assert result["status"] == "failed"
+    assert "manifest_code_hash_mismatch" in result["attempts"][0]["error"]
+
+
+def test_cli_renderer_exposes_project_library_on_pythonpath(tmp_path: Path, monkeypatch):
+    import subprocess
+    import scripts.render_proxy_jobs_parallel as renderer
+
+    job_dir = tmp_path / "agent-case"
+    job_dir.mkdir()
+    (job_dir / "blender_job.py").write_text("# generated agent job", encoding="utf-8")
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["env"] = kwargs.get("env")
+        return subprocess.CompletedProcess(args=args[0], returncode=1, stdout="", stderr="")
+
+    monkeypatch.setattr(renderer.subprocess, "run", fake_run)
+    renderer._run_one(job_dir, "blender", timeout_s=10, max_retries=0)
+
+    assert captured["env"]["PYTHONPATH"].split(renderer.os.pathsep)[0] == str(renderer.ROOT)
+
+
+def test_real_evaluator_cli_passes_blender_binary_to_geometry_audit(tmp_path: Path, monkeypatch):
+    import sys
+    import scripts.evaluate_real_runs as evaluator
+
+    captured = {}
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "evaluate_real_runs.py",
+            "--run-root",
+            str(tmp_path),
+            "--dataset-root",
+            str(tmp_path / "dataset"),
+            "--blender-bin",
+            r"D:\blender\blender.exe",
+        ],
+    )
+    monkeypatch.setattr(
+        evaluator,
+        "evaluate_real_split",
+        lambda root, dataset_root, *, blender_bin: captured.update(
+            root=str(root), dataset_root=str(dataset_root), blender_bin=blender_bin
+        ) or [],
+    )
+
+    assert evaluator.main() == 0
+    assert captured["blender_bin"] == r"D:\blender\blender.exe"
+
+
 def test_unified_report_uses_real_vlm_score_when_available(tmp_path: Path):
     from scripts.train_real_harness import merge_real_scores
 
@@ -134,6 +268,51 @@ def test_task_and_realism_scores_are_separate_channels(tmp_path: Path):
     assert report["aggregate"]["mean_task_final_score"] == 91.5
     assert report["aggregate"]["mean_artifact_only_realism_score"] == 71.25
     assert report["score_channels"]["task_final_score"] != report["score_channels"]["artifact_only_realism_score"]
+
+
+def test_preparation_failures_are_retained_as_not_rendered_cases(tmp_path: Path):
+    import json
+
+    from scripts.train_real_harness import merge_real_scores, preparation_failure_results
+
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    failure_path = run_root / "case-02" / "codegen_failure.json"
+    failure_path.parent.mkdir()
+    failure_path.write_text(json.dumps({"status": "codegen_failed", "reason": "provider unavailable"}), encoding="utf-8")
+    (run_root / "job_index.json").write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {"case_id": "case-01", "status": "prepared", "run_dir": str(run_root / "case-01")},
+                    {
+                        "case_id": "case-02",
+                        "status": "codegen_failed",
+                        "run_dir": str(run_root / "case-02"),
+                        "failure_path": str(failure_path),
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    failures = preparation_failure_results(run_root)
+    report = merge_real_scores(
+        run_root=run_root,
+        deterministic_results=[
+            {"case_id": "case-01", "status": "pass", "score": 90.0, "artifact_status": "complete"},
+            *failures,
+        ],
+        vlm_results=[],
+    )
+
+    assert failures[0]["status"] == "not_rendered"
+    assert failures[0]["preparation_status"] == "codegen_failed"
+    assert report["case_count"] == 2
+    assert report["cases"][1]["case_id"] == "case-02"
+    assert report["cases"][1]["video_score"] is None
+    assert report["preparation_failed_count"] == 1
 
 
 def test_six_round_batches_pair_disjoint_train_and_dev_cases():
@@ -361,6 +540,124 @@ def test_update_training_memory_table_preserves_real_report_traceability_and_sco
     ) in content
 
 
+def test_update_training_memory_table_records_low_artifact_realism_as_diagnostic_issue(tmp_path: Path):
+    from scripts.train_real_harness import update_training_memory_table
+
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    (dataset_root / "manifest.jsonl").write_text(
+        json.dumps({"case_id": "case-low", "prompt": "A cup rotates slowly."}) + "\n",
+        encoding="utf-8",
+    )
+    report_root = tmp_path / "runs" / "round-01" / "attempt-01" / "real" / "train"
+    case_root = report_root / "case-low"
+    case_root.mkdir(parents=True)
+    (case_root / "run_manifest.json").write_text(json.dumps({"director_plan_hash": "a" * 64}), encoding="utf-8")
+    (report_root / "real_unified_score.json").write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case_id": "case-low",
+                        "proxy_video": str(case_root / "proxy.mp4"),
+                        "director_plan_score": 100,
+                        "realism_score": 32.5,
+                        "realism_score_kind": "artifact_only_proxy",
+                        "realism_band": "artifact_only_weak",
+                        "review_source": "assistant_local_review",
+                        "review_confidence": None,
+                        "deterministic_findings": [],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    destination = tmp_path / "memory.md"
+    update_training_memory_table(tmp_path / "runs", dataset_root, destination)
+
+    content = destination.read_text(encoding="utf-8")
+    assert "artifact-only realism is weak" in content
+    assert "independent visual review is pending" in content
+
+
+def test_update_training_memory_table_keeps_sibling_diagnostic_roots(tmp_path: Path):
+    from scripts.train_real_harness import update_training_memory_table
+
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    (dataset_root / "manifest.jsonl").write_text(
+        "".join(
+            json.dumps({"case_id": case_id, "prompt": prompt}) + "\n"
+            for case_id, prompt in (("old-case", "A red cup rotates."), ("new-case", "A blue cup slides."))
+        ),
+        encoding="utf-8",
+    )
+    training_root = tmp_path / "out" / "training"
+    old_root = training_root / "diagnostic-old"
+    new_root = training_root / "diagnostic-new"
+    for root, case_id, round_number in ((old_root, "old-case", 1), (new_root, "new-case", 2)):
+        report_root = root / f"round-{round_number:02d}" / "attempt-01" / "real" / "train"
+        case_root = report_root / case_id
+        case_root.mkdir(parents=True)
+        (report_root / "real_unified_score.json").write_text(
+            json.dumps(
+                {
+                    "cases": [
+                        {
+                            "case_id": case_id,
+                            "proxy_video": str(case_root / "proxy.mp4"),
+                            "deterministic_score": 100,
+                            "realism_score": 35,
+                            "realism_score_kind": "artifact_only_proxy",
+                            "realism_band": "artifact_only_weak",
+                            "deterministic_findings": [],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    destination = tmp_path / "training.md"
+    update_training_memory_table(new_root, dataset_root, destination)
+    content = destination.read_text(encoding="utf-8")
+
+    assert "old-case" in content
+    assert "new-case" in content
+
+
+def test_canonical_memory_path_is_not_overwritten_by_single_run_summary(tmp_path: Path):
+    from scripts.train_real_harness import write_unified_outputs
+
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    (dataset_root / "manifest.jsonl").write_text("", encoding="utf-8")
+    destination = tmp_path / "t2blendercodeharness-agent-training-memory-v1.md"
+    write_unified_outputs(
+        {
+            "scoring_mode": "real_blender_video_vlm",
+            "case_count": 0,
+            "real_video_count": 0,
+            "vlm_scored_count": 0,
+            "aggregate": {
+                "mean_final_score": None,
+                "mean_task_final_score": None,
+                "mean_artifact_only_realism_score": None,
+            },
+            "cases": [],
+        },
+        dataset_root=dataset_root,
+        report_root=tmp_path / "run",
+        markdown_path=destination,
+    )
+
+    content = destination.read_text(encoding="utf-8")
+    assert "append-only" in content
+    assert "Real Blender Video Evaluation" not in content
+
+
 def test_anti_overfit_gate_requires_train_gain_and_paired_and_overall_dev_non_regression():
     from scripts.train_real_harness import anti_overfit_gate
 
@@ -386,16 +683,24 @@ def test_protocol_manifest_declares_six_rounds_and_cumulative_overall_evaluation
     assert manifest["videos_per_round_max"] == 220
     assert manifest["videos_total_max"] == 1320
     assert all(round_info["overall_evaluation"]["scope"] == "cumulative_train_and_dev" for round_info in manifest["rounds"])
+    assert all(
+        len(round_info["overall_evaluation"]["train_cases"]) == 60
+        and len(round_info["overall_evaluation"]["dev_cases"]) == 60
+        for round_info in manifest["rounds"]
+    )
 
 
-def test_outer_attempt_has_no_inner_loop_retry_and_caps_at_five():
+def test_outer_attempt_has_bounded_inner_regeneration_and_caps_outer_attempts_at_five():
     from scripts.train_real_harness import build_attempt_policy
 
     policy = build_attempt_policy(5)
 
-    assert policy["mode"] == "outer_loop_only"
-    assert policy["inner_case_retries"] == 0
-    assert policy["render_retries_per_case"] == 2
+    assert policy["mode"] == "outer_loop_with_bounded_case_regeneration"
+    assert policy["inner_case_attempts_max"] == 3
+    assert policy["render_retries_per_case"] == 0
+    assert policy["candidate_videos_per_case_max"] == 3
+    # 1320 protocol case slots × at most 3 complete candidate generations.
+    assert policy["candidate_videos_total_max"] == 3960
     assert policy["max_attempts"] == 5
     assert policy["videos_per_attempt"] == 20
     assert policy["overall_videos_per_round"] == 120

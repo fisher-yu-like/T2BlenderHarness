@@ -14,11 +14,20 @@ OWNER_SECTIONS = {
     "scene_parser": "contract handoff and scene parsing",
     "trajectory_planner": "trajectory handoff and continuity",
     "camera_planner": "camera coverage and observability",
+    "director_prompt_interpreter": "Director prompt interpretation and event scheduling",
+    "director_event_scheduler": "Director prompt interpretation and event scheduling",
+    "director_trajectory": "Director trajectories and interaction lifecycles",
+    "director_camera": "Director camera choreography and visibility",
+    "blender_code_agent": "Blender code generation from DirectorPlan",
     "blender_executor": "controlled execution and artifact persistence",
     "proxy_renderer": "artifact gate and proxy rendering",
     "evaluator": "deterministic evaluation and score promotion",
     "meta_harness": "outer-loop aggregation and acceptance",
 }
+
+
+SKILL_VERSION = "t2blendercodeharness-v5-executable-director"
+ALLOWED_CHANGE_TYPES = {"function_library", "owner_mapping", "memory_entry", "prose_guidance", "runtime_patch"}
 
 
 def _skill_hash(skill_path: Path) -> str:
@@ -38,7 +47,11 @@ def build_update_proposal(
     skill_path: str | Path,
     *,
     minimum_cases: int = 2,
+    change_type: str = "runtime_patch",
+    explicit_reason: str | None = None,
 ) -> dict[str, Any]:
+    if change_type not in ALLOWED_CHANGE_TYPES:
+        raise ValueError(f"unsupported change_type: {change_type}")
     records_file = Path(records_path)
     skill_file = Path(skill_path)
     groups: dict[tuple[str, str, str, str], dict[str, Any]] = defaultdict(
@@ -69,8 +82,7 @@ def build_update_proposal(
     ):
         if len(group["case_ids"]) < minimum_cases:
             continue
-        proposals.append(
-            {
+        proposal = {
                 "owner": owner,
                 "failure_id": failure_id,
                 "category": category,
@@ -85,11 +97,21 @@ def build_update_proposal(
                     "rerun train and dev with stable fingerprints",
                     "keep test split frozen until final blind verification",
                 ],
-            }
-        )
+        }
+        proposal["change_type"] = change_type
+        proposal["runtime_change"] = change_type != "prose_guidance"
+        proposal["requires_explicit_reason"] = change_type == "prose_guidance"
+        if change_type == "prose_guidance":
+            proposal["warning"] = (
+                "prose_guidance is not counted as Harness training; provide an explicit reason "
+                "and independent runtime evidence before applying it"
+            )
+            if explicit_reason:
+                proposal["explicit_reason"] = explicit_reason
+        proposals.append(proposal)
 
     return {
-        "skill_version": "t2blendercodeharness-v1",
+        "skill_version": SKILL_VERSION,
         "status": "proposal_ready" if proposals else "no_action",
         "requires_human_review": True,
         "skill_sha256": _skill_hash(skill_file),
@@ -98,6 +120,7 @@ def build_update_proposal(
         "ignored_vlm_unavailable": ignored_vlm_unavailable,
         "proposals": proposals,
         "mutation_policy": "proposal-only; never edit SKILL.md, source, evaluator, or labels",
+        "change_type": change_type,
     }
 
 
@@ -107,8 +130,16 @@ def main() -> int:
     parser.add_argument("--skill-file", default=str(Path(__file__).resolve().parents[1] / "SKILL.md"))
     parser.add_argument("--out", required=True)
     parser.add_argument("--minimum-cases", type=int, default=2)
+    parser.add_argument("--change-type", choices=sorted(ALLOWED_CHANGE_TYPES), default="runtime_patch")
+    parser.add_argument("--explicit-reason")
     args = parser.parse_args()
-    result = build_update_proposal(args.records, args.skill_file, minimum_cases=args.minimum_cases)
+    result = build_update_proposal(
+        args.records,
+        args.skill_file,
+        minimum_cases=args.minimum_cases,
+        change_type=args.change_type,
+        explicit_reason=args.explicit_reason,
+    )
     destination = Path(args.out)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

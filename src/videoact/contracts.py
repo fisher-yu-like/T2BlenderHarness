@@ -163,6 +163,8 @@ class AttachmentEvent(ContractModel):
     subject_id: str = Field(min_length=1)
     object_id: str = Field(min_length=1)
     action: Literal["attach", "transfer", "detach"]
+    constraint_type: Literal["child_of", "support_surface"] = "child_of"
+    subtarget: str | None = None
 
 
 class EntityTrajectory(ContractModel):
@@ -192,6 +194,11 @@ class CameraShot(ContractModel):
     max_occlusion: float = Field(default=1.0, ge=0, le=1)
     continuity_group: str | None = None
     innovation_intent_evidence_id: str | None = None
+    # The cue is separate from ``trajectory_type`` so an evaluator can tell
+    # whether a follow/dolly implementation actually preserved the prompt's
+    # direction (for example pan-left versus pan-right).
+    camera_cue: str | None = None
+    camera_direction: str | None = None
 
     @model_validator(mode="after")
     def validate_interval_and_distance(self) -> "CameraShot":

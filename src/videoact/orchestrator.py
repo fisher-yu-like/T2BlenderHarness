@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from .blender_adapter import BlenderAdapter
-from .director import DirectorAgent
 from .inner_loop import run_inner_loop
 from .run_manifest import hash_prompt
 
@@ -49,13 +48,13 @@ class Orchestrator:
                 final_score=selection.get("score"),
             )
 
-        # Validate the contract and plan before delegating to any execution adapter.
-        DirectorAgent().plan(
-            prompt,
-            scene_id=str(case.get("case_id", "case")),
-            duration_s=float(case.get("duration_s", 10.0)),
-            fps=int(case.get("fps", 24)),
-        )
+        # This compatibility orchestrator delegates to the explicit legacy
+        # baseline projection in ``run_inner_loop``.  Keep the input boundary
+        # local so an empty prompt is rejected before an adapter is touched;
+        # production agent runs use ``prepare_real_jobs`` and its dynamic
+        # DirectorAgent gate.
+        if not prompt.strip():
+            raise ValueError("prompt must not be empty")
         self.stage_order = list(self.STAGES)
         return run_inner_loop(
             case,

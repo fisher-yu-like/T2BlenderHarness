@@ -1,5 +1,11 @@
 # T2Blendercodeharness 六轮真实视频训练协议
 
+> **Superseded active commands.** The current protocol is defined by
+> [harness-architecture-v2.md](harness-architecture-v2.md),
+> [t2blendercodeharness-training/SKILL.md](../skills/t2blendercodeharness-training/SKILL.md),
+> and `trajectory-v5-agent-codegen`. This file is retained as a historical
+> record; do not copy its older defaults or scoring wording into a new run.
+
 这是新的训练协议；此前五轮实验文档保留为历史记录，不与本协议的真实视频分数混用。
 
 ## 数据分层
@@ -88,7 +94,7 @@ Evaluator 先过 artifact gate（包括实际解码 MP4），再运行声明式 
   --round-root out\training\six-rounds-real-v6 `
   --full-train-root out\training\full-evaluation-real-v6 `
   --blender-bin D:\blender\blender.exe `
-  --workers 12 `
+  --workers 4 `
   --vlm-model gpt-5.6-luna `
   --markdown-path docs\t2blendercodeharness-six-round-training-memory.md
 ```

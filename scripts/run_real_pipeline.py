@@ -24,8 +24,8 @@ def run_pipeline(
     *,
     split: str,
     out_dir: str | Path,
-    dataset_root: str | Path = "dataset",
-    harness_version: str = "h1-real",
+    dataset_root: str | Path = "dataset/trajectory-v5-agent-codegen",
+    harness_version: str = "t2blendercodeharness-v5-executable-director",
     train_records: list[dict[str, Any]] | None = None,
     forbidden_case_ids: set[str] | None = None,
 ) -> dict[str, Any]:
@@ -56,8 +56,8 @@ def main() -> int:
     parser.add_argument("--mode", choices=["dry-run", "evaluate", "optimize"], required=True)
     parser.add_argument("--split", choices=["calibration", "train", "dev", "test"], required=True)
     parser.add_argument("--out-dir", required=True)
-    parser.add_argument("--dataset-root", default="dataset")
-    parser.add_argument("--harness-version", default="h1-real")
+    parser.add_argument("--dataset-root", default="dataset/trajectory-v5-agent-codegen")
+    parser.add_argument("--harness-version", default="t2blendercodeharness-v5-executable-director")
     parser.add_argument("--train-records")
     args = parser.parse_args()
     records = None

@@ -73,6 +73,7 @@ def test_interpreter_resolves_elliptical_reveal_carry_and_handoff():
     interpretation = DeterministicPromptInterpreter().interpret(request)
 
     assert [(item.action, item.actor_id, item.prop_id, item.receiver_id) for item in interpretation.directives] == [
+        ("reveal", "actor_a", "green_book", None),
         ("carry", "actor_a", "green_book", None),
         ("handoff", "actor_a", "green_book", "actor_b"),
         ("place", "actor_b", "green_book", None),

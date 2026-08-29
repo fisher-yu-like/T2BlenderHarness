@@ -27,6 +27,12 @@ FPS, provider ID, and policy ID. The result contains:
 The exact prompt is retained in `DirectorPlan.request.prompt`. Coordinates,
 motion primitives, and camera shots are not invented by the interpreter.
 
+Build the evidence-backed event order graph before applying generic carry or
+handoff matching. Preserve `then`, `after`, `while`, reveal, subjectless,
+pause, handoff, and return order. If a prompt contains reveal but the plan has
+no explicit reveal event, emit a hard Director finding and stop before Blender
+compilation; never let a generic carry match silently erase the reveal.
+
 ## Execution order
 
 Use this order for every case:
@@ -42,16 +48,23 @@ exact prompt
   -> compile Blender job
 ```
 
-The runtime entry point is `videoact.director.DirectorAgent.plan`. Orchestrator,
-inner-loop, and real-job preparation must call it rather than calling a legacy
-parser and trajectory planner as separate external planning paths.
+The production runtime entry point is `videoact.director.DirectorAgent.plan`.
+Orchestrator and agent real-job preparation must call it rather than calling a
+legacy parser and trajectory planner as separate external planning paths.
+Historical fake/MCP compatibility and the explicit `template_baseline` arm may
+call `DirectorAgent.plan_explicit_baseline`; that method is an explicit baseline
+projection, not a production fallback, and must never be reached after a
+dynamic Director failure.
 
 ## Deterministic and provider-assisted modes
 
-The current deterministic mode is network-free and reproducible. A future
-provider-assisted interpreter may fill implicit details, but it must return the
-same contracts, evidence fields, and fingerprints. Provider output is never
-allowed to write Blender code directly.
+The production interpreter is provider-assisted through `CodexExecProvider`;
+it may fill implicit details, but it must return the same contracts, evidence
+fields, and fingerprints. The provider boundary uses strict structured output
+and fail-closes on timeout, schema, JSON, or session errors. The deterministic
+interpreter remains network-free and reproducible for explicit historical
+baseline comparisons only. Provider output is never allowed to write Blender
+code directly.
 
 Provider-assisted decisions must cite prompt spans or provider evidence. An
 assumption with no supporting evidence is invalid. A `hard` unresolved
@@ -90,6 +103,25 @@ Do not patch the dataset label or evaluator merely to improve a score. The
 Director plan score is independent from deterministic, task, and realism
 scores.
 
+## Real-video trajectory feedback
+
+When a real-video review repeatedly reports weak visible character/object
+phase continuity, treat it as a `director_trajectory` proposal only when the
+same normalized finding affects at least two distinct train cases. Inspect the
+exact chronological PNGs and the corresponding proxy video before changing
+the trajectory component; a valid plan or telemetry record alone is not proof
+that grasp, carry, handoff, return, and placement phases are readable on
+screen. The next outer-loop attempt must preserve stable entity identity,
+include a visible anticipation/contact/settle interval, keep an ownership
+change readable for more than one sampled frame, and re-check camera
+observability without editing the evaluator formula or dataset labels. Record
+the pre/post Harness hash, affected video paths, train/dev deltas, and the
+natural-language acceptance or rejection decision in Memory. If frame-only
+statistics are used because the external VLM is unavailable, label the output
+as `frame_statistics_only-v1` artifact-health evidence. It must not be treated
+as a semantic or realism score; semantic claims require a real VLM or an
+explicit, auditable human review payload.
+
 ## Verification and stop conditions
 
 Before compiling Blender, validate the DirectorPlan hash, references, event
@@ -97,3 +129,22 @@ acyclicity, evidence, uncertainty, trajectory coverage, interaction lifecycle,
 and camera visibility. Stop on an unresolved hard uncertainty, unknown stable
 ID, dependency cycle, path collision, missing handoff, or unresolvable camera
 target. Persist `director_plan.json` even when the later artifact gate fails.
+
+## Executable real-video checks
+
+The Director contract is not evidence that the rendered video succeeded. For
+each real run, route visible failures to one owner and retain the exact frame
+paths. A carried prop must be checked for an attachment constraint, owner
+change, and torso/prop penetration; a coordinate offset is not a handoff.
+Camera feedback must inspect `max_occlusion`, `continuity_group`, target
+coverage, and whether an `orbit` follows a sampled arc rather than a straight
+line between endpoints. Missing visible evidence is a finding, not a default
+pass.
+
+Frame statistics are `frame_statistics_only-v1`: they provide
+`artifact_health` and low-level observations, but their semantic dimensions
+are `None` and cannot form a task or realism score. Use a real VLM or
+validated human review for event, identity, physics, camera, and trajectory
+claims. Patch proposals must expose `predicted_fixes`,
+`predicted_regressions`, and `prediction_rationale`; use the shared
+`function_library` and append-only `memory_entry` rather than untestable prose.

@@ -1,0 +1,751 @@
+{
+  "annotation_policy": "no authored event/entity/oracle labels; DirectorAgent creates the executable plan",
+  "cases": 140,
+  "dataset_id": "vbench2-agent-training-index-v1",
+  "dataset_kind": "benchmark_prompt_index",
+  "dev_families": [
+    "vbench2-dev-01",
+    "vbench2-dev-02",
+    "vbench2-dev-03",
+    "vbench2-dev-04",
+    "vbench2-dev-05",
+    "vbench2-dev-06"
+  ],
+  "fingerprint": "196f71f7bf9deed54b2c4cd0b0f943e3122fff01114b3a84b2c1b400e0b43332",
+  "generator_version": "benchmark-prompt-index-builder-v1",
+  "prompt_policy": "prompt equals source prompt_en exactly; no generated or augmented prompt text",
+  "reference_roots": [
+    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\frozen-eval-v1",
+    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\vbench-derived-100-v1",
+    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\trajectory-v4-multi",
+    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\trajectory-v5-agent-codegen"
+  ],
+  "round_count": 6,
+  "schema_version": "benchmark-prompt-index-v1",
+  "selected_sources": [
+    {
+      "case_id": "vbench2-dev-01-11",
+      "source_dimension": "Camera_Motion",
+      "source_index": 57
+    },
+    {
+      "case_id": "vbench2-dev-01-12",
+      "source_dimension": "Camera_Motion",
+      "source_index": 61
+    },
+    {
+      "case_id": "vbench2-dev-01-13",
+      "source_dimension": "Camera_Motion",
+      "source_index": 67
+    },
+    {
+      "case_id": "vbench2-dev-01-14",
+      "source_dimension": "Camera_Motion",
+      "source_index": 74
+    },
+    {
+      "case_id": "vbench2-dev-01-15",
+      "source_dimension": "Camera_Motion",
+      "source_index": 78
+    },
+    {
+      "case_id": "vbench2-dev-01-16",
+      "source_dimension": "Camera_Motion",
+      "source_index": 85
+    },
+    {
+      "case_id": "vbench2-dev-01-17",
+      "source_dimension": "Camera_Motion",
+      "source_index": 89
+    },
+    {
+      "case_id": "vbench2-dev-01-18",
+      "source_dimension": "Camera_Motion",
+      "source_index": 95
+    },
+    {
+      "case_id": "vbench2-dev-01-19",
+      "source_dimension": "Camera_Motion",
+      "source_index": 100
+    },
+    {
+      "case_id": "vbench2-dev-01-20",
+      "source_dimension": "Camera_Motion",
+      "source_index": 106
+    },
+    {
+      "case_id": "vbench2-dev-02-11",
+      "source_dimension": "Human_Interaction",
+      "source_index": 715
+    },
+    {
+      "case_id": "vbench2-dev-02-12",
+      "source_dimension": "Human_Interaction",
+      "source_index": 720
+    },
+    {
+      "case_id": "vbench2-dev-02-13",
+      "source_dimension": "Human_Interaction",
+      "source_index": 724
+    },
+    {
+      "case_id": "vbench2-dev-02-14",
+      "source_dimension": "Human_Interaction",
+      "source_index": 729
+    },
+    {
+      "case_id": "vbench2-dev-02-15",
+      "source_dimension": "Human_Interaction",
+      "source_index": 734
+    },
+    {
+      "case_id": "vbench2-dev-02-16",
+      "source_dimension": "Human_Interaction",
+      "source_index": 739
+    },
+    {
+      "case_id": "vbench2-dev-02-17",
+      "source_dimension": "Human_Interaction",
+      "source_index": 746
+    },
+    {
+      "case_id": "vbench2-dev-02-18",
+      "source_dimension": "Human_Interaction",
+      "source_index": 750
+    },
+    {
+      "case_id": "vbench2-dev-02-19",
+      "source_dimension": "Human_Interaction",
+      "source_index": 755
+    },
+    {
+      "case_id": "vbench2-dev-02-20",
+      "source_dimension": "Human_Interaction",
+      "source_index": 760
+    },
+    {
+      "case_id": "vbench2-dev-03-11",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 977
+    },
+    {
+      "case_id": "vbench2-dev-03-12",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 982
+    },
+    {
+      "case_id": "vbench2-dev-03-13",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 987
+    },
+    {
+      "case_id": "vbench2-dev-03-14",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 992
+    },
+    {
+      "case_id": "vbench2-dev-03-15",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 997
+    },
+    {
+      "case_id": "vbench2-dev-03-16",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1004
+    },
+    {
+      "case_id": "vbench2-dev-03-17",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1008
+    },
+    {
+      "case_id": "vbench2-dev-03-18",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1013
+    },
+    {
+      "case_id": "vbench2-dev-03-19",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1018
+    },
+    {
+      "case_id": "vbench2-dev-03-20",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1023
+    },
+    {
+      "case_id": "vbench2-dev-04-11",
+      "source_dimension": "Complex_Plot",
+      "source_index": 170
+    },
+    {
+      "case_id": "vbench2-dev-04-12",
+      "source_dimension": "Complex_Plot",
+      "source_index": 173
+    },
+    {
+      "case_id": "vbench2-dev-04-13",
+      "source_dimension": "Complex_Plot",
+      "source_index": 176
+    },
+    {
+      "case_id": "vbench2-dev-04-14",
+      "source_dimension": "Complex_Plot",
+      "source_index": 179
+    },
+    {
+      "case_id": "vbench2-dev-04-15",
+      "source_dimension": "Complex_Plot",
+      "source_index": 182
+    },
+    {
+      "case_id": "vbench2-dev-04-16",
+      "source_dimension": "Complex_Plot",
+      "source_index": 184
+    },
+    {
+      "case_id": "vbench2-dev-04-17",
+      "source_dimension": "Complex_Plot",
+      "source_index": 187
+    },
+    {
+      "case_id": "vbench2-dev-04-18",
+      "source_dimension": "Complex_Plot",
+      "source_index": 190
+    },
+    {
+      "case_id": "vbench2-dev-04-19",
+      "source_dimension": "Complex_Plot",
+      "source_index": 193
+    },
+    {
+      "case_id": "vbench2-dev-04-20",
+      "source_dimension": "Complex_Plot",
+      "source_index": 196
+    },
+    {
+      "case_id": "vbench2-dev-05-11",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 387
+    },
+    {
+      "case_id": "vbench2-dev-05-12",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 392
+    },
+    {
+      "case_id": "vbench2-dev-05-13",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 394
+    },
+    {
+      "case_id": "vbench2-dev-05-14",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 398
+    },
+    {
+      "case_id": "vbench2-dev-05-15",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 401
+    },
+    {
+      "case_id": "vbench2-dev-05-16",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 405
+    },
+    {
+      "case_id": "vbench2-dev-05-17",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 408
+    },
+    {
+      "case_id": "vbench2-dev-05-18",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 412
+    },
+    {
+      "case_id": "vbench2-dev-05-19",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 415
+    },
+    {
+      "case_id": "vbench2-dev-05-20",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 419
+    },
+    {
+      "case_id": "vbench2-dev-06-11",
+      "source_dimension": "Mechanics",
+      "source_index": 899
+    },
+    {
+      "case_id": "vbench2-dev-06-12",
+      "source_dimension": "Mechanics",
+      "source_index": 902
+    },
+    {
+      "case_id": "vbench2-dev-06-13",
+      "source_dimension": "Mechanics",
+      "source_index": 905
+    },
+    {
+      "case_id": "vbench2-dev-06-14",
+      "source_dimension": "Mechanics",
+      "source_index": 908
+    },
+    {
+      "case_id": "vbench2-dev-06-15",
+      "source_dimension": "Mechanics",
+      "source_index": 911
+    },
+    {
+      "case_id": "vbench2-dev-06-16",
+      "source_dimension": "Mechanics",
+      "source_index": 913
+    },
+    {
+      "case_id": "vbench2-dev-06-17",
+      "source_dimension": "Mechanics",
+      "source_index": 916
+    },
+    {
+      "case_id": "vbench2-dev-06-18",
+      "source_dimension": "Mechanics",
+      "source_index": 919
+    },
+    {
+      "case_id": "vbench2-dev-06-19",
+      "source_dimension": "Mechanics",
+      "source_index": 922
+    },
+    {
+      "case_id": "vbench2-dev-06-20",
+      "source_dimension": "Mechanics",
+      "source_index": 925
+    },
+    {
+      "case_id": "vbench2-test-01-01",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1025
+    },
+    {
+      "case_id": "vbench2-test-01-02",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1031
+    },
+    {
+      "case_id": "vbench2-test-01-03",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1038
+    },
+    {
+      "case_id": "vbench2-test-01-04",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1044
+    },
+    {
+      "case_id": "vbench2-test-01-05",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1050
+    },
+    {
+      "case_id": "vbench2-test-01-06",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1057
+    },
+    {
+      "case_id": "vbench2-test-01-07",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1063
+    },
+    {
+      "case_id": "vbench2-test-01-08",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1069
+    },
+    {
+      "case_id": "vbench2-test-01-09",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1076
+    },
+    {
+      "case_id": "vbench2-test-01-10",
+      "source_dimension": "Motion_Rationality",
+      "source_index": 1082
+    },
+    {
+      "case_id": "vbench2-test-02-01",
+      "source_dimension": "Human_Clothes",
+      "source_index": 544
+    },
+    {
+      "case_id": "vbench2-test-02-02",
+      "source_dimension": "Human_Clothes",
+      "source_index": 551
+    },
+    {
+      "case_id": "vbench2-test-02-03",
+      "source_dimension": "Human_Clothes",
+      "source_index": 556
+    },
+    {
+      "case_id": "vbench2-test-02-04",
+      "source_dimension": "Human_Clothes",
+      "source_index": 562
+    },
+    {
+      "case_id": "vbench2-test-02-05",
+      "source_dimension": "Human_Clothes",
+      "source_index": 569
+    },
+    {
+      "case_id": "vbench2-test-02-06",
+      "source_dimension": "Human_Clothes",
+      "source_index": 578
+    },
+    {
+      "case_id": "vbench2-test-02-07",
+      "source_dimension": "Human_Clothes",
+      "source_index": 586
+    },
+    {
+      "case_id": "vbench2-test-02-08",
+      "source_dimension": "Human_Clothes",
+      "source_index": 596
+    },
+    {
+      "case_id": "vbench2-test-02-09",
+      "source_dimension": "Human_Clothes",
+      "source_index": 604
+    },
+    {
+      "case_id": "vbench2-test-02-10",
+      "source_dimension": "Human_Clothes",
+      "source_index": 614
+    },
+    {
+      "case_id": "vbench2-train-01-01",
+      "source_dimension": "Camera_Motion",
+      "source_index": 1
+    },
+    {
+      "case_id": "vbench2-train-01-02",
+      "source_dimension": "Camera_Motion",
+      "source_index": 7
+    },
+    {
+      "case_id": "vbench2-train-01-03",
+      "source_dimension": "Camera_Motion",
+      "source_index": 12
+    },
+    {
+      "case_id": "vbench2-train-01-04",
+      "source_dimension": "Camera_Motion",
+      "source_index": 18
+    },
+    {
+      "case_id": "vbench2-train-01-05",
+      "source_dimension": "Camera_Motion",
+      "source_index": 22
+    },
+    {
+      "case_id": "vbench2-train-01-06",
+      "source_dimension": "Camera_Motion",
+      "source_index": 29
+    },
+    {
+      "case_id": "vbench2-train-01-07",
+      "source_dimension": "Camera_Motion",
+      "source_index": 33
+    },
+    {
+      "case_id": "vbench2-train-01-08",
+      "source_dimension": "Camera_Motion",
+      "source_index": 40
+    },
+    {
+      "case_id": "vbench2-train-01-09",
+      "source_dimension": "Camera_Motion",
+      "source_index": 46
+    },
+    {
+      "case_id": "vbench2-train-01-10",
+      "source_dimension": "Camera_Motion",
+      "source_index": 50
+    },
+    {
+      "case_id": "vbench2-train-02-01",
+      "source_dimension": "Human_Interaction",
+      "source_index": 663
+    },
+    {
+      "case_id": "vbench2-train-02-02",
+      "source_dimension": "Human_Interaction",
+      "source_index": 668
+    },
+    {
+      "case_id": "vbench2-train-02-03",
+      "source_dimension": "Human_Interaction",
+      "source_index": 673
+    },
+    {
+      "case_id": "vbench2-train-02-04",
+      "source_dimension": "Human_Interaction",
+      "source_index": 677
+    },
+    {
+      "case_id": "vbench2-train-02-05",
+      "source_dimension": "Human_Interaction",
+      "source_index": 684
+    },
+    {
+      "case_id": "vbench2-train-02-06",
+      "source_dimension": "Human_Interaction",
+      "source_index": 689
+    },
+    {
+      "case_id": "vbench2-train-02-07",
+      "source_dimension": "Human_Interaction",
+      "source_index": 694
+    },
+    {
+      "case_id": "vbench2-train-02-08",
+      "source_dimension": "Human_Interaction",
+      "source_index": 699
+    },
+    {
+      "case_id": "vbench2-train-02-09",
+      "source_dimension": "Human_Interaction",
+      "source_index": 703
+    },
+    {
+      "case_id": "vbench2-train-02-10",
+      "source_dimension": "Human_Interaction",
+      "source_index": 708
+    },
+    {
+      "case_id": "vbench2-train-03-01",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 927
+    },
+    {
+      "case_id": "vbench2-train-03-02",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 932
+    },
+    {
+      "case_id": "vbench2-train-03-03",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 937
+    },
+    {
+      "case_id": "vbench2-train-03-04",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 942
+    },
+    {
+      "case_id": "vbench2-train-03-05",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 946
+    },
+    {
+      "case_id": "vbench2-train-03-06",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 953
+    },
+    {
+      "case_id": "vbench2-train-03-07",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 958
+    },
+    {
+      "case_id": "vbench2-train-03-08",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 963
+    },
+    {
+      "case_id": "vbench2-train-03-09",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 968
+    },
+    {
+      "case_id": "vbench2-train-03-10",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 973
+    },
+    {
+      "case_id": "vbench2-train-04-01",
+      "source_dimension": "Complex_Plot",
+      "source_index": 139
+    },
+    {
+      "case_id": "vbench2-train-04-02",
+      "source_dimension": "Complex_Plot",
+      "source_index": 142
+    },
+    {
+      "case_id": "vbench2-train-04-03",
+      "source_dimension": "Complex_Plot",
+      "source_index": 145
+    },
+    {
+      "case_id": "vbench2-train-04-04",
+      "source_dimension": "Complex_Plot",
+      "source_index": 148
+    },
+    {
+      "case_id": "vbench2-train-04-05",
+      "source_dimension": "Complex_Plot",
+      "source_index": 151
+    },
+    {
+      "case_id": "vbench2-train-04-06",
+      "source_dimension": "Complex_Plot",
+      "source_index": 153
+    },
+    {
+      "case_id": "vbench2-train-04-07",
+      "source_dimension": "Complex_Plot",
+      "source_index": 156
+    },
+    {
+      "case_id": "vbench2-train-04-08",
+      "source_dimension": "Complex_Plot",
+      "source_index": 159
+    },
+    {
+      "case_id": "vbench2-train-04-09",
+      "source_dimension": "Complex_Plot",
+      "source_index": 162
+    },
+    {
+      "case_id": "vbench2-train-04-10",
+      "source_dimension": "Complex_Plot",
+      "source_index": 165
+    },
+    {
+      "case_id": "vbench2-train-05-01",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 353
+    },
+    {
+      "case_id": "vbench2-train-05-02",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 357
+    },
+    {
+      "case_id": "vbench2-train-05-03",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 360
+    },
+    {
+      "case_id": "vbench2-train-05-04",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 364
+    },
+    {
+      "case_id": "vbench2-train-05-05",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 367
+    },
+    {
+      "case_id": "vbench2-train-05-06",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 371
+    },
+    {
+      "case_id": "vbench2-train-05-07",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 374
+    },
+    {
+      "case_id": "vbench2-train-05-08",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 378
+    },
+    {
+      "case_id": "vbench2-train-05-09",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 380
+    },
+    {
+      "case_id": "vbench2-train-05-10",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 385
+    },
+    {
+      "case_id": "vbench2-train-06-01",
+      "source_dimension": "Mechanics",
+      "source_index": 869
+    },
+    {
+      "case_id": "vbench2-train-06-02",
+      "source_dimension": "Mechanics",
+      "source_index": 872
+    },
+    {
+      "case_id": "vbench2-train-06-03",
+      "source_dimension": "Mechanics",
+      "source_index": 875
+    },
+    {
+      "case_id": "vbench2-train-06-04",
+      "source_dimension": "Mechanics",
+      "source_index": 878
+    },
+    {
+      "case_id": "vbench2-train-06-05",
+      "source_dimension": "Mechanics",
+      "source_index": 882
+    },
+    {
+      "case_id": "vbench2-train-06-06",
+      "source_dimension": "Mechanics",
+      "source_index": 884
+    },
+    {
+      "case_id": "vbench2-train-06-07",
+      "source_dimension": "Mechanics",
+      "source_index": 887
+    },
+    {
+      "case_id": "vbench2-train-06-08",
+      "source_dimension": "Mechanics",
+      "source_index": 890
+    },
+    {
+      "case_id": "vbench2-train-06-09",
+      "source_dimension": "Mechanics",
+      "source_index": 893
+    },
+    {
+      "case_id": "vbench2-train-06-10",
+      "source_dimension": "Mechanics",
+      "source_index": 896
+    }
+  ],
+  "selection_policy": "six benchmark dimensions provide ten train and ten dev prompts; two dimensions provide ten frozen test prompts",
+  "source_dataset": "VBench-2.0",
+  "source_file": "VBench2_full_info.json",
+  "source_path": "data\\vbench-source\\VBench2_full_info.json",
+  "source_sha256": "115e54e02ffbeee118ffe598fb497e9a4e40232a4ac4e0a3fd4e33867590a272",
+  "source_url": "https://raw.githubusercontent.com/Vchitect/VBench/master/VBench-2.0/vbench2/VBench2_full_info.json",
+  "splits": {
+    "dev": 60,
+    "test": 20,
+    "train": 60
+  },
+  "test_families": [
+    "vbench2-test-01",
+    "vbench2-test-02"
+  ],
+  "test_policy": "test prompts are benchmark-verbatim and milestone-only; they cannot create proposals or acceptance decisions",
+  "train_families": [
+    "vbench2-train-01",
+    "vbench2-train-02",
+    "vbench2-train-03",
+    "vbench2-train-04",
+    "vbench2-train-05",
+    "vbench2-train-06"
+  ]
+}

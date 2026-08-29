@@ -39,10 +39,121 @@ def _finding(
     )
 
 
+def _entity_value(entity: Any, field: str, default: Any = None) -> Any:
+    if isinstance(entity, dict):
+        return entity.get(field, default)
+    return getattr(entity, field, default)
+
+
+def _actor_ids(contract: SceneContract, plan: TrajectoryPlan) -> list[str]:
+    """Return actor IDs without assuming the legacy ``character`` name."""
+
+    ids = [
+        str(entity.id)
+        for entity in contract.entities
+        if str(entity.kind).lower() in {"actor", "character"}
+        and str(entity.id) in plan.entities
+    ]
+    if ids:
+        return ids
+    return sorted(
+        entity_id
+        for entity_id in plan.entities
+        if entity_id.startswith("actor") or entity_id == "character"
+    )
+
+
+def _trajectory_targets(
+    oracle: dict[str, Any], contract: SceneContract, plan: TrajectoryPlan
+) -> list[str]:
+    explicit = oracle.get("trajectory_entity_ids")
+    if isinstance(explicit, list) and explicit:
+        return [entity_id for entity_id in explicit if entity_id in plan.entities]
+    explicit_id = oracle.get("trajectory_entity_id")
+    if isinstance(explicit_id, str) and explicit_id in plan.entities:
+        return [explicit_id]
+    if "character" in plan.entities:
+        return ["character"]
+    return _actor_ids(contract, plan)
+
+
+def _state_axis_at(trajectory: Any, frame: int, axis: int = 1) -> float | None:
+    states = sorted(getattr(trajectory, "states", []), key=lambda state: state.frame)
+    if not states:
+        return None
+    if frame <= states[0].frame:
+        return float(states[0].position[axis])
+    if frame >= states[-1].frame:
+        return float(states[-1].position[axis])
+    for left, right in zip(states, states[1:]):
+        if left.frame <= frame <= right.frame:
+            if right.frame == left.frame:
+                return float(left.position[axis])
+            ratio = (frame - left.frame) / (right.frame - left.frame)
+            return float(left.position[axis]) + ratio * (
+                float(right.position[axis]) - float(left.position[axis])
+            )
+    return None
+
+
+def _allowed_crossing_intervals(contract: SceneContract, oracle: dict[str, Any]) -> list[tuple[int, int]]:
+    allowed_ids = {str(value) for value in oracle.get("allowed_crossing_event_ids", []) or []}
+    intervals: list[tuple[int, int]] = []
+    for event in contract.events:
+        description = str(event.description).lower()
+        if event.id in allowed_ids or any(token in description for token in ("handoff", "transfer", "cross")):
+            intervals.append((round(event.start * contract.fps) + 1, round(event.end * contract.fps) + 1))
+    return intervals
+
+
+def _find_unplanned_actor_crossings(
+    oracle: dict[str, Any], contract: SceneContract, plan: TrajectoryPlan
+) -> list[str]:
+    """Detect lane-order inversions using authored actor lanes and plan states.
+
+    This is a negative-constraint check, not a visual-quality score.  Handoff
+    or explicitly authored crossing windows are exempt; an unplanned inversion
+    is evidence that the trajectory planner violated the case contract.
+    """
+
+    actor_ids = _actor_ids(contract, plan)
+    allowed_intervals = _allowed_crossing_intervals(contract, oracle)
+    frames = sorted(
+        {
+            state.frame
+            for actor_id in actor_ids
+            for state in plan.entities[actor_id].states
+        }
+    )
+    crossings: list[str] = []
+    for index, left_id in enumerate(actor_ids):
+        for right_id in actor_ids[index + 1 :]:
+            previous_frame: int | None = None
+            previous_delta: float | None = None
+            for frame in frames:
+                left_y = _state_axis_at(plan.entities[left_id], frame)
+                right_y = _state_axis_at(plan.entities[right_id], frame)
+                if left_y is None or right_y is None:
+                    continue
+                delta = left_y - right_y
+                if previous_delta is not None and previous_frame is not None:
+                    inverted = previous_delta * delta < 0
+                    if inverted:
+                        midpoint = round((previous_frame + frame) / 2)
+                        allowed = any(start <= midpoint <= end for start, end in allowed_intervals)
+                        if not allowed:
+                            crossings.append(f"{left_id}:{right_id}:{previous_frame}-{frame}")
+                            break
+                previous_frame = frame
+                previous_delta = delta
+    return crossings
+
+
 def evaluate_independent_oracle(
     record: dict[str, Any],
     contract: SceneContract,
     plan: TrajectoryPlan,
+    telemetry: dict[str, Any] | None = None,
 ) -> list[Finding]:
     """Return hard findings for mismatches against authored expectations."""
     oracle = record.get("oracle_expectations")
@@ -62,6 +173,38 @@ def evaluate_independent_oracle(
                 f"authored event order differs; missing={missing}, extra={extra}, actual={actual_events}, expected={expected_events}",
                 evidence,
                 root_cause_id="prompt_event_order",
+            )
+        )
+
+    expected_entity_ids = set(oracle.get("required_entity_ids", []))
+    actual_entity_ids = {entity.id for entity in contract.entities}
+    missing_entities = sorted(expected_entity_ids - actual_entity_ids)
+    if missing_entities:
+        findings.append(
+            _finding(
+                "oracle_entity_missing",
+                "scene_parser",
+                f"authored entities are absent from the generated contract: {missing_entities}",
+                evidence + missing_entities,
+                root_cause_id="prompt_required_entity_coverage",
+            )
+        )
+
+    expected_camera_events = set(oracle.get("required_camera_events", []))
+    actual_camera_events = {
+        event_id
+        for shot in plan.camera.shots
+        for event_id in shot.required_event_ids
+    }
+    missing_camera_events = sorted(expected_camera_events - actual_camera_events)
+    if missing_camera_events:
+        findings.append(
+            _finding(
+                "oracle_camera_event_missing",
+                "camera_planner",
+                f"authored required camera events are not covered: {missing_camera_events}",
+                evidence + missing_camera_events,
+                root_cause_id="prompt_required_camera_coverage",
             )
         )
 
@@ -94,8 +237,12 @@ def evaluate_independent_oracle(
             )
         )
 
-    character = plan.entities.get("character")
-    actual_primitives = {primitive.type for primitive in character.motion_primitives} if character else set()
+    trajectory_targets = _trajectory_targets(oracle, contract, plan)
+    actual_primitives = {
+        primitive.type
+        for entity_id in trajectory_targets
+        for primitive in plan.entities[entity_id].motion_primitives
+    }
     required_primitives = set(oracle.get("required_motion_primitives", []))
     missing_primitives = sorted(required_primitives - actual_primitives)
     if missing_primitives:
@@ -110,7 +257,12 @@ def evaluate_independent_oracle(
             )
         )
 
-    actual_attachments = [event.action for event in character.attachment_events] if character else []
+    actual_attachments = [
+        (event.frame, event.action)
+        for entity_id in sorted(plan.entities)
+        for event in plan.entities[entity_id].attachment_events
+    ]
+    actual_attachments = [action for _frame, action in sorted(actual_attachments)]
     required_attachments = list(oracle.get("required_attachment_actions", []))
     if actual_attachments != required_attachments:
         findings.append(
@@ -141,4 +293,72 @@ def evaluate_independent_oracle(
                 root_cause_id="scene_authored_entities",
             )
         )
+
+    negative_constraints = set(oracle.get("required_negative_constraints", []))
+    if negative_constraints:
+        runtime = telemetry or {}
+        violations: list[str] = []
+        missing_evidence: list[str] = []
+        if "no_prop_penetration" in negative_constraints:
+            if "attachment_penetration" not in runtime:
+                missing_evidence.append("attachment_penetration")
+            elif runtime.get("attachment_penetration"):
+                violations.append("no_prop_penetration")
+        if "no_identity_swap" in negative_constraints:
+            objects = runtime.get("objects")
+            if not isinstance(objects, dict) or not objects:
+                missing_evidence.append("objects")
+            elif any(
+                observed.get("source_entity_id")
+                and observed.get("source_entity_id") != entity_id
+                for entity_id, observed in objects.items()
+                if isinstance(observed, dict)
+            ):
+                violations.append("no_identity_swap")
+        if "handoff_requires_same_window_detach_attach" in negative_constraints:
+            transfers = runtime.get("transfer_constraints")
+            if not isinstance(transfers, list):
+                missing_evidence.append("transfer_constraints")
+            elif any(isinstance(item, dict) and item.get("valid") is not True for item in transfers):
+                violations.append("handoff_requires_same_window_detach_attach")
+        if "all_required_targets_visible_in_event_shot" in negative_constraints:
+            if "visibility" not in runtime:
+                missing_evidence.append("visibility")
+            elif any(
+                isinstance(item, dict) and item.get("max_occlusion", 1.0) > 0.5
+                for item in runtime.get("visibility", []) or []
+            ):
+                violations.append("all_required_targets_visible_in_event_shot")
+        if "no_unplanned_actor_crossing" in negative_constraints:
+            runtime_crossings = runtime.get("actor_crossings")
+            if isinstance(runtime_crossings, list) and any(
+                not isinstance(item, dict) or item.get("planned") is not True
+                for item in runtime_crossings
+            ):
+                violations.append("no_unplanned_actor_crossing")
+            else:
+                trajectory_crossings = _find_unplanned_actor_crossings(oracle, contract, plan)
+                if trajectory_crossings:
+                    violations.append("no_unplanned_actor_crossing")
+                    evidence.extend(trajectory_crossings)
+        for constraint in violations:
+            findings.append(
+                _finding(
+                    "oracle_negative_constraint_violated",
+                    "proxy_renderer",
+                    f"runtime evidence violates authored negative constraint: {constraint}",
+                    evidence + [constraint],
+                    root_cause_id=f"negative_constraint:{constraint}",
+                )
+            )
+        for field in missing_evidence:
+            findings.append(
+                _finding(
+                    "oracle_negative_evidence_missing",
+                    "proxy_renderer",
+                    f"runtime evidence required to verify authored negative constraints is missing: {field}",
+                    evidence + [field],
+                    root_cause_id=f"negative_evidence:{field}",
+                )
+            )
     return findings

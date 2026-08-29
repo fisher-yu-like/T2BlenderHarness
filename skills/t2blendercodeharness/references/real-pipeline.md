@@ -1,42 +1,120 @@
-# Real Pipeline Gates
+# Active Real Agent Pipeline
 
-## Inner loop
+This reference describes the production path for
+`t2blendercodeharness-v5-executable-director`. Historical deterministic and
+template experiments remain available as explicit comparison artifacts, not as
+silent production fallbacks.
+
+## Per-case production path
 
 ```text
-prompt
- -> SceneContract
- -> TrajectoryPlan + CameraPlan
- -> controlled Blender execution
- -> .blend + PNG animation + sampled frames + telemetry
- -> artifact gate
- -> deterministic evaluator
- -> optional VLM sampled-frame judge
- -> local repair or candidate promotion
+exact prompt + case metadata
+ -> DirectorAgent
+ -> DirectorPlan evidence/order/trajectory/camera gate
+ -> BlenderCodeAgent + CodexLocalProvider
+ -> static/runtime/case coverage gate
+ -> frozen per-case blender_job.py
+ -> D:\blender\blender.exe in an isolated directory
+ -> proxy.blend + real proxy.mp4 + frames + telemetry
+ -> RealArtifactGate + deterministic + independent oracle
+ -> one shared visual review
+ -> separate task and realism channels
 ```
 
-Use the following promotion order:
+`DirectorAgent.plan` is the only production planning entry point. It combines
+prompt interpretation, event scheduling, actor/prop trajectories, interaction
+lifecycle, and multi-target camera choreography. `SceneContract` and
+`TrajectoryPlan` are compatibility projections for existing adapters.
 
-| Stage | Minimum evidence | If missing |
+`BlenderCodeAgent` receives the exact DirectorPlan and verified
+`blender/lib/signatures.json`, then generates one case-specific source. The
+source must pass schema, AST, runtime, and `case coverage gate` checks before it
+is frozen. `CodexLocalProvider` is the structured in-process Codex bridge for
+the official training path; there is no external endpoint.
+`CodexExecProvider` is retained only for explicit diagnostics. Provider,
+schema, static, or coverage errors are `fail-closed`.
+
+`template_baseline` is permitted only when explicitly requested for a historical
+paired comparison. It is never an agent fallback. The official local inner
+loop allows `max_inner_attempts=3`: a plan/non-compliance, Blender render, or
+artifact failure regenerates a complete case candidate. Same-source retry is
+zero, and after three failures the case is `NOT_RENDERED`; source mutation or
+template substitution is a hard failure. Parallel rendering is capped at
+**at most 12 workers** and the worker count, Blender path, render settings,
+retry count, candidate attempt count, and hashes are recorded in the run
+report.
+
+## Evidence gates
+
+| Stage | Required evidence | Failure behavior |
 |---|---|---|
-| prepared | prompt, contract, plan, manifest, generated job | fail before Blender |
-| executing | persisted state and MCP request | wait or fail closed |
-| rendered | successful MCP response plus `.blend` and animation frames | do not evaluate |
-| artifact-valid | required files, valid manifest, index, three readable PNGs, host MP4 | hard fail |
-| evaluated | deterministic report with terminal status | do not train |
-| VLM-scored | compliant structured response and provenance | keep `unavailable`, do not invent score |
+| prepared | exact prompt, DirectorPlan, projections, manifest, generated source | stop before Blender |
+| code-ready | schema/AST/runtime and case coverage pass | `codegen_failed`, no video |
+| rendered | real Blender return success, `.blend`, animation PNGs, telemetry | retry same source, then `render_failed` |
+| artifact-valid | manifest, playable MP4, index, at least three readable samples, hashes | hard fail; no visual score |
+| deterministic-pass | timebase, identity, events, trajectories, camera, constraints, oracle pass | hard fail; no patch preference |
+| visually reviewed | compliant `gpt-5.6-luna`, `gpt-5.6-terra`, or auditable human/local review | unavailable/needs-human-review; no imputation |
 
-The current project uses `RealRunStateMachine`, `RealArtifactGate`, `evaluate_real_runs.py`, and `evaluate_real_videos.py`. Use their reports as evidence instead of inferring success from directory names or the presence of one file.
+The traceability chain is:
 
-## Outer loop
+```text
+prompt_hash -> plan_hash -> code_hash -> artifact_hash
+```
 
-1. Read only train records to identify repeated failures.
-2. Group by failure ID, owner, category, and severity.
-3. Produce one patch proposal per owner with affected cases and evidence paths.
-4. Apply at most one Harness-owner patch per candidate.
-5. Rerun train and dev with stable evaluator/backend/data fingerprints.
-6. Accept only strict train improvement and non-regressing dev; otherwise roll back.
-7. Run frozen test only after acceptance and never use test findings to choose the patch.
+`RealRunManifest` retains the prompt/plan/Director/code identity fields.
+`RealArtifactReport` retains per-file `artifact_hashes` and their canonical
+aggregate `artifact_hash`.
 
-## VLM boundary
+## Outer-loop protocol
 
-Send only the prompt, compact scene contract, sampled frame data, and deterministic findings required by the judge schema. Do not send Harness version, candidate owner, patch identity, or unrelated workspace files. Network, policy, and schema errors are evidence that the VLM stage is unavailable, not negative labels.
+The active dataset is the verbatim VBench-2.0 index
+`dataset/vbench2-agent-training-index-v1`: exactly 60 train, 60 dev, and 20
+frozen test cases. Six rounds are paired by ten-case families. The training
+entry point validates that every prompt is identical to raw `prompt_en` and
+rejects self-built or augmented prompt datasets; benchmark records have no
+pre-authored event/entity/oracle labels, so DirectorAgent derives those at
+runtime.
+Each outer attempt renders 10 train + 10 dev cases; each round ends with a
+separate full 60 train + 60 dev evaluation. There are at most five attempts per
+round and a theoretical maximum of
+`6 × (5 × 20 + 120) = 1320` real video executions.
+
+The `1320` value counts committed protocol case slots. With at most three fresh
+case candidates per slot, the worst-case candidate-generation budget is `3960`;
+successful cases normally stop at the first passing candidate. The inner loop
+is execution recovery only; it is not a local scene-repair loop and does not
+modify the evaluator or the Harness owner.
+
+The outer loop aggregates repeated train findings, requires one Harness owner,
+regenerates the plan and source for that candidate version, and accepts only
+strict train improvement with paired/full dev non-regression, no new hard
+regressions, and no artifact-completion regression. The frozen test set is used
+only for final blind verification.
+
+The canonical append-only table is
+`docs/t2blendercodeharness-agent-training-memory-v1.md`. Each row keeps the
+exact prompt, absolute MP4 path or `NOT_RENDERED: reason`, Director/task/realism
+scores, review provenance, Harness problem, fix location/method, delta, and
+natural-language handling. JSONL evidence is written beside the round reports.
+
+## Score boundary
+
+Deterministic values are gate/diagnostic outputs. For an eligible shared visual
+review:
+
+```text
+semantic = GM(prompt_compliance, physical_plausibility,
+               object_trajectory, event_timing)
+choreography = GM(camera_coverage, camera_innovation,
+                  character_trajectory, temporal_smoothness)
+task_score = .45 * semantic + .45 * choreography + .10 * visual_clarity
+task_final_score = task_score
+realism_vlm = GM(appearance_detail, physical_realism,
+                  spatial_consistency, motion_naturalness,
+                  visual_presentation)
+reviewed_realism = .15 * geometry_score + .15 * frame_evidence_score + .70 * realism_vlm
+```
+
+Task and realism are separate channels. Frame statistics can report artifact
+health only; they cannot create semantic or realism scores. A VLM transport or
+schema failure stays unavailable and cannot be converted to zero or 100.

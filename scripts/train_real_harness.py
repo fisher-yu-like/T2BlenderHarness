@@ -9,11 +9,12 @@ report per batch.  It can also prepare and evaluate the complete train split.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -21,13 +22,191 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from scripts.evaluate_real_runs import evaluate_real_split  # noqa: E402
+from scripts.evaluate_real_runs import evaluate_real_run, evaluate_real_split  # noqa: E402
 from scripts.evaluate_real_videos import evaluate_split  # noqa: E402
 from scripts.prepare_real_jobs import prepare_jobs  # noqa: E402
+from scripts.render_evaluate_groups import group_case_ids  # noqa: E402
 from scripts.render_proxy_jobs_parallel import render_jobs  # noqa: E402
+from scripts.validate_benchmark_prompt_index import validate_benchmark_prompt_index  # noqa: E402
 from evaluator.openai_vlm import canonical_vlm_name  # noqa: E402
+from evaluator.visual_primary import VISUAL_PRIMARY_VERSION  # noqa: E402
+from videoact.blender_code_agent import BlenderCodeAgent  # noqa: E402
+from videoact.codex_exec_provider import CodexExecProvider  # noqa: E402
+from videoact.director import DirectorAgent  # noqa: E402
+from videoact.real_inner_loop import run_real_inner_loop  # noqa: E402
 
 _MISSING = object()
+
+
+def require_benchmark_training_dataset(dataset_root: str | Path) -> dict[str, Any]:
+    """Fail closed unless the active training index is verbatim benchmark data."""
+
+    report = validate_benchmark_prompt_index(dataset_root)
+    if report.get("status") != "pass":
+        raise ValueError(
+            "training requires a validated benchmark prompt index; "
+            f"self-built or mutated datasets are ineligible: {json.dumps(report, ensure_ascii=False, sort_keys=True)}"
+        )
+    return report
+
+
+def require_training_readiness(report_path: str | Path) -> dict[str, Any]:
+    """Prevent real training until the independent readiness matrix passes."""
+
+    path = Path(report_path)
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"training readiness report is missing or unreadable: {path}: {exc}") from exc
+    if not isinstance(report, dict) or report.get("training_allowed") is not True:
+        raise ValueError(
+            "real Harness training is blocked until training_allowed=true: "
+            f"status={report.get('status') if isinstance(report, dict) else None}, "
+            f"blocking_gates={report.get('blocking_gates') if isinstance(report, dict) else None}, "
+            f"report={path.resolve()}"
+        )
+    return report
+
+
+DIAGNOSTIC_DEFERRED_GATES = frozenset({"golden_review", "paired_gate"})
+DIAGNOSTIC_REQUIRED_GATES = frozenset(
+    {
+        "full_test",
+        "capability",
+        "dataset",
+        "frozen_eval",
+        "real_blender_smoke",
+        "dynamic_agent_provider",
+        "golden_review",
+        "paired_gate",
+    }
+)
+
+
+def require_diagnostic_training_readiness(report_path: str | Path) -> dict[str, Any]:
+    """Allow a transparent pre-calibration run without unlocking formal training.
+
+    The production gate remains fail-closed until human visual calibration and
+    the paired gate pass.  This separate entry point is intentionally limited
+    to a readiness report whose only pending gates are those two human-facing
+    gates; it never authorizes a numeric visual score or a formal patch
+    acceptance decision.
+    """
+
+    path = Path(report_path)
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"diagnostic training readiness is missing or unreadable: {path}: {exc}") from exc
+    if not isinstance(report, dict):
+        raise ValueError("diagnostic training is blocked: readiness report must be an object")
+    if report.get("numeric_substitutions"):
+        raise ValueError("diagnostic training is blocked: numeric gate substitutions are present")
+    gates = report.get("gates")
+    if not isinstance(gates, dict):
+        raise ValueError("diagnostic training is blocked: readiness gates are missing")
+    missing = sorted(DIAGNOSTIC_REQUIRED_GATES - set(gates))
+    if missing:
+        raise ValueError(f"diagnostic training is blocked: readiness gates are missing: {missing}")
+    deferred: list[str] = []
+    invalid: list[str] = []
+    for name, gate in gates.items():
+        status = gate.get("status") if isinstance(gate, dict) else None
+        if status == "pass":
+            continue
+        if name in DIAGNOSTIC_DEFERRED_GATES and status == "pending":
+            deferred.append(name)
+            continue
+        invalid.append(f"{name}={status}")
+    if invalid:
+        raise ValueError(
+            "diagnostic training is blocked: only pending golden_review/paired_gate may be deferred; "
+            + ", ".join(invalid)
+        )
+    return {
+        "mode": "diagnostic_precalibration",
+        "formal_training_allowed": report.get("training_allowed") is True and not deferred,
+        "visual_scores_permitted": False,
+        "deferred_gates": sorted(deferred),
+        "readiness_report": str(path.resolve()),
+        "readiness_status": report.get("status"),
+    }
+
+
+def audit_dynamic_agent_index(
+    index: dict[str, Any], *, run_root: str | Path, expected_case_ids: list[str]
+) -> dict[str, Any]:
+    """Prove a prepared batch is the dynamic agent arm, not a template arm.
+
+    This is a provenance gate, not a visual quality score.  It rejects an
+    explicit template mode, missing per-case codegen provenance, missing
+    sources, and a batch in which every distinct case reuses one source.
+    """
+
+    expected = [str(case_id) for case_id in expected_case_ids]
+    jobs = index.get("jobs") if isinstance(index, dict) else None
+    if index.get("generation_mode") != "agent":
+        return {
+            "status": "fail",
+            "reason": "template_generation_mode_is_not_allowed_for_agent_training",
+            "generation_mode": index.get("generation_mode"),
+        }
+    if not isinstance(jobs, list):
+        return {"status": "fail", "reason": "agent_job_index_missing_jobs", "generation_mode": "agent"}
+    by_id = {str(job.get("case_id")): job for job in jobs if isinstance(job, dict)}
+    missing = sorted(set(expected) - set(by_id))
+    if missing:
+        return {"status": "fail", "reason": "agent_job_index_missing_cases", "missing_case_ids": missing}
+    failures: list[str] = []
+    source_hashes: dict[str, str] = {}
+    root = Path(run_root)
+    for case_id in expected:
+        job = by_id[case_id]
+        if job.get("status") != "prepared":
+            failures.append(f"{case_id}:job_status={job.get('status')}")
+        if not str(job.get("codegen_call_id") or "").strip():
+            failures.append(f"{case_id}:missing_codegen_call_id")
+        job_path = Path(str(job.get("job_path") or root / case_id / "blender_job.py"))
+        if not job_path.is_absolute():
+            candidates = (root / job_path, Path.cwd() / job_path)
+            job_path = next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
+        if not job_path.is_file() or job_path.stat().st_size == 0:
+            failures.append(f"{case_id}:missing_generated_source")
+            continue
+        source_text = job_path.read_text(encoding="utf-8", errors="replace")
+        # A unique hash alone is not sufficient: a shared scaffold can be
+        # copied and stamped with a case id.  The production local provider
+        # must leave an auditable case-specific profile in every generated
+        # Blender source.  This is deliberately a hard provenance gate, not a
+        # quality heuristic; sources without it must not reach Blender.
+        if (
+            "CASE_SCENE_PROFILE" not in source_text
+            or "codex-local-case-profile-v2" not in source_text
+        ):
+            failures.append(f"{case_id}:missing_case_specific_generation_profile")
+        director_plan_hash = str(job.get("director_plan_hash") or "").strip()
+        if director_plan_hash and director_plan_hash[:16] not in source_text:
+            failures.append(f"{case_id}:case_profile_not_bound_to_director_plan")
+        actual_source_hash = hashlib.sha256(job_path.read_bytes()).hexdigest()
+        source_hash = str(job.get("code_hash") or "").strip()
+        if not source_hash:
+            source_hash = actual_source_hash
+        elif source_hash != actual_source_hash:
+            failures.append(f"{case_id}:generated_source_hash_mismatch")
+        source_hashes[case_id] = source_hash
+    unique_hashes = sorted(set(source_hashes.values()))
+    if len(expected) > 1 and len(unique_hashes) == 1 and len(source_hashes) == len(expected):
+        failures.append("all_cases_reuse_one_generated_source")
+    return {
+        "status": "pass" if not failures else "fail",
+        "reason": "dynamic_case_specific_source_verified" if not failures else "agent_source_provenance_failed",
+        "generation_mode": "agent",
+        "case_count": len(expected),
+        "prepared_count": sum(by_id[case_id].get("status") == "prepared" for case_id in expected),
+        "unique_source_count": len(unique_hashes),
+        "source_hashes": source_hashes,
+        "failures": failures,
+    }
 
 
 def _is_missing(value: Any) -> bool:
@@ -36,6 +215,24 @@ def _is_missing(value: Any) -> bool:
 
 def _first_non_missing(*values: Any) -> Any:
     return next((value for value in values if not _is_missing(value)), _MISSING)
+
+
+def _read_failure_reason(path: Any, status: Any) -> str:
+    """Read a preparation failure without hiding malformed evidence."""
+
+    fallback = str(status or "preparation_failed")
+    if not path:
+        return fallback
+    failure_path = Path(str(path))
+    if not failure_path.is_file():
+        return f"{fallback}: failure record missing"
+    try:
+        payload = json.loads(failure_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return f"{fallback}: failure record unreadable ({type(exc).__name__})"
+    if isinstance(payload, dict):
+        return str(payload.get("reason") or payload.get("status") or fallback)
+    return fallback
 
 
 def _numbered_path_part(parts: tuple[str, ...], prefix: str) -> Any:
@@ -92,21 +289,21 @@ def build_protocol_manifest(
     batches = build_round_batches(train_ids, dev_ids)
     if len(test_ids) != 20 or set(test_ids) & (set(train_ids) | set(dev_ids)):
         raise ValueError("test split must contain 20 frozen, disjoint cases")
-    cumulative_train: list[str] = []
-    cumulative_dev: list[str] = []
     rounds: list[dict[str, Any]] = []
     for batch in batches:
-        cumulative_train.extend(batch["train"])
-        cumulative_dev.extend(batch["dev"])
         rounds.append(
             {
                 "round": batch["round"],
                 "train": batch["train"],
                 "dev": batch["dev"],
                 "overall_evaluation": {
+                    # The user-facing protocol requires a complete 60-train
+                    # plus 60-dev evaluation at the end of every round.  The
+                    # ten-case batch above is the patch-selection signal; the
+                    # overall run is not a progressively shrinking sample.
                     "scope": "cumulative_train_and_dev",
-                    "train_cases": list(cumulative_train),
-                    "dev_cases": list(cumulative_dev),
+                    "train_cases": list(train_ids),
+                    "dev_cases": list(dev_ids),
                     "blind_test": False,
                 },
             }
@@ -231,14 +428,22 @@ def build_attempt_policy(max_attempts: int = 5, overall_case_count: int | None =
     legacy_default = overall_case_count is None
     overall_case_count = 120 if legacy_default else overall_case_count
     return {
-        "mode": "outer_loop_only",
+        "mode": "outer_loop_with_bounded_case_regeneration",
         "max_attempts": 5,
-        "inner_case_retries": 0,
-        "render_retries_per_case": 2,
+        "inner_case_attempts_max": 3,
+        "render_retries_per_case": 0,
         "videos_per_attempt": 20,
         "overall_videos_per_round": overall_case_count,
         "videos_per_round_max": 5 * 20 + overall_case_count,
-        "videos_total_max": 6 * (5 * 20 + overall_case_count) if legacy_default else 5 * (5 * 20 + overall_case_count),
+        # ``videos_*`` count protocol case slots.  Candidate counts include
+        # the worst-case three local plan/code/render generations per slot.
+        "candidate_videos_per_case_max": 3,
+        "candidate_videos_per_attempt_max": 3 * 20,
+        "candidate_videos_per_round_max": 3 * (5 * 20 + overall_case_count),
+        # Six rounds are the active protocol.  The historical multi-five
+        # adapter overwrites this field with its own exact accounting.
+        "videos_total_max": 6 * (5 * 20 + overall_case_count),
+        "candidate_videos_total_max": 6 * 3 * (5 * 20 + overall_case_count),
     }
 
 
@@ -256,6 +461,105 @@ def validate_harness_patch_paths(paths: list[str]) -> None:
                 "Harness-only patch scope violation: generated plan/contract contents are immutable; "
                 f"rejected {raw_path}"
             )
+
+
+def run_bounded_outer_attempts(
+    *,
+    run_attempt: Callable[[int], dict[str, Any]],
+    transition: Callable[[int, list[dict[str, Any]]], dict[str, Any]],
+    max_attempts: int = 5,
+) -> dict[str, Any]:
+    """Run a round's outer-loop attempts through an explicit state machine.
+
+    The callback that returns ``{"action": "patch"}`` is the boundary where
+    the Coding Agent has already applied and recorded exactly one Harness-owner
+    patch.  This function never edits source itself.  With no patch transition
+    available, the round stops after its first evidence-producing attempt with
+    ``awaiting_harness_patch`` instead of silently rendering the same Harness
+    again.  A transition can therefore be driven by the Codex Host between
+    attempts while remaining bounded at five.
+    """
+
+    if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or not 1 <= max_attempts <= 5:
+        raise ValueError("max_attempts must be an integer between 1 and 5")
+    reports: list[dict[str, Any]] = []
+    transitions: list[dict[str, Any]] = []
+    status = "max_attempts_exhausted"
+    reason = "maximum outer-loop attempts reached"
+
+    for attempt_number in range(1, max_attempts + 1):
+        report = run_attempt(attempt_number)
+        if not isinstance(report, dict):
+            raise ValueError("run_attempt must return a JSON object")
+        reports.append(report)
+        decision = transition(attempt_number, list(reports))
+        if not isinstance(decision, dict):
+            raise ValueError("outer-loop transition must return a JSON object")
+        action = decision.get("action")
+        if action not in {"patch", "stop", "accept"}:
+            raise ValueError("outer-loop transition action must be patch, stop, or accept")
+        if action == "patch":
+            proposal = decision.get("proposal")
+            if not isinstance(proposal, dict) or not str(proposal.get("owner") or "").strip():
+                raise ValueError("a patch transition requires a proposal with one owner")
+            raw_files = proposal.get("affected_files", proposal.get("files", []))
+            if raw_files is not None:
+                if not isinstance(raw_files, list) or any(not isinstance(item, str) for item in raw_files):
+                    raise ValueError("patch proposal affected_files must be a list of paths")
+                validate_harness_patch_paths(raw_files)
+            if attempt_number == max_attempts:
+                transitions.append(dict(decision))
+                status = "max_attempts_exhausted"
+                reason = "patch proposed at the fifth attempt; no sixth attempt is permitted"
+                break
+            transitions.append(dict(decision))
+            continue
+        transitions.append(dict(decision))
+        status = str(decision.get("status") or ("accepted" if action == "accept" else "stopped"))
+        reason = str(decision.get("reason") or status)
+        break
+
+    return {
+        "status": status,
+        "reason": reason,
+        "attempt_count": len(reports),
+        "max_attempts": max_attempts,
+        "reports": reports,
+        "transitions": transitions,
+    }
+
+
+def build_dynamic_codex_agents(
+    *, codex_command: str = "codex", timeout_s: int = 1800, provider_mode: str = "local"
+):
+    """Build dynamic agents from the current Codex environment by default.
+
+    The local path is the production training path and does not call an
+    external endpoint or spawn ``codex exec``.  The external adapter remains an
+    explicit diagnostic option for provider integration tests only.
+    """
+
+    if provider_mode in {"local", "codex-local"}:
+        from videoact.codex_self_provider import build_codex_local_agents
+
+        return build_codex_local_agents()
+    if provider_mode == "codex-self":
+        from videoact.codex_self_provider import build_codex_self_agents
+
+        return build_codex_self_agents()
+    if provider_mode != "external":
+        raise ValueError("provider_mode must be local, codex-self, or external")
+
+    director = DirectorAgent.from_provider(
+        CodexExecProvider.for_director(command=codex_command, timeout_s=timeout_s),
+        provider_name="codex-local",
+        policy="director-v2-codex-structured",
+    )
+    code_agent = BlenderCodeAgent(
+        provider=CodexExecProvider.for_codegen(command=codex_command, timeout_s=timeout_s),
+        model="codex-local",
+    )
+    return director, code_agent
 
 
 def anti_overfit_gate(
@@ -291,6 +595,17 @@ def write_training_memory_markdown(destination: str | Path, rows: list[dict[str,
         return _first_non_missing(*(row.get(key, _MISSING) for key in keys))
 
     lines = [
+        "<!-- Canonical columns: Round | Attempt | Split | Case ID | Prompt | Proxy video address | Director plan score | Task score | Realism score | Review source/confidence | Harness problem | Harness fix location/method | Before→after delta | Natural-language handling -->",
+        "# T2Blendercodeharness Training Memory v1",
+        "",
+        "Status: diagnostic_precalibration_pending",
+        "",
+        "This append-only memory records real Blender evidence, exact prompts, and every Harness decision.",
+        "The active input is the verbatim VBench index; missing visual review is unavailable, never zero.",
+        "A failed preparation or render is recorded as NOT_RENDERED: <reason> and is never omitted.",
+        "Formal training requires training_allowed=true. Diagnostic rows are evidence only and keep formal acceptance blocked.",
+        "Post-diagnostic semantic audit: object-only prompts no longer receive an invented actor; compound nouns and slide motion are preserved; the two-case real smoke is recorded under out/preflight/director-object-only-v4.",
+        "",
         "# T2Blendercodeharness 训练记忆表",
         "",
         "每一行保留真实 proxy 视频、独立评分通道、Harness 问题、修复和自然语言处理结论。",
@@ -336,9 +651,96 @@ def write_training_memory_markdown(destination: str | Path, rows: list[dict[str,
         )
         lines.append("| " + " | ".join(cell(value) for value in values) + " |")
 
+    channel_rows = [
+        row
+        for row in rows
+        if any(
+            not _is_missing(row.get(name, _MISSING))
+            for name in ("visual_score", "physical_score", "trajectory_score", "camera_score")
+        )
+    ]
+    if channel_rows:
+        lines.extend(
+            [
+                "",
+                "## 真实视频多维评分通道（来自 MP4 解码 + Blender 逐帧观测）",
+                "",
+                "这些分数不从 plan 直接读取：MP4 必须成功解码，且 telemetry 必须包含实际逐帧变换、屏幕框和世界包围盒。",
+                "",
+                "| 轮数 | Attempt | Split | Case ID | 视觉分 | 物理分 | 轨迹分 | 摄像机分 | 视频证据来源 |",
+                "|---:|---:|---|---|---:|---:|---:|---:|---|",
+            ]
+        )
+        for row in channel_rows:
+            values = (
+                row.get("round", _MISSING),
+                row.get("attempt", _MISSING),
+                row.get("split", _MISSING),
+                row.get("case_id", _MISSING),
+                row.get("visual_score", _MISSING),
+                row.get("physical_score", _MISSING),
+                row.get("trajectory_score", _MISSING),
+                row.get("camera_score", _MISSING),
+                row.get("video_evidence_source", _MISSING),
+            )
+            lines.append("| " + " | ".join(cell(value) for value in values) + " |")
+
     output = Path(destination)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def preparation_failure_results(run_root: str | Path) -> list[dict[str, Any]]:
+    """Convert preparation failures into explicit, non-scored case records."""
+
+    root = Path(run_root)
+    index_path = root / "job_index.json"
+    if not index_path.is_file():
+        return []
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return []
+    failures: list[dict[str, Any]] = []
+    for job in index.get("jobs", []) or []:
+        if not isinstance(job, dict) or job.get("status") == "prepared":
+            continue
+        case_id = str(job.get("case_id") or "unknown-case")
+        failure_status = str(job.get("status") or "preparation_failed")
+        failure_path = Path(str(job.get("failure_path"))) if job.get("failure_path") else None
+        reason = failure_status
+        failure_ids: list[str] = [failure_status]
+        if failure_path and failure_path.is_file():
+            try:
+                payload = json.loads(failure_path.read_text(encoding="utf-8"))
+                reason = str(payload.get("reason") or payload.get("status") or reason)
+                response = payload.get("codegen_response") or {}
+                for uncertainty in response.get("uncertainties", []) or []:
+                    identifier = uncertainty.get("id") if isinstance(uncertainty, dict) else None
+                    if identifier:
+                        failure_ids.append(str(identifier))
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                reason = f"{failure_status}: failure record unreadable"
+        run_dir = Path(str(job.get("run_dir") or root / case_id))
+        failures.append(
+            {
+                "case_id": case_id,
+                "status": "not_rendered",
+                "preparation_status": failure_status,
+                "preparation_failure": reason,
+                "artifact_status": "incomplete",
+                "deterministic_status": "not_run",
+                "deterministic_score": None,
+                "deterministic_findings": list(dict.fromkeys(failure_ids)),
+                "director_findings": [],
+                "interaction_findings": [],
+                "vlm_status": "unavailable",
+                "vlm_reason": "not_rendered",
+                "proxy_video": str((run_dir / "proxy.mp4").resolve()),
+                "video_exists": False,
+            }
+        )
+    return failures
 
 
 def merge_real_scores(
@@ -354,8 +756,16 @@ def merge_real_scores(
         vlm = vlm_by_id.get(case_id, {})
         aggregate = vlm.get("aggregate") or {}
         realism = (vlm.get("realism") if vlm.get("status") == "scored" else None) or real.get("realism") or {}
+        local_evidence = vlm.get("local_video_evidence") or {}
+        channels = local_evidence.get("channels") or {}
         video_path = Path(run_root) / case_id / "proxy.mp4"
-        video_score = aggregate.get("final_score") if vlm.get("status") == "scored" else None
+        video_score = (
+            vlm.get("task_score")
+            if vlm.get("status") == "scored" and vlm.get("task_score") is not None
+            else aggregate.get("final_score")
+            if vlm.get("status") == "scored"
+            else None
+        )
         cases.append(
             {
                 "case_id": case_id,
@@ -364,6 +774,8 @@ def merge_real_scores(
                 "artifact_status": real.get("artifact_status"),
                 "deterministic_status": real.get("status"),
                 "deterministic_score": real.get("score"),
+                "preparation_status": real.get("preparation_status"),
+                "preparation_failure": real.get("preparation_failure"),
                 "deterministic_findings": real.get("findings", []),
                 "deterministic_finding_details": real.get("finding_details", []),
                 "director_plan_score": real.get("director_plan_score"),
@@ -377,6 +789,7 @@ def merge_real_scores(
                     or (vlm.get("vlm_response") or {}).get("confidence")
                 ),
                 "vlm_score": aggregate.get("vlm_score"),
+                "overall_vlm_score": vlm.get("overall_vlm_score"),
                 "video_score": video_score,
                 "vlm_reason": vlm.get("reason"),
                 "task_final_score": video_score,
@@ -386,6 +799,12 @@ def merge_real_scores(
                 "realism_claim": realism.get("realism_claim"),
                 "realism_requires_independent_review": realism.get("requires_independent_review"),
                 "realism_evaluator_version": realism.get("evaluator_version"),
+                "visual_score": channels.get("visual_score"),
+                "physical_score": channels.get("physical_score"),
+                "trajectory_score": channels.get("trajectory_score"),
+                "camera_score": channels.get("camera_score"),
+                "video_evidence_source": local_evidence.get("source"),
+                "video_evidence_evaluator_version": local_evidence.get("evaluator_version"),
                 "render_retry_count": _render_retry_count(Path(run_root) / case_id),
             }
         )
@@ -397,6 +816,8 @@ def merge_real_scores(
     }
     if review_sources == {"assistant_local_review"}:
         scoring_mode = "real_blender_video_assistant_local_review"
+    elif review_sources == {"codex_local_visual_review"}:
+        scoring_mode = "real_blender_video_codex_local_visual_review"
     elif review_sources and review_sources != {"external_vlm"}:
         scoring_mode = "real_blender_video_mixed_review"
     else:
@@ -411,6 +832,17 @@ def merge_real_scores(
         for item in cases
         if item.get("realism_score") is not None and item.get("realism_score_kind")
     ]
+    channel_names = ("visual_score", "physical_score", "trajectory_score", "camera_score")
+    channel_means = {
+        f"mean_{name}": round(
+            sum(float(item[name]) for item in cases if item.get(name) is not None)
+            / len([item for item in cases if item.get(name) is not None]),
+            4,
+        )
+        if any(item.get(name) is not None for item in cases)
+        else None
+        for name in channel_names
+    }
     failure_counts: dict[str, int] = {}
     for item in cases:
         for failure_id in item["deterministic_findings"]:
@@ -421,6 +853,8 @@ def merge_real_scores(
         "case_count": len(cases),
         "real_video_count": sum(item["video_exists"] for item in cases),
         "vlm_scored_count": len(scored),
+        "preparation_failed_count": sum(item.get("preparation_status") is not None for item in cases),
+        "artifact_failed_count": sum(item.get("artifact_status") not in {None, "complete"} for item in cases),
         "aggregate": {
             "mean_task_final_score": round(sum(scored) / len(scored), 4) if scored else None,
             "mean_final_score": round(sum(scored) / len(scored), 4) if scored else None,
@@ -431,11 +865,17 @@ def merge_real_scores(
             if realism_scores
             else None,
             "realism_scored_count": len(realism_scores),
+            **channel_means,
             "failure_counts": dict(sorted(failure_counts.items())),
         },
         "score_channels": {
-            "task_final_score": "legacy deterministic/VLM task score; not added to realism",
-            "artifact_only_realism_score": "v3 geometry/PNG evidence; not added to task score",
+            "task_final_score": "VLM-compatible task channel; local path is computed from decoded MP4 plus runtime evidence",
+            "artifact_only_realism_score": "geometry/PNG evidence; not added to task score",
+            "visual_score": "decoded MP4 clarity/detail/presentation channel",
+            "physical_score": "actual runtime bounding-box, collision, ground, rig, and smoothness channel",
+            "trajectory_score": "actual runtime entity trajectory, timing, and smoothness channel",
+            "camera_score": "actual runtime event coverage and camera-motion cue channel",
+            "combined": False,
         },
         "cases": cases,
     }
@@ -507,7 +947,241 @@ def write_unified_outputs(
         )
     destination = Path(markdown_path) if markdown_path else root / "real_unified_score.md"
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.name == "t2blendercodeharness-agent-training-memory-v1.md":
+        # The canonical training document is append-only evidence, not the
+        # per-run summary format above.  Route it through the cross-root
+        # aggregator so a smoke/attempt cannot erase historical rows.
+        update_training_memory_table(root, dataset_root, destination)
+        return
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _inner_not_rendered_result(
+    *,
+    case_id: str,
+    run_root: Path,
+    split: str,
+    inner_case: dict[str, Any],
+) -> dict[str, Any]:
+    """Convert an exhausted inner-loop case into an explicit audit row."""
+
+    attempts = list(inner_case.get("attempts", []))
+    last = attempts[-1] if attempts else {}
+    reason = str(last.get("reason") or inner_case.get("reason") or "max_inner_attempts_exhausted")
+    return {
+        "case_id": case_id,
+        "split": split,
+        "status": "not_rendered",
+        "preparation_status": last.get("status", "inner_loop_exhausted"),
+        "preparation_failure": reason,
+        "artifact_status": "incomplete",
+        "deterministic_status": "not_run",
+        "deterministic_score": None,
+        "deterministic_findings": ["inner_loop_exhausted"],
+        "director_findings": [],
+        "interaction_findings": [],
+        "vlm_status": "unavailable",
+        "vlm_reason": "not_rendered",
+        "proxy_video": str((run_root / case_id / "proxy.mp4").resolve()),
+        "video_exists": False,
+        "inner_loop_attempts": attempts,
+    }
+
+
+def run_real_batch_with_inner_loop(
+    run_root: str | Path,
+    *,
+    split: str,
+    case_ids: list[str],
+    dataset_root: str | Path,
+    harness_version: str,
+    evaluator_version: str,
+    blender_bin: str,
+    workers: int,
+    timeout_s: int,
+    vlm_model: str,
+    markdown_path: str | Path | None = None,
+    scoring_policy: str = VISUAL_PRIMARY_VERSION,
+    director_agent: DirectorAgent,
+    code_agent: BlenderCodeAgent,
+    code_cache_dir: str | Path | None = None,
+    codegen_examples_root: str | Path | None = None,
+    max_inner_attempts: int = 3,
+    assistant_review_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """Prepare, render, and evaluate a real batch with bounded regeneration.
+
+    ``vlm_model`` is retained as the requested model label, but this local
+    training path never calls an external endpoint.  When Blender emits the
+    required runtime observations, the in-process Codex visual reviewer scores
+    decoded MP4 frames and actual transforms; incomplete evidence stays
+    unavailable rather than becoming a zero or a plan-derived number.
+    """
+
+    if not case_ids:
+        raise ValueError("case_ids must not be empty")
+    if not 1 <= workers <= 12:
+        raise ValueError("workers must be between 1 and 12")
+    root = Path(run_root).resolve()
+    records = _dataset_records(dataset_root)
+    missing = sorted(set(case_ids) - set(records))
+    if missing:
+        raise ValueError(f"case IDs are missing from dataset manifest: {missing}")
+    render_reports: list[dict[str, Any]] = []
+    provenance_reports: list[dict[str, Any]] = []
+
+    def prepare_callback(pending_ids: list[str], attempt: int) -> dict[str, Any]:
+        # Each inner candidate gets an isolated cache namespace.  This forces
+        # both local Codex stages to regenerate instead of silently reusing a
+        # failed candidate's source.
+        attempt_cache = Path(code_cache_dir or (root / "code_cache")) / f"inner-attempt-{attempt:02d}"
+        index = prepare_jobs(
+            split,
+            root,
+            dataset_root=dataset_root,
+            harness_version=harness_version,
+            evaluator_version=evaluator_version,
+            case_ids=pending_ids,
+            director_agent=director_agent,
+            code_agent=code_agent,
+            code_cache_dir=attempt_cache,
+            codegen_examples_root=codegen_examples_root,
+        )
+        provenance = audit_dynamic_agent_index(index, run_root=root, expected_case_ids=pending_ids)
+        provenance["inner_attempt"] = attempt
+        provenance_reports.append(provenance)
+        jobs = list(index.get("jobs", []))
+        prepared_ids = [str(job["case_id"]) for job in jobs if job.get("status") == "prepared"]
+        failures = {
+            str(job["case_id"]): {
+                "status": job.get("status"),
+                "reason": _read_failure_reason(job.get("failure_path"), job.get("status")),
+                "failure_path": job.get("failure_path"),
+            }
+            for job in jobs
+            if job.get("status") != "prepared"
+        }
+        if provenance["status"] != "pass":
+            reason = "; ".join(provenance.get("failures", [])) or provenance.get("reason", "agent_source_provenance_failed")
+            prepared_ids = []
+            for case_id in pending_ids:
+                failures[case_id] = {
+                    "status": "agent_provenance_failed",
+                    "reason": reason,
+                    "provenance": provenance,
+                }
+        return {"prepared_ids": prepared_ids, "failures": failures, "job_index": index}
+
+    def render_callback(pending_ids: list[str], attempt: int) -> dict[str, Any]:
+        combined: dict[str, dict[str, Any]] = {}
+        groups: list[dict[str, Any]] = []
+        for group in group_case_ids(pending_ids, group_size=12):
+            report = render_jobs(
+                root,
+                blender_bin=blender_bin,
+                workers=workers,
+                timeout_s=timeout_s,
+                # A failed candidate is regenerated by the outer inner loop;
+                # do not spend additional hidden attempts on the same source.
+                max_retries=0,
+                case_ids=group,
+            )
+            groups.append({"case_ids": group, "report": report})
+            for item in report.get("results", []):
+                combined[str(item["case_id"])] = item
+        payload = {"results": combined, "groups": groups, "attempt": attempt}
+        render_reports.append(payload)
+        return payload
+
+    def evaluate_callback(case_id: str, attempt: int) -> dict[str, Any]:
+        result = evaluate_real_run(
+            root / case_id,
+            record=records[case_id],
+            blender_bin=blender_bin,
+        )
+        result["proxy_video"] = str((root / case_id / "proxy.mp4").resolve())
+        result["inner_attempt"] = attempt
+        return result
+
+    inner = run_real_inner_loop(
+        case_ids,
+        root,
+        prepare=prepare_callback,
+        render=render_callback,
+        evaluate=evaluate_callback,
+        max_attempts=max_inner_attempts,
+    )
+    deterministic_results: list[dict[str, Any]] = []
+    for case_id in case_ids:
+        inner_case = inner["cases"][case_id]
+        if inner_case.get("evaluation"):
+            deterministic_results.append(dict(inner_case["evaluation"]))
+        else:
+            deterministic_results.append(
+                _inner_not_rendered_result(
+                    case_id=case_id,
+                    run_root=root,
+                    split=split,
+                    inner_case=inner_case,
+                )
+            )
+    preliminary = merge_real_scores(
+        run_root=root,
+        deterministic_results=deterministic_results,
+        vlm_results=[],
+    )
+    preliminary["status"] = "awaiting_local_visual_review"
+    preliminary["inner_loop"] = inner
+    preliminary["render"] = {
+        "status": "completed",
+        "group_size": 12,
+        "workers": workers,
+        "max_render_retries_per_candidate": 0,
+        "groups": render_reports,
+    }
+    preliminary["agent_provenance"] = provenance_reports
+    preliminary["vlm_model"] = str(vlm_model).lower()
+    preliminary["vlm_call_policy"] = "local_codex_visual_review_only; no external endpoint"
+    write_unified_outputs(
+        preliminary,
+        dataset_root=dataset_root,
+        report_root=root,
+        markdown_path=markdown_path,
+    )
+    visual_results = evaluate_split(
+        root,
+        dataset_root=dataset_root,
+        assistant_local=assistant_review_dir is None,
+        assistant_review_dir=assistant_review_dir,
+        scoring_policy=scoring_policy,
+    )
+    report = merge_real_scores(
+        run_root=root,
+        deterministic_results=deterministic_results,
+        vlm_results=visual_results,
+    )
+    report.update(
+        {
+            "status": "complete" if report["vlm_scored_count"] == report["real_video_count"] and not inner["pending_case_ids"] else "incomplete_local_visual_review",
+            "render": preliminary["render"],
+            "agent_provenance": provenance_reports,
+            "inner_loop": inner,
+            "vlm_model": str(vlm_model).lower(),
+            "vlm_call_policy": "local_codex_visual_review_only; no external endpoint",
+            "evaluator_version": scoring_policy,
+        }
+    )
+    (root / "real_unified_score.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    write_unified_outputs(
+        report,
+        dataset_root=dataset_root,
+        report_root=root,
+        markdown_path=markdown_path,
+    )
+    return report
 
 
 def run_real_batch(
@@ -519,10 +1193,12 @@ def run_real_batch(
     timeout_s: int,
     vlm_model: str,
     markdown_path: str | Path | None = None,
+    scoring_policy: str = VISUAL_PRIMARY_VERSION,
 ) -> dict[str, Any]:
     os.environ["OPENAI_VLM_MODEL"] = vlm_model
     render_report = render_jobs(run_root, blender_bin=blender_bin, workers=workers, timeout_s=timeout_s)
     deterministic_results = evaluate_real_split(run_root, dataset_root=dataset_root, blender_bin=blender_bin)
+    deterministic_results.extend(preparation_failure_results(run_root))
     preliminary = merge_real_scores(run_root=run_root, deterministic_results=deterministic_results, vlm_results=[])
     preliminary["status"] = "awaiting_shared_vlm_review"
     write_unified_outputs(
@@ -531,7 +1207,7 @@ def run_real_batch(
         report_root=run_root,
         markdown_path=markdown_path,
     )
-    vlm_results = evaluate_split(run_root, dataset_root=dataset_root)
+    vlm_results = evaluate_split(run_root, dataset_root=dataset_root, scoring_policy=scoring_policy)
     report = merge_real_scores(
         run_root=run_root,
         deterministic_results=deterministic_results,
@@ -539,10 +1215,14 @@ def run_real_batch(
     )
     report["render"] = render_report
     report["vlm_model"] = canonical_vlm_name(vlm_model)
-    report["evaluator_version"] = "real-v4-shared-evidence-separate-scores"
+    report["evaluator_version"] = scoring_policy
     report["vlm_call_policy"] = "one VLM call per eligible case; geometry/PNG realism is local and separate"
     write_unified_outputs(report, dataset_root=dataset_root, report_root=run_root, markdown_path=markdown_path)
-    if report["vlm_scored_count"] != report["real_video_count"]:
+    if (
+        report["vlm_scored_count"] != report["real_video_count"]
+        or report.get("preparation_failed_count", 0) > 0
+        or report.get("artifact_failed_count", 0) > 0
+    ):
         report["status"] = "incomplete_vlm_scoring"
     else:
         report["status"] = "complete"
@@ -557,6 +1237,8 @@ def prepare_full_split(
     dataset_root: str | Path,
     harness_version: str,
     evaluator_version: str,
+    director_agent: DirectorAgent | None = None,
+    code_agent: BlenderCodeAgent | None = None,
 ) -> Path:
     split_root = Path(output_root) / split
     prepare_jobs(
@@ -565,6 +1247,8 @@ def prepare_full_split(
         dataset_root=dataset_root,
         harness_version=harness_version,
         evaluator_version=evaluator_version,
+        director_agent=director_agent,
+        code_agent=code_agent,
     )
     return split_root
 
@@ -575,6 +1259,8 @@ def prepare_full_train(
     dataset_root: str | Path,
     harness_version: str,
     evaluator_version: str,
+    director_agent: DirectorAgent | None = None,
+    code_agent: BlenderCodeAgent | None = None,
 ) -> Path:
     return prepare_full_split(
         output_root,
@@ -582,6 +1268,8 @@ def prepare_full_train(
         dataset_root=dataset_root,
         harness_version=harness_version,
         evaluator_version=evaluator_version,
+        director_agent=director_agent,
+        code_agent=code_agent,
     )
 
 
@@ -716,6 +1404,16 @@ def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path)
                 case.get("video_score", _MISSING),
                 case.get("score", _MISSING),
             )
+            detected_problem = _first_non_missing(
+                ", ".join(case.get("deterministic_findings", [])),
+                patch.get("detected_problem", _MISSING),
+            )
+            if _is_missing(detected_problem) and case.get("realism_score_kind") == "artifact_only_proxy" and case.get("realism_band") == "artifact_only_weak":
+                detected_problem = (
+                    f"artifact-only realism is weak ({case.get('realism_score')}); "
+                    "independent visual review is pending, so no semantic or physical conclusion is claimed"
+                )
+
             rows.append(
                 {
                     "round": round_number,
@@ -733,13 +1431,15 @@ def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path)
                     ),
                     "task_score": task_score,
                     "realism_score": case.get("realism_score", _MISSING),
+                    "visual_score": case.get("visual_score", _MISSING),
+                    "physical_score": case.get("physical_score", _MISSING),
+                    "trajectory_score": case.get("trajectory_score", _MISSING),
+                    "camera_score": case.get("camera_score", _MISSING),
+                    "video_evidence_source": case.get("video_evidence_source", _MISSING),
                     "review": case.get("review", _MISSING),
                     "review_source": case.get("review_source", _MISSING),
                     "review_confidence": case.get("review_confidence", _MISSING),
-                    "detected_problem": _first_non_missing(
-                        ", ".join(case.get("deterministic_findings", [])),
-                        patch.get("detected_problem", _MISSING),
-                    ),
+                    "detected_problem": detected_problem,
                     "owner": _first_non_missing(case.get("owner", _MISSING), patch.get("owner", _MISSING)),
                     "fix_location": patch.get("fix_location", _MISSING),
                     "fix_method": patch.get("fix_method", _MISSING),
@@ -750,8 +1450,54 @@ def _memory_rows_from_reports(output_root: str | Path, dataset_root: str | Path)
     return rows
 
 
+def _memory_output_roots(output_root: str | Path) -> list[Path]:
+    """Return the current diagnostic root plus sibling diagnostic roots.
+
+    Diagnostic runs were intentionally split into a baseline root and later
+    upgraded-Harness roots.  Rebuilding the Markdown from only the latest root
+    silently erased earlier evidence, so the canonical table must discover all
+    sibling diagnostic roots under the same ``out/training`` directory.
+    """
+
+    root = Path(output_root).resolve()
+    roots = {root}
+    parent = root.parent
+    if parent.is_dir():
+        for sibling in parent.iterdir():
+            if sibling.is_dir() and sibling.name.startswith("diagnostic-"):
+                roots.add(sibling.resolve())
+    return sorted(roots, key=lambda path: str(path).lower())
+
+
 def update_training_memory_table(output_root: str | Path, dataset_root: str | Path, destination: str | Path) -> None:
-    write_training_memory_markdown(destination, _memory_rows_from_reports(output_root, dataset_root))
+    """Rebuild the canonical table without dropping earlier diagnostic roots."""
+
+    rows: list[dict[str, Any]] = []
+    for root in _memory_output_roots(output_root):
+        rows.extend(_memory_rows_from_reports(root, dataset_root))
+
+    # A report can be revisited after its patch manifest is written.  Replace
+    # that exact evidence row once, while retaining baseline/upgrade rows whose
+    # proxy paths differ.  This makes each update idempotent and append-only at
+    # the experiment-evidence level.
+    deduplicated: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = tuple(
+            str(row.get(field, ""))
+            for field in ("round", "attempt", "split", "case_id", "proxy_video")
+        )
+        deduplicated[key] = row
+    ordered = sorted(
+        deduplicated.values(),
+        key=lambda row: (
+            str(row.get("round", "")),
+            str(row.get("attempt", "")),
+            str(row.get("split", "")),
+            str(row.get("case_id", "")),
+            str(row.get("proxy_video", "")),
+        ),
+    )
+    write_training_memory_markdown(destination, ordered)
 
 
 def run_outer_attempt(
@@ -767,29 +1513,36 @@ def run_outer_attempt(
     timeout_s: int,
     vlm_model: str,
     markdown_path: str | Path,
+    director_agent: DirectorAgent | None = None,
+    code_agent: BlenderCodeAgent | None = None,
+    codex_command: str = "codex",
+    code_cache_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     if not 1 <= attempt_number <= 5:
         raise ValueError("attempt must be between 1 and 5; this is an outer-loop attempt, not an inner repair retry")
     batch = _protocol_round(dataset_root, round_number)
+    if director_agent is None or code_agent is None:
+        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
     attempt_root = Path(output_root) / f"round-{round_number:02d}" / f"attempt-{attempt_number:02d}" / "real"
     reports: dict[str, Any] = {}
     for split in ("train", "dev"):
         split_root = attempt_root / split
-        prepare_jobs(
-            split,
+        reports[split] = run_real_batch_with_inner_loop(
             split_root,
+            split=split,
+            case_ids=batch[split],
             dataset_root=dataset_root,
             harness_version=harness_version,
             evaluator_version=evaluator_version,
-            case_ids=batch[split],
-        )
-        reports[split] = run_real_batch(
-            split_root,
-            dataset_root=dataset_root,
             blender_bin=blender_bin,
             workers=workers,
             timeout_s=timeout_s,
             vlm_model=vlm_model,
+            markdown_path=markdown_path,
+            director_agent=director_agent,
+            code_agent=code_agent,
+            code_cache_dir=code_cache_dir or (Path(output_root) / "code_cache"),
+            max_inner_attempts=3,
         )
     result = {"round": round_number, "attempt": attempt_number, "batch": batch, "splits": reports}
     attempt_root.parent.parent.mkdir(parents=True, exist_ok=True)
@@ -810,27 +1563,34 @@ def run_outer_overall(
     timeout_s: int,
     vlm_model: str,
     markdown_path: str | Path,
+    director_agent: DirectorAgent | None = None,
+    code_agent: BlenderCodeAgent | None = None,
+    codex_command: str = "codex",
+    code_cache_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     overall_root = Path(output_root) / f"round-{round_number:02d}" / "overall" / "real"
     batch = _protocol_round(dataset_root, round_number)
+    if director_agent is None or code_agent is None:
+        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
     reports: dict[str, Any] = {}
     for split in ("train", "dev"):
         split_root = overall_root / split
-        prepare_jobs(
-            split,
+        reports[split] = run_real_batch_with_inner_loop(
             split_root,
+            split=split,
+            case_ids=batch["overall_evaluation"][f"{split}_cases"],
             dataset_root=dataset_root,
             harness_version=harness_version,
             evaluator_version=evaluator_version,
-            case_ids=batch["overall_evaluation"][f"{split}_cases"],
-        )
-        reports[split] = run_real_batch(
-            split_root,
-            dataset_root=dataset_root,
             blender_bin=blender_bin,
             workers=workers,
             timeout_s=timeout_s,
             vlm_model=vlm_model,
+            markdown_path=markdown_path,
+            director_agent=director_agent,
+            code_agent=code_agent,
+            code_cache_dir=code_cache_dir or (Path(output_root) / "code_cache"),
+            max_inner_attempts=3,
         )
     result = {
         "round": round_number,
@@ -854,105 +1614,129 @@ def run_six_round_protocol(
     workers: int,
     timeout_s: int,
     vlm_model: str,
+    codex_command: str = "codex",
+    markdown_path: str | Path | None = None,
+    director_agent: DirectorAgent | None = None,
+    code_agent: BlenderCodeAgent | None = None,
+    outer_transition: Callable[[int, list[dict[str, Any]]], dict[str, Any]] | None = None,
+    diagnostic_only: bool = False,
 ) -> dict[str, Any]:
     dataset = Path(dataset_root)
     split_payload = json.loads((dataset / "splits.json").read_text(encoding="utf-8"))
     metadata = json.loads((dataset / "metadata.json").read_text(encoding="utf-8"))
     protocol = build_protocol_manifest(
-        split_payload["train"], split_payload["dev"], split_payload["test"], dataset_fingerprint=metadata["fingerprint"]
+        split_payload["train"],
+        split_payload["dev"],
+        split_payload["test"],
+        dataset_fingerprint=metadata["fingerprint"],
     )
+    if diagnostic_only:
+        protocol = {
+            **protocol,
+            "execution_mode": "diagnostic_precalibration",
+            "formal_training_allowed": False,
+            "visual_scores_permitted": False,
+            "human_review": "deferred_until_after_Harness_upgrade",
+        }
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
-    (root / "six_round_protocol.json").write_text(json.dumps(protocol, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    records = _dataset_records(dataset_root)
-    memory_rows: list[dict[str, Any]] = []
-    cumulative = {"train": [], "dev": []}
+    if director_agent is None or code_agent is None:
+        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
+    memory_table = Path(markdown_path) if markdown_path is not None else root / "harness_training_memory.md"
+    shared_cache = root / "code_cache"
+    (root / "six_round_protocol.json").write_text(
+        json.dumps(protocol, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     round_reports: list[dict[str, Any]] = []
+    memory_reports: list[dict[str, Any]] = []
     for batch in protocol["rounds"]:
-        round_root = root / f"round-{batch['round']:02d}" / "real"
-        per_split: dict[str, dict[str, Any]] = {}
-        for split in ("train", "dev"):
-            split_root = round_root / split
-            prepare_jobs(
-                split,
-                split_root,
+        round_number = batch["round"]
+        def run_attempt(attempt_number: int) -> dict[str, Any]:
+            return run_outer_attempt(
+                root,
+                round_number=round_number,
+                attempt_number=attempt_number,
                 dataset_root=dataset_root,
                 harness_version=harness_version,
                 evaluator_version=evaluator_version,
-                case_ids=batch[split],
-            )
-            report = run_real_batch(
-                split_root,
-                dataset_root=dataset_root,
                 blender_bin=blender_bin,
                 workers=workers,
                 timeout_s=timeout_s,
                 vlm_model=vlm_model,
+                markdown_path=memory_table,
+                director_agent=director_agent,
+                code_agent=code_agent,
+                codex_command=codex_command,
+                code_cache_dir=shared_cache,
             )
-            per_split[split] = report
-            cumulative[split].append(report)
-            patch = _load_patch_metadata(root / f"round-{batch['round']:02d}")
-            for case in report["cases"]:
-                record = records[case["case_id"]]
-                task_score = _first_non_missing(
-                    case.get("task_final_score", _MISSING),
-                    case.get("video_score", _MISSING),
-                    case.get("score", _MISSING),
-                )
-                memory_rows.append(
-                    {
-                        "round": batch["round"],
-                        "split": split,
-                        "case_id": case["case_id"],
-                        "prompt": record["prompt"],
-                        "proxy_video": case.get("proxy_video", _MISSING),
-                        "director_plan_score": _first_non_missing(
-                            case.get("director_plan_score", _MISSING),
-                            record.get("director_plan_score", _MISSING),
-                            report.get("director_plan_score", _MISSING),
-                        ),
-                        "task_score": task_score,
-                        "realism_score": case.get("realism_score", _MISSING),
-                        "review": case.get("review", _MISSING),
-                        "review_source": case.get("review_source", _MISSING),
-                        "review_confidence": case.get("review_confidence", _MISSING),
-                        "detected_problem": _first_non_missing(
-                            ", ".join(case.get("deterministic_findings", [])),
-                            patch.get("detected_problem", _MISSING),
-                        ),
-                        "owner": _first_non_missing(case.get("owner", _MISSING), patch.get("owner", _MISSING)),
-                        "fix_location": patch.get("fix_location", _MISSING),
-                        "fix_method": patch.get("fix_method", _MISSING),
-                        "delta": patch.get("delta", _MISSING),
-                        "handling": patch.get("handling", _MISSING),
-                    }
-                )
-            write_training_memory_markdown(root / "harness_training_memory.md", memory_rows)
-        overall = {
-            "train": summarize_real_reports(cumulative["train"], scope="cumulative_train_and_dev"),
-            "dev": summarize_real_reports(cumulative["dev"], scope="cumulative_train_and_dev"),
-        }
+
+        transition = outer_transition or (
+            lambda _attempt_number, _reports: {
+                "action": "stop",
+                "status": "awaiting_harness_patch",
+                "reason": "no outer patch transition was supplied; preserve evidence and stop before a duplicate attempt",
+            }
+        )
+        outer_loop = run_bounded_outer_attempts(
+            run_attempt=run_attempt,
+            transition=transition,
+            max_attempts=5,
+        )
+        attempt = outer_loop["reports"][-1]
+        # This is intentionally a separate full evaluation.  It covers all
+        # 60 train and all 60 dev cases at every round, even though only the
+        # new 10+10 batch is used for the candidate signal.
+        overall = run_outer_overall(
+            root,
+            round_number=round_number,
+            dataset_root=dataset_root,
+            harness_version=harness_version,
+            evaluator_version=evaluator_version,
+            blender_bin=blender_bin,
+            workers=workers,
+            timeout_s=timeout_s,
+            vlm_model=vlm_model,
+            markdown_path=memory_table,
+            director_agent=director_agent,
+            code_agent=code_agent,
+            codex_command=codex_command,
+            code_cache_dir=shared_cache,
+        )
         round_report = {
-            "round": batch["round"],
+            "round": round_number,
+            "execution_mode": "diagnostic_precalibration" if diagnostic_only else "formal_training",
+            "formal_training_allowed": False if diagnostic_only else None,
             "batch": batch,
-            "patch": _load_patch_metadata(root / f"round-{batch['round']:02d}"),
-            "splits": per_split,
-            "overall_evaluation": overall,
+            "attempt": attempt,
+            "outer_loop": outer_loop,
+            "overall": overall,
         }
         round_reports.append(round_report)
-        (root / f"round-{batch['round']:02d}" / "overall_evaluation.json").write_text(
+        memory_reports.append(
+            {
+                "round": round_number,
+                "patch": _load_patch_metadata(root / f"round-{round_number:02d}"),
+                "splits": attempt["splits"],
+                "overall_evaluation": overall["splits"],
+            }
+        )
+        (root / f"round-{round_number:02d}" / "overall_evaluation.json").write_text(
             json.dumps(round_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-    write_training_memory_markdown(root / "harness_training_memory.md", memory_rows)
     memory_path = root / "memory" / "harness_updates.jsonl"
-    write_harness_memory_jsonl(memory_path, round_reports)
+    write_harness_memory_jsonl(memory_path, memory_reports)
     result = {
         "protocol": protocol,
+        "execution_mode": "diagnostic_precalibration" if diagnostic_only else "formal_training",
+        "formal_training_allowed": False if diagnostic_only else None,
+        "visual_scores_permitted": False if diagnostic_only else None,
         "rounds": round_reports,
-        "memory_table": str((root / "harness_training_memory.md").resolve()),
+        "memory_table": str(memory_table.resolve()),
         "memory_jsonl": str(memory_path.resolve()),
     }
-    (root / "six_round_training_report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (root / "six_round_training_report.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return result
 
 
@@ -967,8 +1751,19 @@ def run_multi_five_round_protocol(
     timeout_s: int,
     vlm_model: str,
     markdown_path: str | Path,
+    director_agent: DirectorAgent | None = None,
+    code_agent: BlenderCodeAgent | None = None,
+    codex_command: str = "codex",
+    outer_transition: Callable[[int, list[dict[str, Any]]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Execute one real attempt plus one round-end overall evaluation per round."""
+    """Execute bounded real outer attempts plus one round-end evaluation.
+
+    Without an explicit ``outer_transition`` callback the function performs
+    one evidence-producing attempt and stops in ``awaiting_harness_patch``.
+    This prevents a caller from accidentally re-rendering the same Harness;
+    an injected Codex Host controller may apply one-owner patches and permit
+    attempts 2--5.
+    """
     dataset = Path(dataset_root)
     split_payload = json.loads((dataset / "splits.json").read_text(encoding="utf-8"))
     metadata = json.loads((dataset / "metadata.json").read_text(encoding="utf-8"))
@@ -979,26 +1774,48 @@ def run_multi_five_round_protocol(
         dataset_fingerprint=metadata["fingerprint"],
     )
     root = Path(output_root)
+    if director_agent is None or code_agent is None:
+        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
     root.mkdir(parents=True, exist_ok=True)
     (root / "multi_five_protocol.json").write_text(json.dumps(protocol, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     round_reports = []
     for batch in protocol["rounds"]:
-        attempt = run_outer_attempt(
-            root,
-            round_number=batch["round"],
-            attempt_number=1,
-            dataset_root=dataset_root,
-            harness_version=harness_version,
-            evaluator_version=evaluator_version,
-            blender_bin=blender_bin,
-            workers=workers,
-            timeout_s=timeout_s,
-            vlm_model=vlm_model,
-            markdown_path=markdown_path,
+        round_number = batch["round"]
+
+        def run_attempt(attempt_number: int) -> dict[str, Any]:
+            return run_outer_attempt(
+                root,
+                round_number=round_number,
+                attempt_number=attempt_number,
+                dataset_root=dataset_root,
+                harness_version=harness_version,
+                evaluator_version=evaluator_version,
+                blender_bin=blender_bin,
+                workers=workers,
+                timeout_s=timeout_s,
+                vlm_model=vlm_model,
+                markdown_path=markdown_path,
+                director_agent=director_agent,
+                code_agent=code_agent,
+                codex_command=codex_command,
+            )
+
+        transition = outer_transition or (
+            lambda _attempt_number, _reports: {
+                "action": "stop",
+                "status": "awaiting_harness_patch",
+                "reason": "no outer patch transition was supplied; preserve evidence and stop before a duplicate attempt",
+            }
         )
+        outer_loop = run_bounded_outer_attempts(
+            run_attempt=run_attempt,
+            transition=transition,
+            max_attempts=5,
+        )
+        attempt = outer_loop["reports"][-1]
         overall = run_outer_overall(
             root,
-            round_number=batch["round"],
+            round_number=round_number,
             dataset_root=dataset_root,
             harness_version=harness_version,
             evaluator_version=evaluator_version,
@@ -1007,8 +1824,11 @@ def run_multi_five_round_protocol(
             timeout_s=timeout_s,
             vlm_model=vlm_model,
             markdown_path=markdown_path,
+            director_agent=director_agent,
+            code_agent=code_agent,
+            codex_command=codex_command,
         )
-        round_reports.append({"round": batch["round"], "attempt": attempt, "overall": overall})
+        round_reports.append({"round": round_number, "attempt": attempt, "outer_loop": outer_loop, "overall": overall})
     result = {"protocol": protocol, "rounds": round_reports, "memory_table": str(Path(markdown_path).resolve())}
     (root / "multi_five_training_report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result
@@ -1018,24 +1838,66 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["protocol", "attempt", "overall", "multi-five-rounds", "six-rounds", "existing-rounds", "full-train", "all"],
+        choices=[
+            "protocol",
+            "attempt",
+            "overall",
+            "diagnostic-attempt",
+            "diagnostic-overall",
+            "diagnostic-six-rounds",
+            "multi-five-rounds",
+            "six-rounds",
+            "existing-rounds",
+            "full-train",
+            "all",
+        ],
         required=True,
     )
-    parser.add_argument("--dataset-root", default="dataset/trajectory-v4-multi")
-    parser.add_argument("--round-root", default="out/training/multi-five-rounds-v1")
-    parser.add_argument("--full-train-root", default="out/training/full-evaluation-real-v6")
-    parser.add_argument("--harness-version", default="h-t2-hard-v4")
-    parser.add_argument("--evaluator-version", default="real-v4-shared-evidence-separate-scores")
+    parser.add_argument("--dataset-root", default="dataset/vbench2-agent-training-index-v1")
+    parser.add_argument("--readiness-report", default="out/training_readiness_report.json")
+    parser.add_argument("--round-root", default="out/training/agent-six-rounds-v1")
+    parser.add_argument("--full-train-root", default="out/training/full-evaluation-real-v7")
+    parser.add_argument("--harness-version", default="t2blendercodeharness-v5-executable-director")
+    parser.add_argument("--evaluator-version", default=VISUAL_PRIMARY_VERSION)
     parser.add_argument("--blender-bin", default=r"D:\blender\blender.exe")
-    parser.add_argument("--workers", type=int, default=12)
+    parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--vlm-model", choices=["gpt-5.6-luna", "gpt-5.6-terra"], default="gpt-5.6-luna")
-    parser.add_argument("--markdown-path", default="docs/t2blendercodeharness-multi-training-memory-v1.md")
+    parser.add_argument("--codex-command", default="codex")
+    parser.add_argument("--markdown-path", default="docs/t2blendercodeharness-agent-training-memory-v1.md")
     parser.add_argument("--round", dest="round_number", type=int)
     parser.add_argument("--attempt", dest="attempt_number", type=int)
     args = parser.parse_args()
     dataset_root = Path(args.dataset_root)
     all_reports: dict[str, Any] = {}
+    require_benchmark_training_dataset(dataset_root)
+    formal_modes = {"attempt", "overall", "multi-five-rounds", "six-rounds", "full-train", "all"}
+    diagnostic_modes = {"diagnostic-attempt", "diagnostic-overall", "diagnostic-six-rounds"}
+    diagnostic_policy = None
+    if args.mode in formal_modes:
+        require_training_readiness(args.readiness_report)
+    elif args.mode in diagnostic_modes:
+        diagnostic_policy = require_diagnostic_training_readiness(args.readiness_report)
+        diagnostic_manifest_path = Path(args.round_root) / "diagnostic_training_manifest.json"
+        diagnostic_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        diagnostic_manifest_path.write_text(
+            json.dumps(
+                {
+                    **diagnostic_policy,
+                    "dataset_root": str(dataset_root.resolve()),
+                    "harness_version": args.harness_version,
+                    "evaluator_version": args.evaluator_version,
+                    "blender_bin": str(Path(args.blender_bin).resolve()),
+                    "workers": args.workers,
+                    "protocol": "six_rounds_max_five_outer_attempts_10_train_plus_10_dev_then_120_overall",
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     split_payload = json.loads((dataset_root / "splits.json").read_text(encoding="utf-8"))
     metadata = json.loads((dataset_root / "metadata.json").read_text(encoding="utf-8"))
     protocol = build_active_protocol_manifest(
@@ -1047,12 +1909,12 @@ def main() -> int:
     if args.mode == "protocol":
         print(json.dumps(protocol, indent=2, sort_keys=True))
         return 0
-    if args.mode in {"attempt", "overall"}:
+    if args.mode in {"attempt", "overall", "diagnostic-attempt", "diagnostic-overall"}:
         if args.round_number is None:
-            raise SystemExit("--round is required for --mode attempt/overall")
-        if args.mode == "attempt":
+            raise SystemExit("--round is required for --mode attempt/overall/diagnostic-attempt/diagnostic-overall")
+        if args.mode in {"attempt", "diagnostic-attempt"}:
             if args.attempt_number is None:
-                raise SystemExit("--attempt is required for --mode attempt")
+                raise SystemExit("--attempt is required for --mode attempt/diagnostic-attempt")
             result = run_outer_attempt(
                 args.round_root,
                 round_number=args.round_number,
@@ -1065,6 +1927,7 @@ def main() -> int:
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
                 markdown_path=args.markdown_path,
+                codex_command=args.codex_command,
             )
         else:
             result = run_outer_overall(
@@ -1078,10 +1941,31 @@ def main() -> int:
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
                 markdown_path=args.markdown_path,
+                codex_command=args.codex_command,
             )
+        if args.mode in {"diagnostic-attempt", "diagnostic-overall"}:
+            result["execution_mode"] = "diagnostic_precalibration"
+            result["formal_training_allowed"] = False
+            result["visual_scores_permitted"] = False
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    if args.mode in {"multi-five-rounds", "six-rounds", "all"}:
+    if args.mode in {"diagnostic-six-rounds", "multi-five-rounds", "six-rounds", "all"}:
+        if args.mode == "diagnostic-six-rounds":
+            all_reports["six_rounds"] = run_six_round_protocol(
+                args.round_root,
+                dataset_root=dataset_root,
+                harness_version=args.harness_version,
+                evaluator_version=args.evaluator_version,
+                blender_bin=args.blender_bin,
+                workers=args.workers,
+                timeout_s=args.timeout_s,
+                vlm_model=args.vlm_model,
+                codex_command=args.codex_command,
+                markdown_path=args.markdown_path,
+                diagnostic_only=True,
+            )
+            print(json.dumps(all_reports, indent=2, sort_keys=True))
+            return 0
         if protocol["protocol_version"] == "multi-five-rounds-v1":
             all_reports["multi_five_rounds"] = run_multi_five_round_protocol(
                 args.round_root,
@@ -1093,6 +1977,7 @@ def main() -> int:
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
                 markdown_path=args.markdown_path,
+                codex_command=args.codex_command,
             )
         else:
             all_reports["six_rounds"] = run_six_round_protocol(
@@ -1104,6 +1989,8 @@ def main() -> int:
                 workers=args.workers,
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
+                codex_command=args.codex_command,
+                markdown_path=args.markdown_path,
             )
     if args.mode == "existing-rounds":
         round_root = Path(args.round_root)
@@ -1127,11 +2014,17 @@ def main() -> int:
                 )
                 all_reports[round_dir.name] = round_reports
     if args.mode in {"full-train", "all"}:
+        director_agent, code_agent = build_dynamic_codex_agents(
+            codex_command=args.codex_command,
+            timeout_s=args.timeout_s,
+        )
         train_root = prepare_full_train(
             args.full_train_root,
             dataset_root=dataset_root,
             harness_version=args.harness_version,
             evaluator_version=args.evaluator_version,
+            director_agent=director_agent,
+            code_agent=code_agent,
         )
         all_reports["full_train"] = run_real_batch(
             train_root,
@@ -1149,6 +2042,8 @@ def main() -> int:
                 dataset_root=dataset_root,
                 harness_version=args.harness_version,
                 evaluator_version=args.evaluator_version,
+                director_agent=director_agent,
+                code_agent=code_agent,
             )
             all_reports["full_dev"] = run_real_batch(
                 dev_root,

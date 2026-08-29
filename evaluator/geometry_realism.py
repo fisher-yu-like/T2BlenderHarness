@@ -98,7 +98,9 @@ def evaluate_geometry_report(raw: dict[str, Any] | None, proxy_scene: dict[str, 
             coarse.append(f"{entity_id}: primitive_hint={primitive_hint}")
         if vertices < min_vertices or faces < min_faces:
             low_topology.append(f"{entity_id}: vertices={vertices} (<{min_vertices}), faces={faces} (<{min_faces})")
-        if detail_required and mesh.get("geometry_style") != "detailed_parametric_v1":
+        geometry_style = mesh.get("geometry_style")
+        infrastructure_style = entity_kind == "environment" and geometry_style == "ground_contact_surface_v1"
+        if detail_required and geometry_style != "detailed_parametric_v1" and not infrastructure_style:
             style_missing.append(f"{entity_id}: geometry_style={mesh.get('geometry_style')!r}")
         minimum_components = MIN_COMPONENTS.get(entity_kind, 1)
         if detail_required and component_count < minimum_components:

@@ -13,6 +13,8 @@ from typing_extensions import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .contracts import CameraPlan
+
 
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -29,6 +31,9 @@ class DirectorRequest(ContractModel):
     fps: int = Field(gt=0)
     provider: str = Field(min_length=1)
     policy: str = Field(min_length=1)
+    # Stable case obligations constrain identifier traceability only.  They do
+    # not replace the exact prompt or supply an implementation template.
+    obligations: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class DirectorEntity(ContractModel):
@@ -80,6 +85,7 @@ class DirectorDecisionEvidence(ContractModel):
     id: str = Field(min_length=1)
     source: Literal["prompt", "provider", "dataset", "policy", "critic"]
     prompt_span: tuple[int, int] | None = None
+    quoted_text: str | None = None
     claim: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -119,6 +125,11 @@ class DirectorPlan(ContractModel):
     assumptions: list[DirectorAssumption] = Field(default_factory=list)
     uncertainties: list[DirectorUncertainty] = Field(default_factory=list)
     evidence: list[DirectorDecisionEvidence] = Field(default_factory=list)
+    # These fields make the DirectorPlan the single handoff contract.  The
+    # legacy projection still exposes the same objects for compatibility.
+    trajectory_summary: dict[str, Any] = Field(default_factory=dict)
+    camera_plan: CameraPlan | None = None
+    coverage_obligations: list[str] = Field(default_factory=list)
     provider_fingerprint: str = Field(min_length=1)
     policy_fingerprint: str = Field(min_length=1)
 

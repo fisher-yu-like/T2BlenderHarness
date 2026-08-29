@@ -50,6 +50,19 @@ def test_failure_groups_include_root_cause_and_distinct_cases():
     assert summary.groups[0].affected_case_ids == ["case-01", "case-02"]
 
 
+def test_blender_code_agent_patch_brief_includes_local_codegen_provider_file():
+    from videoact.evolution import aggregate_failures, build_patch_brief
+
+    records = [
+        _finding(case_id="case-01", owner="blender_code_agent", root="codegen:visual_profile"),
+        _finding(case_id="case-02", owner="blender_code_agent", root="codegen:visual_profile"),
+    ]
+    brief = build_patch_brief(aggregate_failures(records))
+
+    assert "src/videoact/blender_code_agent.py" in brief.affected_files
+    assert "src/videoact/codex_self_provider.py" in brief.affected_files
+
+
 def test_meta_requires_two_distinct_train_cases_for_a_patch(tmp_path):
     from videoact.meta_harness import MetaHarnessOptimizer
 

@@ -19,6 +19,9 @@ def test_director_agent_preserves_prompt_fingerprints_and_projects_compatibility
     assert result.trajectory_plan.timebase.fps == 24
     assert result.camera_plan == result.trajectory_plan.camera
     assert len(result.director_plan.content_hash()) == 64
+    assert result.director_plan.camera_plan is not None
+    assert result.director_plan.trajectory_summary["entities"]
+    assert result.director_plan.coverage_obligations
 
 
 def test_director_agent_rejects_unresolved_hard_uncertainty_before_projection():
@@ -91,7 +94,7 @@ def test_prepare_real_jobs_persists_director_plan_json(tmp_path: Path):
     (dataset_root / "manifest.jsonl").write_text(json.dumps(case) + "\n", encoding="utf-8")
     (dataset_root / "splits.json").write_text(json.dumps({"train": [case["case_id"]]}), encoding="utf-8")
 
-    prepare_jobs("train", tmp_path / "out", dataset_root=dataset_root)
+    prepare_jobs("train", tmp_path / "out", dataset_root=dataset_root, generation_mode="template_baseline")
 
     director_plan = tmp_path / "out" / case["case_id"] / "director_plan.json"
     assert director_plan.exists()

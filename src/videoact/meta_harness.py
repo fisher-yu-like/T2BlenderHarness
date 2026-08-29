@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .evolution import PatchBrief, aggregate_failures, build_patch_brief
 from .outer_loop import evaluate_candidate, write_optimization_record
@@ -21,6 +21,9 @@ class PatchProposal(BaseModel):
     desired_behavior: str
     rerun_command: str
     patch_scope: str = "one-harness-owner"
+    predicted_fixes: list[str] = Field(default_factory=list)
+    predicted_regressions: list[str] = Field(default_factory=list)
+    prediction_rationale: str = ""
 
 
 class MetaHarnessOptimizer:
@@ -56,7 +59,16 @@ class MetaHarnessOptimizer:
         brief: PatchBrief = build_patch_brief(summary)
         if brief.owner not in owners:
             raise ValueError("top failure group is not the sole repeated owner")
-        return PatchProposal(**brief.model_dump())
+        predicted_fixes = sorted({case_id for group in repeated for case_id in group.affected_case_ids})
+        return PatchProposal(
+            **brief.model_dump(),
+            predicted_fixes=predicted_fixes,
+            predicted_regressions=[],
+            prediction_rationale=(
+                "The proposal targets a repeated train-only failure affecting the predicted cases; "
+                "no known regression case was identified, so predicted_regressions is empty."
+            ),
+        )
 
     def record_acceptance(
         self,

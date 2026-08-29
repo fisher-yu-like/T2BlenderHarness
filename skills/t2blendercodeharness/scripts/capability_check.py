@@ -27,8 +27,30 @@ REQUIRED_COMPONENTS = {
     "director_agent": "src/videoact/director.py",
     "director_metrics": "evaluator/director_metrics.py",
     "interaction_metrics": "evaluator/interaction_metrics.py",
+    "vlm_providers": "evaluator/vlm_providers.py",
+    "camera_dsl": "blender/camera_dsl.py",
+    "character_rig": "blender/character_rig.py",
+    "patch_attribution": "src/videoact/patch_attribution.py",
+    "director_prompt_llm": "src/videoact/director_prompt_llm.py",
+    "blender_code_agent": "src/videoact/blender_code_agent.py",
+    "codegen_context": "src/videoact/codegen_context.py",
+    "codex_exec_provider": "src/videoact/codex_exec_provider.py",
+    "fallback_codegen": "src/videoact/fallback_codegen.py",
+    "case_coverage_gate": "src/videoact/case_coverage.py",
+    "runtime_scaffolding": "blender/lib/scaffolding.py",
+    "parallel_renderer": "scripts/render_proxy_jobs_parallel.py",
     "multi_entity_dataset_validator": "scripts/validate_multi_entity_dataset.py",
+    "agent_dataset_validator": "scripts/validate_agent_training_dataset.py",
+    "benchmark_prompt_index_builder": "scripts/build_benchmark_prompt_index.py",
+    "benchmark_prompt_index_validator": "scripts/validate_benchmark_prompt_index.py",
+    "frozen_eval_validator": "scripts/validate_frozen_eval_set.py",
+    "codegen_examples_validator": "scripts/validate_codegen_examples.py",
+    "training_readiness": "scripts/check_training_readiness.py",
+    "l4_promotion_report": "scripts/promote_fallback_primitives.py",
 }
+
+
+SKILL_VERSION = "t2blendercodeharness-v5-executable-director"
 
 
 def _check(name: str, passed: bool, detail: str) -> dict[str, str]:
@@ -47,7 +69,7 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         )
     )
     if missing:
-        return {"skill_version": "t2blendercodeharness-v3", "project_root": str(root), "status": "fail", "checks": checks}
+        return {"skill_version": SKILL_VERSION, "project_root": str(root), "status": "fail", "checks": checks}
 
     sys.path.insert(0, str(root))
     sys.path.insert(0, str(root / "src"))
@@ -59,11 +81,15 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         from evaluator.director_metrics import evaluate_director_plan
         from videoact.scene_contract import SceneContractBuilder
         from videoact.trajectory import TrajectoryPlanner
+        from videoact.blender_code_agent import BlenderCodeAgent
+        from videoact.codegen_contracts import CodegenRequest
+        from blender.lib.__meta__ import collect_library_signatures
+        from scripts.validate_frozen_eval_set import validate_frozen_eval_set
 
         checks.append(_check("imports", True, "DirectorAgent, contract, planner, artifact gate, evaluator, and optimizer imported"))
     except Exception as exc:  # pragma: no cover - exercised by a missing runtime
         checks.append(_check("imports", False, f"{type(exc).__name__}: {exc}"))
-        return {"skill_version": "t2blendercodeharness-v3", "project_root": str(root), "status": "fail", "checks": checks}
+        return {"skill_version": SKILL_VERSION, "project_root": str(root), "status": "fail", "checks": checks}
 
     try:
         contract = SceneContractBuilder().build(
@@ -110,6 +136,48 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         checks.append(_check("evaluator_interfaces", False, f"{type(exc).__name__}: {exc}"))
 
     try:
+        signatures = collect_library_signatures()
+        request = CodegenRequest(
+            director_plan={},
+            library_signatures=signatures,
+            harness_version="capability-probe",
+        )
+        response = BlenderCodeAgent(
+            provider=lambda _payload: {
+                "status": "hard_uncertainty",
+                "uncertainties": [
+                    {
+                        "id": "probe_provider_unavailable",
+                        "description": "network-free capability probe",
+                        "severity": "hard",
+                        "resolved": False,
+                    }
+                ],
+            },
+            library_signatures=signatures,
+        ).generate(request)
+        checks.append(
+            _check(
+                "agent_codegen_fail_closed",
+                response.status == "hard_uncertainty" and not response.generated_code,
+                "provider/schema boundary returns hard_uncertainty without template source",
+            )
+        )
+    except Exception as exc:
+        checks.append(_check("agent_codegen_fail_closed", False, f"{type(exc).__name__}: {exc}"))
+
+    try:
+        checks.append(
+            _check(
+                "frozen_eval_boundary",
+                callable(validate_frozen_eval_set),
+                "frozen evaluation validator is importable and proposal-independent",
+            )
+        )
+    except Exception as exc:
+        checks.append(_check("frozen_eval_boundary", False, f"{type(exc).__name__}: {exc}"))
+
+    try:
         optimizer = MetaHarnessOptimizer(output_dir=root / "out" / "skill-capability-check")
         failure = {
             "case_id": "skill-probe-01",
@@ -137,7 +205,7 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         checks.append(_check("one_owner_proposal", False, f"{type(exc).__name__}: {exc}"))
 
     status = "pass" if all(check["status"] == "pass" for check in checks) else "fail"
-    return {"skill_version": "t2blendercodeharness-v3", "project_root": str(root), "status": status, "checks": checks}
+    return {"skill_version": SKILL_VERSION, "project_root": str(root), "status": status, "checks": checks}
 
 
 def main() -> int:

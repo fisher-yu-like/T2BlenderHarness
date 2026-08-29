@@ -42,6 +42,18 @@ def test_capability_check_passes_current_project():
     report = module.run_capability_check(ROOT)
 
     assert report["status"] == "pass"
+    assert report["skill_version"] == "t2blendercodeharness-v5-executable-director"
+    assert all(check["status"] == "pass" for check in report["checks"])
+
+
+def test_capability_check_covers_agent_codegen_and_frozen_eval_boundaries():
+    module = load_skill_script("capability_check")
+
+    report = module.run_capability_check(ROOT)
+    names = {check["name"] for check in report["checks"]}
+
+    assert "agent_codegen_fail_closed" in names
+    assert "frozen_eval_boundary" in names
     assert all(check["status"] == "pass" for check in report["checks"])
 
 
@@ -90,3 +102,50 @@ def test_self_evolution_requires_repeated_distinct_cases(tmp_path):
 
     assert result["status"] == "no_action"
     assert result["proposals"] == []
+
+
+def test_self_evolution_targets_director_owner_and_current_skill_version(tmp_path):
+    module = load_skill_script("propose_skill_update")
+    records_path = tmp_path / "records.jsonl"
+    records = [
+        finding("multi-train-041", "director_prompt_interpreter", "implicit_event_order_not_preserved"),
+        finding("multi-train-042", "director_prompt_interpreter", "implicit_event_order_not_preserved"),
+    ]
+    records_path.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
+
+    result = module.build_update_proposal(records_path, SKILL_ROOT / "SKILL.md")
+
+    assert result["skill_version"] == "t2blendercodeharness-v5-executable-director"
+    assert result["proposals"][0]["target_section"] == "Director prompt interpretation and event scheduling"
+
+
+def test_historical_self_evolution_records_keep_round_and_case_evidence(tmp_path):
+    module = load_skill_script("build_self_evolution_records")
+    round_root = tmp_path / "round-root"
+    round_dir = round_root / "round-04"
+    round_dir.mkdir(parents=True)
+    (round_dir / "patch_manifest.json").write_text(
+        json.dumps(
+            {
+                "decision": "accepted",
+                "owner": "director_prompt_interpreter",
+                "patch_id": "round-04-director-prompt-elliptical-v1",
+                "detected_problem": "implicit reveal and return order was not preserved",
+                "fix_location": "src/videoact/director_prompt.py",
+                "fix_method": "preserve evidence-backed event order",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (round_dir / "attempt_report.json").write_text(
+        json.dumps({"batch": {"train": ["multi-train-041", "multi-train-042"]}}),
+        encoding="utf-8",
+    )
+
+    records = module.build_historical_records(round_root)
+
+    assert [record["case_id"] for record in records] == ["multi-train-041", "multi-train-042"]
+    assert all(record["round"] == 4 for record in records)
+    assert all(record["findings"][0]["failure_id"] == "implicit_event_order_not_preserved" for record in records)
+    assert all("implicit event order" in record["findings"][0]["message"] for record in records)
+    assert all("patch_manifest.json" in record["findings"][0]["evidence"][0] for record in records)

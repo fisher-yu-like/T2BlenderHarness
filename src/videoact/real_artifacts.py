@@ -21,6 +21,8 @@ class RealRunManifest(BaseModel):
     prompt_hash: str
     plan_hash: str
     director_plan_hash: str | None = None
+    code_hash: str | None = None
+    rollout_seed: int | None = None
     harness_version: str
     evaluator_version: str
     blender_version: str
@@ -42,6 +44,7 @@ class RealArtifactReport(BaseModel):
     video_fps: float = Field(default=0.0, ge=0)
     video_duration_s: float = Field(default=0.0, ge=0)
     artifact_hashes: dict[str, str] = Field(default_factory=dict)
+    artifact_hash: str | None = None
     manifest: RealRunManifest | None = None
 
 
@@ -151,6 +154,19 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def aggregate_artifact_hash(artifact_hashes: dict[str, str]) -> str | None:
+    """Hash the canonical path-to-content hash map for one real run."""
+
+    if not artifact_hashes:
+        return None
+    encoded = json.dumps(
+        sorted(artifact_hashes.items()),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def probe_mp4(path: str | Path, *, minimum_frames: int = 3) -> dict[str, Any]:
     """Decode enough of an MP4 to prove it is playable, not merely non-empty."""
     video = Path(path)
@@ -230,6 +246,11 @@ class RealArtifactGate:
         elif manifest is not None and manifest.director_plan_hash:
             failures.append("missing_artifact:director_plan.json")
 
+        if manifest is not None and manifest.code_hash:
+            actual_code_hash = hashes.get("blender_job.py")
+            if actual_code_hash != manifest.code_hash:
+                failures.append("job_source_hash_mismatch")
+
         readable = 0
         for frame_path in sample_frame_paths(root):
             try:
@@ -255,6 +276,7 @@ class RealArtifactGate:
             video_fps=float(video_probe["fps"]),
             video_duration_s=float(video_probe["duration_s"]),
             artifact_hashes=hashes,
+            artifact_hash=aggregate_artifact_hash(hashes),
             manifest=manifest,
         )
 
@@ -268,6 +290,7 @@ def fingerprint_real_run(
     evaluator_version: str,
     blender_version: str,
     render_settings: dict[str, Any],
+    rollout_seed: int | None = None,
 ) -> str:
     payload = {
         "prompt_hash": prompt_hash,
@@ -277,6 +300,7 @@ def fingerprint_real_run(
         "evaluator_version": evaluator_version,
         "blender_version": blender_version,
         "render_settings": render_settings,
+        "rollout_seed": rollout_seed,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

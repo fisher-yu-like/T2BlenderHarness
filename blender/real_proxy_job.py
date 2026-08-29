@@ -51,10 +51,18 @@ def compile_real_proxy_job(
     # semantics. Legacy TrajectoryPlan entities are only a compatibility
     # fallback; no stable ID is interpreted as a character by name.
     proxy_entities = []
+    kind_aliases = {
+        "actor": "character",
+        "character": "character",
+        "prop": "prop",
+        "support": "support",
+        "occluder": "occluder",
+        "camera": "camera",
+    }
     authored_by_id = {
         str(entity.get("id")): {
             "id": str(entity.get("id")),
-            "kind": str(entity.get("kind", "prop")),
+            "kind": kind_aliases.get(str(entity.get("kind", "prop")), str(entity.get("kind", "prop"))),
             "role": str(entity.get("role", "target_object")),
             **{
                 key: value
@@ -67,13 +75,7 @@ def compile_real_proxy_job(
     }
     for entity_id, entity in authored_by_id.items():
         proxy_entities.append(entity)
-    director_kind = {
-        "actor": "character",
-        "prop": "prop",
-        "support": "support",
-        "occluder": "occluder",
-        "camera": "camera",
-    }
+    director_kind = kind_aliases
     if director_plan is not None:
         for entity in director_plan.entities:
             if entity.id not in authored_by_id:
@@ -128,8 +130,157 @@ def reset_scene():
 
 def white_material():
     material = bpy.data.materials.get("ProxyWhiteMaterial") or bpy.data.materials.new("ProxyWhiteMaterial")
-    material.diffuse_color = (0.8, 0.8, 0.8, 1.0)
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    principled = nodes.get("Principled BSDF")
+    if principled is not None:
+        principled.inputs["Base Color"].default_value = (0.72, 0.74, 0.78, 1.0)
+        principled.inputs["Roughness"].default_value = 0.62
+    material.diffuse_color = (0.72, 0.74, 0.78, 1.0)
     return material
+
+
+def principled_material(name, color, roughness=0.6, metallic=0.0):
+    material = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    material.use_nodes = True
+    principled = material.node_tree.nodes.get("Principled BSDF")
+    if principled is not None:
+        principled.inputs["Base Color"].default_value = tuple(color) + (1.0,)
+        principled.inputs["Roughness"].default_value = float(roughness)
+        principled.inputs["Metallic"].default_value = float(metallic)
+    material.diffuse_color = tuple(color) + (1.0,)
+    return material
+
+
+def material_for(entity_spec):
+    kind = entity_spec.get("kind", "prop")
+    label = str(entity_spec.get("label", entity_spec.get("id", "prop"))).lower()
+    if kind == "character":
+        return principled_material("CharacterSkinMaterial", (0.46, 0.22, 0.12), roughness=0.62)
+    if kind == "support":
+        return principled_material("SupportWoodMaterial", (0.24, 0.12, 0.05), roughness=0.8)
+    if kind == "occluder":
+        return principled_material("OccluderMaterial", (0.04, 0.05, 0.07), roughness=0.9)
+    color = (0.55, 0.12, 0.08)
+    if "blue" in label:
+        color = (0.06, 0.20, 0.62)
+    elif "green" in label:
+        color = (0.10, 0.42, 0.16)
+    elif "yellow" in label:
+        color = (0.75, 0.52, 0.06)
+    return principled_material("PropMaterial__" + str(entity_spec.get("id", "prop")), color, roughness=0.42, metallic=0.05)
+
+
+def ground_plane():
+    bpy.ops.mesh.primitive_plane_add(size=30.0, location=(0.0, 0.0, 0.0))
+    plane = bpy.context.object
+    plane.name = "ground_plane"
+    plane["entity_kind"] = "environment"
+    plane["geometry_style"] = "ground_contact_surface_v1"
+    plane.data.materials.append(principled_material("GroundMaterial", (0.08, 0.09, 0.11), roughness=0.92))
+    return plane
+
+
+MINIMAL_BONES = (
+    "root", "hips", "spine", "chest", "neck", "head",
+    "shoulder.L", "upper_arm.L", "forearm.L", "hand.L",
+    "shoulder.R", "upper_arm.R", "forearm.R", "hand.R",
+    "thigh.L", "shin.L", "foot.L", "thigh.R", "shin.R", "foot.R",
+)
+PARENTS = {{
+    "hips": "root", "spine": "hips", "chest": "spine", "neck": "chest", "head": "neck",
+    "shoulder.L": "chest", "upper_arm.L": "shoulder.L", "forearm.L": "upper_arm.L", "hand.L": "forearm.L",
+    "shoulder.R": "chest", "upper_arm.R": "shoulder.R", "forearm.R": "upper_arm.R", "hand.R": "forearm.R",
+    "thigh.L": "hips", "shin.L": "thigh.L", "foot.L": "shin.L",
+    "thigh.R": "hips", "shin.R": "thigh.R", "foot.R": "shin.R",
+}}
+BONE_POSITIONS = {{
+    "root": (0.0, 0.0, 0.0), "hips": (0.0, 0.0, 1.0),
+    "spine": (0.0, 0.0, 1.55), "chest": (0.0, 0.0, 2.15),
+    "neck": (0.0, 0.0, 2.75), "head": (0.0, 0.0, 3.05),
+    "shoulder.L": (-0.48, 0.0, 2.25), "upper_arm.L": (-0.62, 0.0, 2.05),
+    "forearm.L": (-0.82, -0.02, 1.72), "hand.L": (-1.04, -0.04, 1.40),
+    "shoulder.R": (0.48, 0.0, 2.25), "upper_arm.R": (0.62, 0.0, 2.05),
+    "forearm.R": (0.82, -0.02, 1.72), "hand.R": (1.04, -0.04, 1.40),
+    "thigh.L": (-0.34, 0.0, 1.0), "shin.L": (-0.45, 0.0, 0.55), "foot.L": (-0.45, -0.02, 0.10),
+    "thigh.R": (0.34, 0.0, 1.0), "shin.R": (0.45, 0.0, 0.55), "foot.R": (0.45, -0.02, 0.10),
+}}
+
+
+def create_character_armature(entity_id, location):
+    bpy.ops.object.armature_add(location=location)
+    armature = bpy.context.object
+    armature.name = entity_id + "__armature"
+    armature.data.name = entity_id + "__skeleton"
+    bpy.ops.object.mode_set(mode="EDIT")
+    edit_bones = armature.data.edit_bones
+    for bone_name in MINIMAL_BONES:
+        bone = edit_bones.new(bone_name)
+        bone.head = BONE_POSITIONS[bone_name]
+        bone.tail = tuple(BONE_POSITIONS[bone_name][index] + (0.12 if index == 2 else 0.0) for index in range(3))
+        if bone_name in PARENTS:
+            bone.parent = edit_bones[PARENTS[bone_name]]
+    bpy.ops.object.mode_set(mode="OBJECT")
+    armature["entity_kind"] = "armature"
+    armature["rig_contract"] = "minimal_articulated_v1"
+    return armature
+
+
+def bind_mesh_to_armature(mesh_object, armature):
+    bone_positions = {{bone.name: bone.head_local.copy() for bone in armature.data.bones}}
+    for bone_name in MINIMAL_BONES:
+        group = mesh_object.vertex_groups.new(name=bone_name)
+        nearest_bone = [
+            vertex.index
+            for vertex in mesh_object.data.vertices
+            if min(
+                MINIMAL_BONES,
+                key=lambda candidate: (vertex.co - bone_positions[candidate]).length,
+            ) == bone_name
+        ]
+        if nearest_bone:
+            group.add(nearest_bone, 1.0, "REPLACE")
+    modifier = mesh_object.modifiers.new("ArticulatedArmature", "ARMATURE")
+    modifier.object = armature
+    return modifier
+
+
+def add_hand_ik_constraint(armature, hand_name, target):
+    if hand_name not in {{"hand.L", "hand.R"}}:
+        raise ValueError("hand_name must be hand.L or hand.R")
+    pose_bone = armature.pose.bones.get(hand_name)
+    if pose_bone is None:
+        raise ValueError("hand bone is missing: " + hand_name)
+    constraint = pose_bone.constraints.new(type="IK")
+    constraint.name = hand_name + "__IK"
+    constraint.target = target
+    constraint.chain_count = 2
+    return constraint
+
+
+def create_hand_ik_targets(armature, entity_id):
+    targets = {{}}
+    for hand_name in ("hand.L", "hand.R"):
+        target = bpy.data.objects.new(entity_id + "__IK__" + hand_name, None)
+        bpy.context.collection.objects.link(target)
+        target.empty_display_type = "SPHERE"
+        target.empty_display_size = 0.18
+        target.location = tuple(armature.location[index] + BONE_POSITIONS[hand_name][index] for index in range(3))
+        target["ik_target_for"] = entity_id + ":" + hand_name
+        add_hand_ik_constraint(armature, hand_name, target)
+        targets[hand_name] = target
+    return targets
+
+
+def insert_walk_cycle(armature, frame_start, frame_end):
+    midpoint = (int(frame_start) + int(frame_end)) // 2
+    for frame, sign in ((int(frame_start), 1.0), (midpoint, -1.0), (int(frame_end), 1.0)):
+        for side, side_sign in (("L", sign), ("R", -sign)):
+            bone = armature.pose.bones.get("thigh." + side)
+            if bone:
+                bone.rotation_mode = "XYZ"
+                bone.rotation_euler[1] = 0.35 * side_sign
+                bone.keyframe_insert(data_path="rotation_euler", index=1, frame=frame)
 
 
 def append_ellipsoid(vertices, faces, center, radii, segments=24, rings=12):
@@ -368,14 +519,28 @@ def initial_location(entity_id, entity_spec):
     return (float(support[0]), float(support[1]), 1.0)
 
 
-def add_light(material):
+def add_light(material=None):
     bpy.ops.object.light_add(type="AREA", location=(4.0, -4.0, 6.0))
-    light = bpy.context.object
-    light.name = "ProxyKeyLight"
-    light.data.energy = 900
-    light.data.shape = "DISK"
-    light.data.size = 5.0
-    return light
+    key = bpy.context.object
+    key.name = "ProxyKeyLight"
+    key.data.energy = 900.0
+    key.data.shape = "DISK"
+    key.data.size = 5.0
+
+    bpy.ops.object.light_add(type="AREA", location=(-4.0, -1.0, 3.5))
+    fill = bpy.context.object
+    fill.name = "ProxyFillLight"
+    fill.data.energy = 520.0
+    fill.data.shape = "DISK"
+    fill.data.size = 4.0
+
+    bpy.ops.object.light_add(type="AREA", location=(1.5, 5.0, 5.5))
+    rim = bpy.context.object
+    rim.name = "ProxyRimLight"
+    rim.data.energy = 760.0
+    rim.data.shape = "DISK"
+    rim.data.size = 3.0
+    return [key, fill, rim]
 
 
 def look_at(camera, target):
@@ -385,10 +550,24 @@ def look_at(camera, target):
 
 
 def add_camera():
+    global CAMERA_TARGET
     bpy.ops.object.camera_add(location=(7.0, -8.0, 5.0))
     camera = bpy.context.object
     camera.name = "ProxyCamera"
     bpy.context.scene.camera = camera
+    target = bpy.data.objects.new("ProxyCameraLookTarget", None)
+    bpy.context.collection.objects.link(target)
+    constraint = camera.constraints.new(type="TRACK_TO")
+    constraint.name = "DirectorTrackTo"
+    constraint.target = target
+    constraint.track_axis = "TRACK_NEGATIVE_Z"
+    constraint.up_axis = "UP_Y"
+    camera["camera_constraint"] = "TRACK_TO"
+    camera["camera_dsl"] = "orbit_follow_dolly_hold_v1"
+    camera["multi_target_framing"] = True
+    camera["visibility_predicate_checks"] = True
+    camera["continuity_group_checks"] = True
+    CAMERA_TARGET = target
     return camera
 
 
@@ -417,14 +596,200 @@ def configure_render(scene, manifest):
     scene.world.color = (0.04, 0.04, 0.04)
 
 
+def _child_of_constraint(prop, target, name, subtarget=None):
+    constraint = prop.constraints.get(name) or prop.constraints.new(type="CHILD_OF")
+    constraint.name = name
+    constraint.target = target
+    if subtarget:
+        constraint.subtarget = subtarget
+    prop["attachment_constraint_mode"] = "CHILD_OF"
+    prop["attachment_constraint_target"] = target.name
+    prop["attachment_constraint_subtarget"] = subtarget or ""
+    return constraint
+
+
+def _key_constraint_influence(constraint, frame, influence):
+    constraint.influence = float(influence)
+    constraint.keyframe_insert(data_path="influence", frame=int(frame))
+    key = (constraint.id_data.name, constraint.name)
+    CONSTRAINT_KEYFRAMES.setdefault(key, []).append(
+        {{"frame": int(frame), "influence": float(influence)}}
+    )
+
+
+CONSTRAINT_KEYFRAMES = {{}}
+
+
+def apply_attachment_constraints(objects, armatures):
+    """Compile attach/transfer/detach as Child Of influence curves."""
+    for prop_id, trajectory in PLAN["entities"].items():
+        prop = objects.get(prop_id)
+        if prop is None:
+            continue
+        active = dict()
+        for event in sorted(trajectory.get("attachment_events", []), key=lambda item: int(item["frame"])):
+            frame = int(event["frame"])
+            action = event.get("action")
+            if action in {"attach", "transfer"}:
+                actor_id = event.get("object_id")
+                armature = armatures.get(actor_id)
+                if armature is None:
+                    continue
+                if action == "transfer":
+                    for previous in active.values():
+                        _key_constraint_influence(previous, frame, 0.0)
+                constraint = _child_of_constraint(
+                    prop,
+                    armature,
+                    "Attach__" + str(actor_id),
+                    event.get("subtarget") or "hand.R",
+                )
+                if frame > 1:
+                    _key_constraint_influence(constraint, frame - 1, 0.0)
+                _key_constraint_influence(constraint, frame, 1.0)
+                active[actor_id] = constraint
+            elif action == "detach":
+                for constraint in active.values():
+                    _key_constraint_influence(constraint, frame, 0.0)
+                active.clear()
+                support = objects.get("support_surface") or objects.get("drop_zone") or objects.get("table")
+                if support is not None:
+                    constraint = _child_of_constraint(prop, support, "Place__support_surface")
+                    _key_constraint_influence(constraint, frame, 1.0)
+
+
+def _is_attached_at(trajectory, frame):
+    attached = False
+    for event in sorted(trajectory.get("attachment_events", []), key=lambda item: int(item["frame"])):
+        if int(event["frame"]) > int(frame):
+            break
+        if event.get("action") in {"attach", "transfer"}:
+            attached = True
+        elif event.get("action") == "detach":
+            attached = False
+    return attached
+
+
+def audit_attachment_penetration(scene, objects):
+    findings = []
+    checked = []
+    for prop_id, trajectory in PLAN["entities"].items():
+        prop = objects.get(prop_id)
+        if prop is None:
+            continue
+        for event in trajectory.get("attachment_events", []):
+            if event.get("action") not in {{"attach", "transfer"}}:
+                continue
+            actor = objects.get(event.get("object_id"))
+            if actor is None:
+                continue
+            frame = int(event["frame"])
+            scene.frame_set(frame)
+            prop_center = prop.matrix_world.translation.copy()
+            torso_center = actor.matrix_world @ Vector((0.0, 0.0, 1.65))
+            distance = float((prop_center - torso_center).length)
+            checked.append({{
+                "prop_id": prop_id,
+                "actor_id": event.get("object_id"),
+                "frame": frame,
+                "torso_distance": distance,
+            }})
+            if distance < 0.35:
+                findings.append({{
+                    "failure_id": "no_prop_penetration",
+                    "owner": "director_trajectory",
+                    "category": "interaction_geometry",
+                    "severity": "hard",
+                    "message": f"{{prop_id}} penetrates {{event.get('object_id')}} torso at frame {{frame}}",
+                    "evidence": [prop_id, str(event.get("object_id")), str(frame)],
+                }})
+    return findings, checked
+
+
+def _constraint_telemetry(obj):
+    return [
+        {{
+            "name": constraint.name,
+            "type": constraint.type,
+            "target": constraint.target.name if constraint.target else None,
+            "subtarget": constraint.subtarget,
+            "influence": constraint.influence,
+            "influence_keyframes": CONSTRAINT_KEYFRAMES.get((obj.name, constraint.name), []),
+        }}
+        for constraint in obj.constraints
+        if constraint.type == "CHILD_OF"
+    ]
+
+
 def animate_entities(objects):
     for entity_id, trajectory in PLAN["entities"].items():
         obj = objects[entity_id]
         for state in trajectory["states"]:
+            # During carry/handoff the Child Of constraint owns translation;
+            # emitting a competing location curve would reintroduce drift.
+            if _is_attached_at(trajectory, int(state["frame"])):
+                continue
             obj.location = tuple(state["position"])
             obj.rotation_euler = tuple(state.get("rotation", (0.0, 0.0, 0.0)))
             obj.keyframe_insert(data_path="location", frame=int(state["frame"]))
             obj.keyframe_insert(data_path="rotation_euler", frame=int(state["frame"]))
+
+
+CAMERA_FINDINGS = []
+CAMERA_TARGET = None
+ATTACHMENT_PENETRATION = []
+
+
+def orbit_points(center, radius, start_angle, end_angle, height, frame_count):
+    """Parameterised circular arc; never replace an orbit with a chord."""
+    frame_count = max(2, int(frame_count))
+    step = (float(end_angle) - float(start_angle)) / float(frame_count - 1)
+    return [
+        (
+            float(center[0]) + float(radius) * math.cos(math.radians(float(start_angle) + step * index)),
+            float(center[1]) + float(radius) * math.sin(math.radians(float(start_angle) + step * index)),
+            float(height),
+        )
+        for index in range(frame_count)
+    ]
+
+
+def target_bounds(objects, target_ids):
+    points = [Vector(objects[target_id].location) for target_id in target_ids if target_id in objects]
+    if not points:
+        return Vector((0.0, 0.0, 1.0)), 1.0
+    center = sum(points, Vector()) / len(points)
+    radius = max((point - center).length for point in points)
+    return center, max(0.5, radius)
+
+
+def camera_point_for_shot(shot, center, bound_radius, sample_index, sample_count):
+    trajectory_type = shot.get("trajectory_type", "hold")
+    distance_range = shot.get("distance_range", (4.0, 8.0))
+    minimum_distance = max(2.0, float(distance_range[0]))
+    maximum_distance = max(minimum_distance, float(distance_range[1]))
+    if trajectory_type == "orbit":
+        radius = max(minimum_distance, min(maximum_distance, bound_radius * 2.0 + 1.5))
+        points = orbit_points(
+            center=tuple(center),
+            radius=radius,
+            start_angle=-55.0,
+            end_angle=55.0,
+            height=float(center.z) + max(1.5, radius * 0.45),
+            frame_count=max(8, int(sample_count)),
+        )
+        return Vector(points[min(sample_index, len(points) - 1)])
+    if trajectory_type == "dolly":
+        start = Vector((7.0, -8.0, 5.0))
+        end = Vector((3.5, -4.0, 2.8))
+        fraction = float(sample_index) / float(max(1, sample_count - 1))
+        return start.lerp(end, fraction)
+    if trajectory_type == "follow":
+        offset = Vector((7.0, -8.0, 5.0)) - center
+        offset_length = max(offset.length, 1e-6)
+        offset = offset / offset_length * max(minimum_distance, min(maximum_distance, offset_length))
+        return center + offset
+    return Vector((7.0, -8.0, 5.0))
 
 
 def animate_camera(camera, objects):
@@ -432,27 +797,99 @@ def animate_camera(camera, objects):
     for shot in shots:
         target_ids = [target_id for target_id in shot.get("target_ids", []) if target_id in objects]
         if not target_ids:
+            CAMERA_FINDINGS.append({{
+                "failure_id": "camera_target_missing",
+                "owner": "director_camera",
+                "category": "camera_coverage",
+                "severity": "error",
+                "message": "camera shot has no executable target object",
+                "evidence": [shot.get("shot_id", "unknown")],
+            }})
             continue
-        target_points = [Vector(objects[target_id].location) for target_id in target_ids]
-        target_point = tuple(sum(point[index] for point in target_points) / len(target_points) for index in range(3))
-        trajectory_type = shot.get("trajectory_type", "hold")
-        if trajectory_type == "dolly" or shot["shot_id"].endswith("closeup"):
-            start_location, end_location = (7.0, -8.0, 5.0), (3.5, -4.0, 2.8)
-        elif trajectory_type == "orbit":
-            start_location, end_location = (7.0, -8.0, 5.0), (-7.0, -8.0, 5.0)
-        else:
-            start_location = end_location = (7.0, -8.0, 5.0)
+        start_frame = int(shot["start_frame"])
+        end_frame = int(shot["end_frame"])
+        sample_count = max(8, min(64, max(2, end_frame - start_frame + 1)))
+        center, bound_radius = target_bounds(objects, target_ids)
         camera.data.lens = float(shot.get("lens_mm", 50.0))
-        camera.location = start_location
-        look_at(camera, target_point)
-        camera.keyframe_insert(data_path="location", frame=int(shot["start_frame"]))
-        camera.keyframe_insert(data_path="rotation_euler", frame=int(shot["start_frame"]))
-        camera.data.keyframe_insert(data_path="lens", frame=int(shot["start_frame"]))
-        camera.location = end_location
-        look_at(camera, target_point)
-        camera.keyframe_insert(data_path="location", frame=int(shot["end_frame"]))
-        camera.keyframe_insert(data_path="rotation_euler", frame=int(shot["end_frame"]))
-        camera.data.keyframe_insert(data_path="lens", frame=int(shot["end_frame"]))
+        for sample_index in range(sample_count):
+            frame = round(start_frame + (end_frame - start_frame) * sample_index / max(1, sample_count - 1))
+            scene = bpy.context.scene
+            scene.frame_set(int(frame))
+            center, bound_radius = target_bounds(objects, target_ids)
+            camera.location = camera_point_for_shot(shot, center, bound_radius, sample_index, sample_count)
+            if CAMERA_TARGET is not None:
+                CAMERA_TARGET.location = center
+                CAMERA_TARGET.keyframe_insert(data_path="location", frame=int(frame))
+            look_at(camera, center)
+            camera.keyframe_insert(data_path="location", frame=int(frame))
+            camera.keyframe_insert(data_path="rotation_euler", frame=int(frame))
+            camera.data.keyframe_insert(data_path="lens", frame=int(frame))
+
+
+def _ray_occlusion(scene, camera, target):
+    origin = camera.matrix_world.translation.copy()
+    bounds = [target.matrix_world @ Vector(corner) for corner in target.bound_box]
+    destination = sum(bounds, Vector()) / max(1, len(bounds)) if bounds else target.matrix_world.translation.copy()
+    direction = destination - origin
+    distance = direction.length
+    if distance <= 1e-6:
+        return 0.0
+    direction.normalize()
+    try:
+        hit, _location, _normal, _index, hit_object, _matrix = scene.ray_cast(
+            bpy.context.evaluated_depsgraph_get(), origin, direction, distance=max(0.0, distance - 0.05)
+        )
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        return 0.0
+    return 1.0 if hit and hit_object != target else 0.0
+
+
+def audit_camera_visibility(scene, camera, objects, shots):
+    for shot in shots:
+        target_ids = [target_id for target_id in shot.get("target_ids", []) if target_id in objects]
+        if not target_ids:
+            continue
+        frames = sorted({{
+            int(shot["start_frame"]),
+            int(shot["end_frame"]),
+            (int(shot["start_frame"]) + int(shot["end_frame"])) // 2,
+        }})
+        maximum_observed = 0.0
+        for frame in frames:
+            scene.frame_set(frame)
+            for target_id in target_ids:
+                maximum_observed = max(maximum_observed, _ray_occlusion(scene, camera, objects[target_id]))
+        allowed = float(shot.get("max_occlusion", 1.0))
+        if maximum_observed > allowed:
+            CAMERA_FINDINGS.append({{
+                "failure_id": "camera_occlusion_exceeded",
+                "owner": "director_camera",
+                "category": "camera_coverage",
+                "severity": "error",
+                "message": f"{{shot.get('shot_id', 'unknown')}} occlusion {{maximum_observed:.3f}} exceeds {{allowed:.3f}}",
+                "evidence": target_ids,
+            }})
+
+
+def audit_camera_continuity(shots):
+    last_by_group = {{}}
+    for shot in shots:
+        group = shot.get("continuity_group")
+        if not group:
+            continue
+        previous = last_by_group.get(group)
+        previous_side = previous.get("axis_side") if previous else None
+        current_side = shot.get("axis_side")
+        if previous_side and current_side and previous_side != current_side:
+            CAMERA_FINDINGS.append({{
+                "failure_id": "camera_continuity_violation",
+                "owner": "director_camera",
+                "category": "camera_continuity",
+                "severity": "error",
+                "message": f"continuity group {{group}} crosses the declared axis",
+                "evidence": [previous.get("shot_id", "unknown"), shot.get("shot_id", "unknown")],
+            }})
+        last_by_group[group] = shot
 
 
 def validate_transfer(prop_id, interaction, event_by_id, attachment_events):
@@ -469,14 +906,40 @@ def validate_transfer(prop_id, interaction, event_by_id, attachment_events):
         if item.get("subject_id") == prop_id and window_start <= int(item.get("frame", 0)) <= window_end
     ]
     transfer = next((item for item in in_window if item.get("action") == "transfer"), None)
+    giver_id = interaction.get("giver_id")
+    receiver_id = interaction.get("receiver_id")
+    handoff_frame = int(transfer.get("frame")) if transfer else window_start
+    giver_curve = CONSTRAINT_KEYFRAMES.get((prop_id, "Attach__" + str(giver_id)), [])
+    receiver_curve = CONSTRAINT_KEYFRAMES.get((prop_id, "Attach__" + str(receiver_id)), [])
+    giver_released = any(
+        int(item.get("frame", -1)) == handoff_frame and float(item.get("influence", 1.0)) <= 0.01
+        for item in giver_curve
+    )
+    receiver_acquired = any(
+        int(item.get("frame", -1)) == handoff_frame and float(item.get("influence", 0.0)) >= 0.99
+        for item in receiver_curve
+    )
+    constraint_curve = {{
+        "valid": giver_released and receiver_acquired,
+        "handoff_frame": handoff_frame,
+        "giver_curve": giver_curve,
+        "receiver_curve": receiver_curve,
+    }}
     # The single transfer marker is compiled as a validated atomic pair: the
     # giver releases and the receiver acquires on the same handoff frame.
     return {{
-        "valid": bool(transfer and transfer.get("object_id") == receiver_id and giver_id and receiver_id),
+        "valid": bool(
+            transfer
+            and transfer.get("object_id") == receiver_id
+            and giver_id
+            and receiver_id
+            and constraint_curve["valid"]
+        ),
         "window": [window_start, window_end],
         "giver_detach": {{"actor_id": giver_id, "frame": window_start}},
         "receiver_attach": {{"actor_id": receiver_id, "frame": window_start}},
         "observed_attachment": transfer,
+        "constraint_curve": constraint_curve,
     }}
 
 
@@ -513,7 +976,14 @@ def write_telemetry(objects, camera, manifest):
             }}
             for entity_id, obj in objects.items()
         }},
+        "attachment_constraints": {{
+            entity_id: _constraint_telemetry(obj)
+            for entity_id, obj in objects.items()
+            if any(constraint.type == "CHILD_OF" for constraint in obj.constraints)
+        }},
+        "attachment_penetration": ATTACHMENT_PENETRATION,
         "camera": dict(name=camera.name, active=(bpy.context.scene.camera.name == camera.name)),
+        "camera_findings": CAMERA_FINDINGS,
         "proxy_scene": {{
             "scene_id": PROXY_SPEC.get("scene_id"),
             "scene_seed": PROXY_SPEC.get("scene_seed"),
@@ -563,6 +1033,17 @@ def write_sample_frames(scene):
 
 
 def update_manifest(manifest):
+    # The host writes code_hash after freezing this source.  Reload the
+    # persisted manifest so the generated job cannot overwrite that binding
+    # with the pre-freeze value embedded in INITIAL_MANIFEST.
+    persisted_manifest_path = OUTPUT_DIR / "run_manifest.json"
+    if persisted_manifest_path.is_file():
+        try:
+            persisted = json.loads(persisted_manifest_path.read_text(encoding="utf-8"))
+            if persisted.get("code_hash"):
+                manifest["code_hash"] = persisted["code_hash"]
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
     manifest["blender_version"] = bpy.app.version_string
     manifest["state"] = "rendered"
     manifest["fingerprint"] = canonical_hash({{
@@ -573,6 +1054,7 @@ def update_manifest(manifest):
         "evaluator_version": manifest["evaluator_version"],
         "blender_version": manifest["blender_version"],
         "render_settings": manifest["render_settings"],
+        "rollout_seed": manifest.get("rollout_seed"),
     }})
     (OUTPUT_DIR / "run_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -582,9 +1064,9 @@ FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 (FRAMES_DIR / "animation").mkdir(parents=True, exist_ok=True)
 reset_scene()
 scene = bpy.context.scene
-material = white_material()
+ground_plane()
 objects = {{
-    entity["id"]: add_entity(entity["id"], entity, material)
+    entity["id"]: add_entity(entity["id"], entity, material_for(entity))
     for entity in {json.dumps(proxy_entities, sort_keys=True)}
 }}
 entity_specs = {{
@@ -599,7 +1081,19 @@ for entity_id, obj in objects.items():
         obj.scale = tuple(PROXY_SPEC.get("layout", {{}}).get("support_scale", obj.scale))
     elif entity_kind == "prop":
         obj.scale = tuple(PROXY_SPEC.get("layout", {{}}).get("object_scale", obj.scale))
-add_light(material)
+armatures = {{}}
+ik_targets = {{}}
+for entity_id, obj in objects.items():
+    if entity_specs[entity_id].get("kind") == "character":
+        armature = create_character_armature(entity_id, tuple(obj.location))
+        bind_mesh_to_armature(obj, armature)
+        ik_targets[entity_id] = create_hand_ik_targets(armature, entity_id)
+        insert_walk_cycle(armature, INITIAL_MANIFEST["frame_start"], INITIAL_MANIFEST["frame_end"])
+        armatures[entity_id] = armature
+apply_attachment_constraints(objects, armatures)
+penetration_findings, penetration_checks = audit_attachment_penetration(scene, objects)
+ATTACHMENT_PENETRATION.extend(penetration_findings)
+add_light()
 camera = add_camera()
 configure_render(scene, INITIAL_MANIFEST)
 if DIRECTOR_PLAN:
@@ -609,6 +1103,9 @@ if DIRECTOR_PLAN:
     )
 animate_entities(objects)
 animate_camera(camera, objects)
+camera_payload = (DIRECTOR_CAMERA or PLAN["camera"]).get("shots", [])
+audit_camera_visibility(scene, camera, objects, camera_payload)
+audit_camera_continuity(camera_payload)
 write_telemetry(objects, camera, INITIAL_MANIFEST)
 bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "proxy.blend"))
 scene.render.image_settings.file_format = "PNG"

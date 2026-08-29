@@ -57,5 +57,5 @@ def test_shared_review_uses_canonical_report_name(tmp_path):
         model="gpt-5.6-terra",
     )
 
-    assert result["vlm_model"] == "gpt-5.6-Terra"
-    assert result["review_source"] == "gpt-5.6-Terra"
+    assert result["vlm_model"] == "gpt-5.6-terra"
+    assert result["review_source"] == "gpt-5.6-terra"

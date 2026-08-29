@@ -185,6 +185,8 @@ def _make_prompt(actors: list[str], props: list[str], family: str, variant: int)
         action = f"{a0} reveals the {props[0]}, then carries the {props[0]} and hands the {props[0]} to {a1}; {a1} places the {props[0]} while the {props[1]} remains visible"
     elif family in {"role_swap_pause_return_crossing", "dev_role_reversal", "test_role_reversal_final_owner"}:
         action = f"{a0} carries the {props[0]} and hands the {props[0]} to {a1}; {a1} pauses, returns the {props[0]} to {a0}, and {a0} places the {props[0]}"
+    elif family == "subjectless_handoff":
+        action = f"{a0} carries the {props[0]} to {a1}; then hands the {props[0]} to {a1}, who places the {props[0]} while the other lane remains visible"
     else:
         action = f"{a0} carries the {props[0]}, then {a0} hands the {props[0]} to {a1} and {a1} places the {props[0]}; then {a1} carries the {props[1]} and places the {props[1]} through a separate lane"
     return (

@@ -66,3 +66,86 @@ def test_real_evaluator_flags_semantic_entity_kind_mismatch():
 
     assert report.terminal_status == "fail"
     assert any(f.failure_id == "telemetry_entity_kind_mismatch" for f in report.findings)
+
+
+def test_real_evaluator_surfaces_runtime_camera_findings_from_telemetry():
+    from evaluator.deterministic import DeterministicEvaluator
+
+    contract, plan, telemetry, artifacts = real_inputs()
+    telemetry["camera_findings"] = [{
+        "failure_id": "camera_occlusion_exceeded",
+        "owner": "director_camera",
+        "category": "camera_coverage",
+        "severity": "error",
+        "message": "handoff target is occluded",
+        "evidence": ["handoff", "red_cup"],
+    }]
+    report = DeterministicEvaluator().evaluate_real(contract, plan, telemetry, artifacts)
+
+    assert any(f.failure_id == "camera_occlusion_exceeded" for f in report.findings)
+    assert report.metrics["error_count"] >= 1
+
+
+def test_real_evaluator_hard_fails_runtime_penetration_finding():
+    from evaluator.deterministic import DeterministicEvaluator
+
+    contract, plan, telemetry, artifacts = real_inputs()
+    telemetry["attachment_penetration"] = [{
+        "failure_id": "no_prop_penetration",
+        "owner": "director_trajectory",
+        "category": "interaction_geometry",
+        "severity": "hard",
+        "message": "prop intersects torso",
+        "evidence": ["red_cup", "character", "42"],
+    }]
+    report = DeterministicEvaluator().evaluate_real(contract, plan, telemetry, artifacts)
+
+    assert report.terminal_status == "fail"
+    assert any(f.failure_id == "no_prop_penetration" for f in report.findings)
+
+
+def test_evaluate_real_run_is_fail_closed_when_render_artifacts_are_missing(tmp_path):
+    import json
+
+    from scripts.evaluate_real_runs import evaluate_real_run
+    from videoact.real_artifacts import RealRunManifest, fingerprint_real_run
+
+    contract, plan, _telemetry, _artifacts = real_inputs()
+    fingerprint = fingerprint_real_run(
+        prompt_hash="p",
+        plan_hash="t",
+        harness_version="h",
+        evaluator_version="e",
+        blender_version="pending-mcp",
+        render_settings={"resolution": [256, 256]},
+    )
+    manifest = RealRunManifest(
+        run_id="failed-run",
+        case_id="failed-run",
+        split="train",
+        prompt_hash="p",
+        plan_hash="t",
+        harness_version="h",
+        evaluator_version="e",
+        blender_version="pending-mcp",
+        fps=plan.timebase.fps,
+        frame_start=plan.timebase.frame_start,
+        frame_end=plan.timebase.frame_end,
+        render_settings={"resolution": [256, 256]},
+        fingerprint=fingerprint,
+        state="prepared",
+    )
+    for name, payload in (
+        ("run_manifest.json", manifest.model_dump(mode="json")),
+        ("scene_contract.json", contract.model_dump(mode="json")),
+        ("trajectory.json", plan.model_dump(mode="json")),
+        ("camera_plan.json", plan.camera.model_dump(mode="json")),
+    ):
+        (tmp_path / name).write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "blender_job.py").write_text("# failed before execution", encoding="utf-8")
+
+    result = evaluate_real_run(tmp_path, record={"case_id": "failed-run"})
+
+    assert result["status"] == "fail"
+    assert result["artifact_status"] == "incomplete"
+    assert "missing_artifact:telemetry.json" in result["hard_failures"]

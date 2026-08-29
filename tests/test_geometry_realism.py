@@ -46,3 +46,17 @@ def test_missing_required_entity_is_a_hard_failure():
     }, _scene())
     assert report["hard_gate_failed"] is True
     assert any(finding["failure_id"] == "proxy_entity_missing_from_blend" for finding in report["findings"])
+
+
+def test_ground_environment_mesh_is_not_a_missing_detailed_entity():
+    report = evaluate_geometry_report({
+        "audit_available": True,
+        "meshes": [
+            {"entity_id": "character", "entity_kind": "character", "geometry_style": "detailed_parametric_v1", "connected_component_count": 8, "vertex_count": 800, "face_count": 1200, "primitive_hint": None},
+            {"entity_id": "red_cup", "entity_kind": "prop", "geometry_style": "detailed_parametric_v1", "connected_component_count": 2, "vertex_count": 500, "face_count": 700, "primitive_hint": None},
+            {"entity_id": "ground_plane", "entity_kind": "environment", "geometry_style": "ground_contact_surface_v1", "connected_component_count": 1, "vertex_count": 4, "face_count": 1, "primitive_hint": None},
+        ],
+    }, {"geometry": {"detail_required": True}})
+
+    assert report["hard_gate_failed"] is False
+    assert not any(finding["failure_id"] == "proxy_geometry_style_missing" for finding in report["findings"])

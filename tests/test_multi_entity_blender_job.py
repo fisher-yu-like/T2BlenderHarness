@@ -78,10 +78,50 @@ def test_generated_job_compiles_all_multi_entity_semantics(tmp_path):
         "validate_transfer",
         "attach",
         "detach",
+        "CHILD_OF",
+        "constraint.keyframe_insert(data_path=\"influence\"",
+        "apply_attachment_constraints",
+        "influence_keyframes",
+        "attachment_penetration",
+        "no_prop_penetration",
+        "constraint_curve",
+        "giver_curve",
+        "receiver_curve",
     ):
         assert required_marker in script
     assert 'entity_id == "character"' not in script
     assert 'entity_id == "opening"' not in script
+
+
+def test_real_job_normalizes_director_actor_kind_to_character_rig(tmp_path):
+    from blender.real_proxy_job import compile_real_proxy_job
+    from videoact.director import DirectorAgent
+
+    result = DirectorAgent().plan(
+        "Alice carries the red cube, then Alice hands the red cube to Bob.",
+        scene_id="actor-kind-normalization",
+        duration_s=10.0,
+        fps=24,
+    )
+    manifest = _manifest(tmp_path, director_plan_hash=result.director_plan_hash)
+    script = compile_real_proxy_job(
+        result.trajectory_plan,
+        manifest,
+        tmp_path,
+        director_plan=result.director_plan,
+        director_trajectories=result.director_trajectories,
+        director_camera=result.director_camera,
+        proxy_spec={
+            "entities": [
+                {"id": "actor_a", "kind": "actor", "role": "participant"},
+                {"id": "actor_b", "kind": "actor", "role": "participant"},
+                {"id": "red_cube", "kind": "prop", "role": "target_object"},
+            ]
+        },
+    )
+
+    assert '"id": "actor_a", "kind": "character"' in script
+    assert '"id": "actor_b", "kind": "character"' in script
 
 
 def test_real_artifact_fingerprint_binds_director_plan_hash():
@@ -122,7 +162,7 @@ def test_prepare_multi_job_persists_director_hash_and_multientity_plan(tmp_path)
     (dataset_root / "manifest.jsonl").write_text(json.dumps(case) + "\n", encoding="utf-8")
     (dataset_root / "splits.json").write_text(json.dumps({"train": [case["case_id"]]}), encoding="utf-8")
 
-    prepare_jobs("train", tmp_path / "out", dataset_root=dataset_root)
+    prepare_jobs("train", tmp_path / "out", dataset_root=dataset_root, generation_mode="template_baseline")
     run_dir = tmp_path / "out" / case["case_id"]
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     director_plan = json.loads((run_dir / "director_plan.json").read_text(encoding="utf-8"))

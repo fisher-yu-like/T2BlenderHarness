@@ -7,6 +7,7 @@ so one failed render cannot overwrite another case's artifacts.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -30,7 +31,19 @@ from videoact.real_video import assemble_mp4_from_pngs  # noqa: E402
 
 def build_blender_command(job_dir: str | Path, blender_bin: str) -> list[str]:
     root = Path(job_dir).resolve()
-    return [blender_bin, "-b", "--python", str((root / "blender_job.py").resolve())]
+    # Blender's embedded Python on Windows does not honor the parent process'
+    # PYTHONPATH.  Inject the verified project root before loading the frozen
+    # job; this is executor wiring, not a scene/codegen fallback.
+    project_root_literal = repr(str(ROOT))
+    path_bootstrap = f"import sys; sys.path.insert(0, {project_root_literal})"
+    return [
+        blender_bin,
+        "-b",
+        "--python-expr",
+        path_bootstrap,
+        "--python",
+        str((root / "blender_job.py").resolve()),
+    ]
 
 
 def classify_render_status(return_code: int, render_artifacts_ready: bool) -> str:
@@ -91,14 +104,43 @@ def _assemble_and_probe_video(job_dir: Path) -> dict[str, Any]:
     return probe_mp4(job_dir / "proxy.mp4", minimum_frames=3)
 
 
-def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int = 2) -> dict[str, Any]:
+def _run_one(
+    job_dir: Path,
+    blender_bin: str,
+    timeout_s: int,
+    max_retries: int = 2,
+    rollout_seed: int | None = None,
+) -> dict[str, Any]:
     job_dir = job_dir.resolve()
     job_path = job_dir / "blender_job.py"
     if not job_path.is_file():
         return {"case_id": job_dir.name, "status": "missing_job", "job_dir": str(job_dir.resolve())}
     command = build_blender_command(job_dir, blender_bin)
+    frozen_source_hash = hashlib.sha256(job_path.read_bytes()).hexdigest()
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
+    expected_manifest_code_hash = None
+    manifest_path = job_dir / "run_manifest.json"
+    if manifest_path.is_file():
+        try:
+            expected_manifest_code_hash = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            ).get("code_hash")
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            expected_manifest_code_hash = None
+    if expected_manifest_code_hash and expected_manifest_code_hash != frozen_source_hash:
+        return {
+            "case_id": job_dir.name,
+            "status": "failed",
+            "job_dir": str(job_dir.resolve()),
+            "return_code": None,
+            "render_artifacts_ready": False,
+            "video_probe": {"playable": False, "error": "manifest_code_hash_mismatch_before_render"},
+            "retry_count": 0,
+            "attempts": [],
+            "proxy_video": None,
+            "job_source_hash": frozen_source_hash,
+        }
     attempts: list[dict[str, Any]] = []
     for attempt_number in range(1, max_retries + 2):
         started = time.monotonic()
@@ -107,6 +149,17 @@ def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int =
         completed = None
         error = None
         try:
+            # Agent-generated jobs import the verified ``blender.lib`` package
+            # from the project.  Blender starts with the case directory on
+            # sys.path, so the executor must expose the project root
+            # explicitly; this is runtime wiring, not generated scene code.
+            inherited_pythonpath = os.environ.get("PYTHONPATH", "")
+            pythonpath = os.pathsep.join(
+                item for item in (str(ROOT), inherited_pythonpath) if item
+            )
+            environment = {**os.environ, "PYTHONPATH": pythonpath}
+            if rollout_seed is not None:
+                environment["T2BLENDER_ROLLOUT_SEED"] = str(int(rollout_seed))
             completed = subprocess.run(
                 command,
                 cwd=str(job_dir),
@@ -114,12 +167,27 @@ def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int =
                 text=True,
                 timeout=timeout_s,
                 check=False,
+                env=environment,
             )
         except subprocess.TimeoutExpired as exc:
             error = f"timeout:{exc}"
         except OSError as exc:
             error = f"oserror:{exc}"
         render_artifacts_ready = _render_artifacts_ready(job_dir)
+        current_source_hash = hashlib.sha256(job_path.read_bytes()).hexdigest() if job_path.is_file() else None
+        source_unchanged = current_source_hash == frozen_source_hash
+        if not source_unchanged:
+            error = (error + ";" if error else "") + "job_source_changed_during_render"
+        manifest_code_hash = None
+        if manifest_path.is_file():
+            try:
+                manifest_code_hash = json.loads(
+                    manifest_path.read_text(encoding="utf-8")
+                ).get("code_hash")
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                manifest_code_hash = None
+        if expected_manifest_code_hash and manifest_code_hash != frozen_source_hash:
+            error = (error + ";" if error else "") + "manifest_code_hash_mismatch"
         video_probe = _assemble_and_probe_video(job_dir) if render_artifacts_ready else {
             "playable": False,
             "error": "render_artifacts_incomplete",
@@ -134,9 +202,18 @@ def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int =
             "stdout_tail": (completed.stdout or "")[-2000:] if completed is not None else "",
             "stderr_tail": (completed.stderr or "")[-2000:] if completed is not None else "",
             "error": error,
+            "source_hash": current_source_hash,
+            "source_unchanged": source_unchanged,
+            "manifest_code_hash": manifest_code_hash,
         }
         attempts.append(attempt_result)
-        if return_code == 0 and render_artifacts_ready and video_probe.get("playable"):
+        if (
+            source_unchanged
+            and return_code == 0
+            and render_artifacts_ready
+            and video_probe.get("playable")
+            and (not expected_manifest_code_hash or manifest_code_hash == frozen_source_hash)
+        ):
             result = {
                 "case_id": job_dir.name,
                 "status": "success",
@@ -148,10 +225,13 @@ def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int =
                 "retry_count": attempt_number - 1,
                 "attempts": attempts,
                 "proxy_video": str((job_dir / "proxy.mp4").resolve()),
+                "job_source_hash": frozen_source_hash,
             }
             mark_render_state(job_dir, return_code=0, blender_version=(completed.stdout or "")[:120])
             (job_dir / "render_attempts.json").write_text(json.dumps(attempts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             return result
+        if not source_unchanged:
+            break
     last = attempts[-1]
     result = {
         "case_id": job_dir.name,
@@ -164,6 +244,7 @@ def _run_one(job_dir: Path, blender_bin: str, timeout_s: int, max_retries: int =
         "retry_count": len(attempts) - 1,
         "attempts": attempts,
         "proxy_video": str((job_dir / "proxy.mp4").resolve()) if (job_dir / "proxy.mp4").exists() else None,
+        "job_source_hash": frozen_source_hash,
     }
     mark_render_state(job_dir, return_code=1, blender_version="")
     (job_dir / "render_attempts.json").write_text(json.dumps(attempts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -177,12 +258,25 @@ def render_jobs(
     workers: int | None = None,
     timeout_s: int = 900,
     max_retries: int = 2,
+    rollout_seed: int | None = None,
+    case_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
     root = Path(run_root)
-    job_dirs = sorted(path.parent for path in root.glob("*/blender_job.py"))
-    workers = max(1, workers or min(4, os.cpu_count() or 1))
+    all_job_dirs = sorted(path.parent for path in root.glob("*/blender_job.py"))
+    if case_ids is None:
+        job_dirs = all_job_dirs
+    else:
+        requested = [str(case_id) for case_id in case_ids]
+        if len(requested) != len(set(requested)):
+            raise ValueError("case_ids must be unique")
+        by_id = {path.name: path for path in all_job_dirs}
+        unknown = sorted(set(requested) - set(by_id))
+        if unknown:
+            raise ValueError(f"requested case IDs have no frozen Blender job: {unknown}")
+        job_dirs = [by_id[case_id] for case_id in requested]
+    workers = min(12, max(1, workers or min(4, os.cpu_count() or 1)))
     resolved_blender = shutil.which(blender_bin) or (blender_bin if Path(blender_bin).is_file() else None)
     if resolved_blender is None:
         report = {
@@ -191,6 +285,8 @@ def render_jobs(
             "run_root": str(root.resolve()),
             "job_count": len(job_dirs),
             "workers": workers,
+            "rollout_seed": rollout_seed,
+            "selected_case_ids": [path.name for path in job_dirs],
             "results": [
                 {"case_id": job_dir.name, "status": "not_started", "job_dir": str(job_dir.resolve())}
                 for job_dir in job_dirs
@@ -200,7 +296,7 @@ def render_jobs(
         results: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
-                executor.submit(_run_one, job_dir, resolved_blender, timeout_s, max_retries): job_dir.name
+                executor.submit(_run_one, job_dir, resolved_blender, timeout_s, max_retries, rollout_seed): job_dir.name
                 for job_dir in job_dirs
             }
             for future in as_completed(futures):
@@ -213,6 +309,8 @@ def render_jobs(
             "job_count": len(job_dirs),
             "workers": workers,
             "max_render_retries": max_retries,
+            "rollout_seed": rollout_seed,
+            "selected_case_ids": [path.name for path in job_dirs],
             "success_count": sum(item["status"] == "success" for item in results),
             "results": results,
         }
@@ -227,6 +325,8 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--timeout-s", type=int, default=900)
     parser.add_argument("--max-render-retries", type=int, default=2)
+    parser.add_argument("--rollout-seed", type=int)
+    parser.add_argument("--case-id", action="append", default=None, help="render only this frozen case; repeat for a serial group")
     args = parser.parse_args()
     report = render_jobs(
         args.run_root,
@@ -234,6 +334,8 @@ def main() -> int:
         workers=args.workers,
         timeout_s=args.timeout_s,
         max_retries=args.max_render_retries,
+        rollout_seed=args.rollout_seed,
+        case_ids=args.case_id,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["status"] in {"completed", "unavailable"} else 1

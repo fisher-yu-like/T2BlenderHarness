@@ -1,5 +1,10 @@
 # Realism evaluator v3 审计说明
 
+> **Historical snapshot.** The active realism boundary is
+> [evaluator-v5-calibration.md](evaluator-v5-calibration.md): geometry and
+> frame statistics are artifact evidence, while an eligible visual review is
+> required for a realism claim.
+
 更新时间：2026-08-26
 
 ## 结论

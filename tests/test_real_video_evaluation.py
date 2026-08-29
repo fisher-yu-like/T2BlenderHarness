@@ -121,6 +121,7 @@ def test_vlm_evaluation_runs_only_after_deterministic_pass(tmp_path):
         prompt="Observe a table.",
         scene_contract={"events": [{"id": "observe"}]},
         provider=FakeProvider(),
+        scoring_policy="legacy-aggregate",
     )
 
     assert result["status"] == "scored"

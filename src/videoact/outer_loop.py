@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from .patch_attribution import PatchVerdict, attribute
+
 
 class AcceptanceDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -49,6 +51,16 @@ def _paired_dev_ok(dev: dict[str, Any], before: float, after: float) -> bool:
     return after >= before
 
 
+def _contains_frame_statistics(payload: dict[str, Any]) -> bool:
+    values: list[Any] = [payload.get("review_source"), payload.get("review_sources")]
+    values.extend(payload.get("case_review_sources", []) or [])
+    return any(
+        value == "frame_statistics"
+        or isinstance(value, (list, tuple, set)) and "frame_statistics" in value
+        for value in values
+    )
+
+
 def evaluate_candidate(
     before: dict[str, float],
     after: dict[str, float],
@@ -73,6 +85,9 @@ def evaluate_candidate(
     checks["artifact_completion"] = (
         artifact_before is None
         or artifact_after is not None and float(artifact_after) >= float(artifact_before)
+    )
+    checks["independent_visual_review"] = not (
+        _contains_frame_statistics(train) or _contains_frame_statistics(dev)
     )
     realism_patch = owner in {"proxy_renderer", "blender_code_agent"} or train.get("patch_category") == "realism" or dev.get("patch_category") == "realism"
     if realism_patch:
@@ -104,3 +119,23 @@ def write_optimization_record(path: str | Path, record: dict[str, Any]) -> Path:
     with destination.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
     return destination
+
+
+def record_patch_attribution(
+    path: str | Path,
+    manifest_entry: dict[str, Any],
+    observed_deltas: dict[str, float],
+) -> PatchVerdict:
+    """Attribute a patch before distillation and append the immutable verdict."""
+    verdict = attribute(manifest_entry, observed_deltas)
+    write_optimization_record(
+        path,
+        {
+            "event": "patch_attribution",
+            "ordering": "before_root_cause_distillation",
+            "manifest_entry": manifest_entry,
+            "observed_deltas": observed_deltas,
+            "verdict": verdict.model_dump(mode="json"),
+        },
+    )
+    return verdict

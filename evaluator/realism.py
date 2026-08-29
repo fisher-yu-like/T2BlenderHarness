@@ -12,7 +12,7 @@ import math
 from typing import Any
 
 
-REALISM_EVALUATOR_VERSION = "realism-v4-shared-visual-review"
+REALISM_EVALUATOR_VERSION = "realism-v5-independent-review-boundary"
 ARTIFACT_ONLY_CEILING = 80.0
 GEOMETRY_WEIGHTS = {
     "entity_coverage": 0.20,
@@ -85,8 +85,8 @@ def _review_score(independent_review: dict[str, Any] | None) -> tuple[float | No
     if source not in {
         "gpt-5.6-luna",
         "gpt-5.6-terra",
-        "gpt-5.6-Luna",
-        "gpt-5.6-Terra",
+        "human_review",
+        "codex_local_visual_review",
         "assistant_local_review",
         "human",
     }:
@@ -113,7 +113,19 @@ def score_realism(
     report = geometry_report or {}
     geometry_components, geometry_score = _geometry_quality(report)
     visual = visual_report or {}
-    visual_score = _clamp(visual.get("score", 0.0)) if visual.get("status") in {"complete", "partial"} else 0.0
+    visual_source = str(visual.get("review_source") or visual.get("source") or "")
+    visual_is_frame_statistics = (
+        visual.get("score_kind") == "artifact_health_only"
+        or visual_source == "frame_statistics"
+    )
+    raw_visual_score = visual.get("score")
+    visual_score = (
+        _clamp(raw_visual_score)
+        if not visual_is_frame_statistics
+        and raw_visual_score is not None
+        and visual.get("status") in {"complete", "partial"}
+        else 0.0
+    )
     artifact_unbounded = 0.60 * geometry_score + 0.40 * visual_score
     # Reserve 20% for semantics, physical plausibility, and motion quality
     # that low-level geometry/PNG measurements cannot observe.  This is a

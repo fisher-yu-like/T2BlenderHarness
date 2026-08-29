@@ -34,8 +34,8 @@ def test_multi_training_skill_matches_frozen_protocol():
         "10 paired dev",
         "five attempts",
         "12 workers",
-        "gpt-5.6-Luna",
-        "gpt-5.6-Terra",
+            "gpt-5.6-luna",
+            "gpt-5.6-terra",
         "director_plan_score",
         "task_score",
         "realism_score",
@@ -66,3 +66,18 @@ def test_capability_check_declares_director_and_multi_dataset_checks():
     assert "director_agent" in capability
     assert "director_metrics" in capability
     assert "validate_multi_entity_dataset.py" in capability
+    assert "vlm_providers" in capability
+    assert "camera_dsl" in capability
+    assert "character_rig" in capability
+    assert "patch_attribution" in capability
+
+
+def test_harness_skills_preserve_prompt_event_order_before_generic_matching():
+    harness = _read("skills/t2blendercodeharness/SKILL.md")
+    chinese = _read("skills/t2blendercodeharness-zh/SKILL.md")
+    director = _read("skills/director-agent/SKILL.md")
+
+    for skill in (harness, chinese, director):
+        assert "evidence-backed event order" in skill
+        assert "generic carry" in skill
+        assert "subjectless" in skill

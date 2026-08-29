@@ -14,19 +14,21 @@ from .schemas import VLMJudgeResponse
 
 
 VLM_MODELS = {
-    "gpt-5.6-Luna": "gpt-5.6-luna",
-    "gpt-5.6-Terra": "gpt-5.6-terra",
+    "gpt-5.6-luna": "gpt-5.6-luna",
+    "gpt-5.6-terra": "gpt-5.6-terra",
 }
 
 VLM_MODEL_ALIASES = {
     **VLM_MODELS,
+    "gpt-5.6-Luna": "gpt-5.6-luna",
+    "gpt-5.6-Terra": "gpt-5.6-terra",
     "gpt-5.6-luna": "gpt-5.6-luna",
     "gpt-5.6-terra": "gpt-5.6-terra",
 }
 
 _CANONICAL_BY_LOWER = {
     **{name.lower(): name for name in VLM_MODELS},
-    **{endpoint.lower(): name for name, endpoint in VLM_MODELS.items()},
+    **{alias.lower(): endpoint for alias, endpoint in VLM_MODEL_ALIASES.items()},
 }
 
 
@@ -180,7 +182,11 @@ class OpenAIVLMProvider:
         request = urllib.request.Request(
             f"{self.base_url}/responses",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+            },
             method="POST",
         )
         try:

@@ -39,7 +39,10 @@ def run_inner_loop(
     attempts_root = root / "attempts"
     attempts_root.mkdir(parents=True, exist_ok=True)
 
-    director_result = DirectorAgent().plan(
+    # This module is retained for historical fake/MCP compatibility tests.
+    # Production outer-loop training uses provider-backed DirectorAgent.plan;
+    # the legacy inner loop must opt into the explicit baseline projection.
+    director_result = DirectorAgent(mode="deterministic_baseline").plan_explicit_baseline(
         prompt,
         scene_id=case_id,
         duration_s=duration_s,

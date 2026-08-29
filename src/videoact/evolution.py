@@ -50,11 +50,19 @@ OWNER_FILES = {
     "director_event_scheduler": ["src/videoact/director_schedule.py"],
     "director_trajectory": ["src/videoact/director_trajectory.py"],
     "director_camera": ["src/videoact/director_camera.py"],
-    "blender_code_agent": ["blender/real_proxy_job.py"],
-    "blender_executor": ["src/videoact/blender_adapter.py"],
+    # Generated Blender source, evaluator code, and the dataset are frozen
+    # during Harness evolution.  A proposal may point only at the Harness
+    # owner that produced the behavior; the generated job is evidence, not a
+    # patch target.
+    "blender_code_agent": [
+        "src/videoact/blender_code_agent.py",
+        "src/videoact/codex_self_provider.py",
+    ],
+    "blender_executor": ["src/videoact/orchestrator.py"],
     "proxy_renderer": ["src/videoact/real_artifacts.py"],
-    "evaluator": ["evaluator/deterministic.py"],
 }
+
+FROZEN_OWNERS = {"evaluator"}
 
 
 def aggregate_failures(records: list[dict[str, Any]]) -> FailureSummary:
@@ -97,6 +105,10 @@ def build_patch_brief(summary: FailureSummary) -> PatchBrief:
     if not summary.groups:
         raise ValueError("cannot build a patch brief without failure groups")
     group = summary.groups[0]
+    if group.owner in FROZEN_OWNERS:
+        raise ValueError(f"owner is frozen and cannot produce a Harness patch: {group.owner}")
+    if group.owner not in OWNER_FILES:
+        raise ValueError(f"unknown Harness patch owner: {group.owner}")
     return PatchBrief(
         owner=group.owner,
         root_cause_id=group.root_cause_id,

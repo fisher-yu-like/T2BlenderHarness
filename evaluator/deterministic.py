@@ -23,6 +23,40 @@ from .director_metrics import evaluate_director_plan
 from .interaction_metrics import evaluate_interactions
 
 
+def _runtime_telemetry_findings(telemetry: dict[str, Any]) -> list[Finding]:
+    """Convert executable runtime observations into report findings.
+
+    Blender runtime checks are independent evidence. They must be surfaced in
+    the real-run report instead of remaining inert JSON fields.
+    """
+    findings: list[Finding] = []
+    routes = {
+        "camera_findings": "camera_repair",
+        "attachment_penetration": "trajectory_repair",
+    }
+    for field, route in routes.items():
+        for item in telemetry.get(field, []) or []:
+            if not isinstance(item, dict):
+                continue
+            failure_id = str(item.get("failure_id") or f"malformed_{field}")
+            severity = str(item.get("severity") or "error")
+            if severity not in {"info", "warning", "error", "hard"}:
+                severity = "hard"
+            findings.append(
+                Finding(
+                    failure_id=failure_id,
+                    owner=str(item.get("owner") or "blender_executor"),
+                    category=str(item.get("category") or "runtime_observability"),
+                    severity=severity,
+                    message=str(item.get("message") or f"runtime finding from {field}"),
+                    root_cause_id=str(item.get("root_cause_id") or f"runtime:{field}:{failure_id}"),
+                    evidence=[str(value) for value in item.get("evidence", []) or []],
+                    repair_route=route,
+                )
+            )
+    return findings
+
+
 class DeterministicReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -117,6 +151,7 @@ class DeterministicEvaluator:
         """Evaluate a real Blender run after the ordinary plan-level checks."""
         base = self.evaluate(contract, plan, director_plan=director_plan, telemetry=telemetry)
         findings = list(base.findings)
+        findings.extend(_runtime_telemetry_findings(telemetry))
         if getattr(artifacts, "artifact_status", None) != "complete":
             failures = list(getattr(artifacts, "hard_failures", []))
             findings.append(

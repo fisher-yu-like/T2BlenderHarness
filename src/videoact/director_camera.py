@@ -17,11 +17,20 @@ class MultiTargetCameraChoreographer:
         schedule: DirectorSchedule,
         trajectories: DirectorTrajectories,
     ) -> CameraPlan:
-        del interpretation, trajectories
+        del trajectories
         frame_end = max(1, round(request.duration_s * request.fps))
         frame = lambda seconds: max(1, min(frame_end, round(seconds * request.fps) + 1))
         shots: list[CameraShot] = []
         consumed: set[str] = set()
+        camera_cues = list(getattr(interpretation, "camera_cues", []) or [])
+
+        def cue_for(event) -> object | None:
+            if not camera_cues:
+                return None
+            # A provider may emit several cues for a long prompt.  Select the
+            # cue whose evidence occurs nearest to this event; the cue order
+            # is otherwise the stable provider order.
+            return camera_cues[min(len(camera_cues) - 1, len(shots))]
 
         for event in schedule.events:
             if event.id in consumed:
@@ -35,6 +44,7 @@ class MultiTargetCameraChoreographer:
                 consumed.add(candidate.id)
             targets = self._targets(group_events)
             action_set = {candidate.action for candidate in group_events}
+            cue = cue_for(event)
             if "handoff" in action_set:
                 intent = "handoff two-shot preserves giver, receiver, and prop contact"
                 trajectory_type = "orbit"
@@ -52,6 +62,21 @@ class MultiTargetCameraChoreographer:
                 trajectory_type = "follow"
                 max_occlusion = 0.4
 
+            if cue is not None:
+                cue_action = str(cue.action)
+                if cue_action == "orbit":
+                    trajectory_type = "orbit"
+                elif cue_action in {"zoom", "dolly"}:
+                    trajectory_type = "dolly"
+                elif cue_action in {"pan", "tilt", "follow"}:
+                    trajectory_type = "follow"
+                elif cue_action == "static":
+                    trajectory_type = "hold"
+                direction = getattr(cue, "direction", None)
+                intent = f"{intent}; prompt camera cue={cue_action}" + (
+                    f" direction={direction}" if direction else ""
+                )
+
             shots.append(
                 CameraShot(
                     shot_id=f"shot_{len(shots) + 1:02d}_{group_events[0].action}",
@@ -67,6 +92,8 @@ class MultiTargetCameraChoreographer:
                     max_occlusion=max_occlusion,
                     continuity_group="axis_a",
                     innovation_intent_evidence_id=f"ev_camera_{len(shots) + 1:02d}",
+                    camera_cue=str(cue.action) if cue is not None else None,
+                    camera_direction=getattr(cue, "direction", None) if cue is not None else None,
                 )
             )
         return CameraPlan(shots=shots)

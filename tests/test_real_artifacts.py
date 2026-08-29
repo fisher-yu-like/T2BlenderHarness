@@ -126,3 +126,31 @@ def test_real_run_fingerprint_and_resume_match_are_stable():
     )
     assert resume_matches(manifest, {"fingerprint": fingerprint}) is True
     assert resume_matches(manifest, {"fingerprint": "different"}) is False
+
+
+def test_real_artifact_gate_detects_job_source_hash_mismatch(tmp_path):
+    from videoact.real_artifacts import RealArtifactGate
+
+    make_complete_run(tmp_path)
+    payload = manifest_payload()
+    payload["code_hash"] = "0" * 64
+    (tmp_path / "run_manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    report = RealArtifactGate().validate(tmp_path)
+
+    assert "job_source_hash_mismatch" in report.hard_failures
+
+
+def test_real_artifact_gate_exposes_stable_aggregate_artifact_hash(tmp_path):
+    from videoact.real_artifacts import RealArtifactGate
+
+    make_complete_run(tmp_path)
+    first = RealArtifactGate().validate(tmp_path)
+    (tmp_path / "frames" / "frame_000012.png").write_bytes(
+        (tmp_path / "frames" / "frame_000024.png").read_bytes()
+    )
+    second = RealArtifactGate().validate(tmp_path)
+
+    assert first.artifact_hash
+    assert second.artifact_hash
+    assert first.artifact_hash != second.artifact_hash

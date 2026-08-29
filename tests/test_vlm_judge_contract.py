@@ -61,6 +61,6 @@ def test_real_vlm_provider_defaults_to_project_model():
 
     assert OpenAIVLMProvider(api_key="test-key").model == "gpt-5.6-luna"
     assert normalize_vlm_model("gpt-5.6-Terra") == "gpt-5.6-terra"
-    assert canonical_vlm_name("gpt-5.6-luna") == "gpt-5.6-Luna"
-    assert canonical_vlm_name("gpt-5.6-Terra") == "gpt-5.6-Terra"
-    assert OpenAIVLMProvider(api_key="test-key", model="gpt-5.6-luna").model_alias == "gpt-5.6-Luna"
+    assert canonical_vlm_name("gpt-5.6-luna") == "gpt-5.6-luna"
+    assert canonical_vlm_name("gpt-5.6-Terra") == "gpt-5.6-terra"
+    assert OpenAIVLMProvider(api_key="test-key", model="gpt-5.6-luna").model_alias == "gpt-5.6-luna"

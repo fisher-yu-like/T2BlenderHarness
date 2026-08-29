@@ -15,7 +15,7 @@ def test_geometry_compliance_does_not_claim_realism_without_independent_review()
     assert result["score"] <= result["artifact_only_ceiling"]
     assert result["requires_independent_review"] is True
     assert result["realism_claim"] == "not_established"
-    assert result["evaluator_version"] == "realism-v4-shared-visual-review"
+    assert result["evaluator_version"] == "realism-v5-independent-review-boundary"
 
 
 def test_realism_score_exposes_primitive_failure_without_rewriting_deterministic_score():
@@ -28,7 +28,7 @@ def test_realism_score_exposes_primitive_failure_without_rewriting_deterministic
     })
     assert result["score"] == 9.6
     assert result["band"] == "artifact_only_weak"
-    assert result["evaluator_version"] == "realism-v4-shared-visual-review"
+    assert result["evaluator_version"] == "realism-v5-independent-review-boundary"
 
 
 def test_even_perfect_render_metrics_cannot_saturate_artifact_only_score_at_100():
@@ -68,3 +68,31 @@ def test_independent_review_unlocks_fused_score_without_faking_review():
     assert result["score_kind"] == "independent_review_fused"
     assert result["requires_independent_review"] is False
     assert result["score"] == 83.0
+
+
+def test_human_and_local_codex_review_sources_are_eligible_for_realism_channel():
+    base = {
+        "coverage_score": 100,
+        "topology_score": 100,
+        "primitive_score": 100,
+        "semantic_score": 100,
+        "structural_score": 100,
+        "hard_gate_failed": False,
+    }
+    review = {
+        "status": "complete",
+        "confidence": 0.9,
+        "scores": {
+            "appearance_detail": 80,
+            "physical_realism": 80,
+            "spatial_consistency": 80,
+            "motion_naturalness": 80,
+            "visual_presentation": 80,
+        },
+    }
+
+    human = score_realism(base, {"status": "complete", "score": 80}, {**review, "source": "human_review"})
+    local = score_realism(base, {"status": "complete", "score": 80}, {**review, "source": "codex_local_visual_review"})
+
+    assert human["score_kind"] == "independent_review_fused"
+    assert local["score_kind"] == "independent_review_fused"

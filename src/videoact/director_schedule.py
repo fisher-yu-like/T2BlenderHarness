@@ -123,9 +123,7 @@ class EventScheduler:
 
     @staticmethod
     def _event_id(directive: DirectorActionDirective) -> str:
-        if directive.action == "handoff":
-            return f"handoff_{directive.actor_id}_{directive.receiver_id}_{directive.prop_id}"
-        return "_".join(part for part in (directive.action, directive.actor_id, directive.prop_id) if part)
+        return directive.id
 
     @staticmethod
     def _dependencies(
@@ -166,8 +164,9 @@ class EventScheduler:
             prop_directives = [directive for directive in directives if directive.prop_id == prop_id]
             carry = next((directive for directive in prop_directives if directive.action == "carry"), None)
             handoff = next((directive for directive in prop_directives if directive.action == "handoff"), None)
+            explicit_attach = next((directive for directive in prop_directives if directive.action == "attach"), None)
             detach = next(
-                (directive for directive in prop_directives if directive.action in {"place", "return"}),
+                (directive for directive in prop_directives if directive.action in {"detach", "place", "return"}),
                 handoff or carry,
             )
             if carry is None or detach is None:
@@ -185,11 +184,11 @@ class EventScheduler:
                 prop_id=prop_id,
                 giver_id=handoff.actor_id if handoff is not None else carry.actor_id,
                 receiver_id=handoff.receiver_id if handoff is not None else detach.receiver_id,
-                attach_event_id=self._event_id(carry),
+                attach_event_id=self._event_id(explicit_attach or carry),
                 transfer_event_id=transfer_event_id,
                 detach_event_id=self._event_id(detach),
                 final_owner_id=final_owner,
-                final_support_id="support_surface" if detach.action == "place" else None,
+                final_support_id="support_surface" if detach.action in {"place", "detach"} else None,
             )
             if (
                 lifecycle.attach_event_id in event_ids

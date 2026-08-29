@@ -1,0 +1,729 @@
+{
+  "case_count": 20,
+  "dataset_id": "frozen-eval-v1",
+  "excluded_reference_count": 240,
+  "excluded_reference_datasets": [
+    "vbench-derived-100-v1",
+    "trajectory-v4-multi"
+  ],
+  "fingerprint": "8a7210bef81945439ac593713276523520b0d1abe6079b2a8568faa8da3b1b4e",
+  "patch_selection_allowed": false,
+  "proposal_generation_allowed": false,
+  "schema_version": "frozen-eval-manifest-v1",
+  "selected_dimensions": [
+    "Complex_Landscape",
+    "Composition",
+    "Diversity",
+    "Dynamic_Attribute",
+    "Human_Anatomy"
+  ],
+  "source_dataset": "VBench-2.0-unused-dimension-holdout",
+  "source_kind": "raw_json",
+  "source_policy": "raw VBench source; excludes all explicitly referenced dataset identities, prompt hashes, and used dimensions",
+  "source_root": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\data\\vbench-source\\VBench2_full_info.json",
+  "split": "frozen_eval",
+  "train_dev_prompt_hashes": [
+    "00b7aa9b50b0fab5b231fdb5b3abaa11d7cecf95aed4bbd79fe5a61751681c1d",
+    "060490d1256ab653e9cd2e211640a119a3543ffeda12d38a4066ba0d3bea5008",
+    "08f5f9b001c4bbee4db9a632cf3f06fd51378bc417800cc28826e826e2c4e53c",
+    "0c152f67030e5d9ef94b2aeb4be086856ddc7f5fe6aff82a6a9bcbe4af40d22f",
+    "0c71e2892ad8ee47f2e9d0df72492c97a12d9a8a5ee323636c1b3ce74bc14c9b",
+    "0f0f969a650c72d361a0f68d9bdbcc663bc0987289fe9c313e4923f4b3cf18e2",
+    "11106e4c7ffedc6a279561df293aba70bc184ba850b7f2c9d0aa0ae21cb2e8ac",
+    "11c94249b0b0c856778b92eccbbea77bd2622071777dc8c4646f51c7395738f4",
+    "13e38d95390617eef65641c065f7f0526d3a0775fa0f12a8dc3dd35799422937",
+    "14bb752ef0b8aeab44c7df074480508c1c58ec0b54558ca65aac9d5423726c70",
+    "1776ba4523fbf119f3e3e7d45c995c7361d69ebea734e443042b0ee24673b74b",
+    "1a46e96c8cda2c788db8027b01870442c88adb3bddeae87479a079feba4e743c",
+    "2173dbc2141434faa27b03c289008a6382f05924cdae31b5da9050bb0aacaa32",
+    "21bd08ef173ba0dedfbce2b52a9fffe697c640d7b5d093a9695aa484712ab465",
+    "2354fd5f015492d702dbb70a8dc4461e0dfc7b378491d302085c71fd7656dcb7",
+    "2600e35e28e41e7908319d6cb8d7fbcc71006a48bf1661d498183f95d43efbce",
+    "26146335a11f6d4cc61342661d5d4158f0e9cc1b70ff74c54cdc5e673983cde6",
+    "263991f26bbb688c893b141865cb2a0680440266ae0c154ad9b51ca636c25e8f",
+    "263f9d89b59452221694415285fe2c5189652fecb3e3258452e2930495746e0a",
+    "26459db63cf7912c49546926841fc6abc3f5cd06adc7b561711275a370421ff8",
+    "2689056dcaa97064de5765753d8dabfe28a3958734e21ab3551bed96c15955b2",
+    "27e27d0456532f8c3a7574bc3621a68dc15c5533ce91c7886a7a9d3de479057e",
+    "2bdba5432afdb7eb9ff2f2dc349b035cece2bb8ba3968c338a62906415a0e4e6",
+    "2dc47bf43edf696fefcafe3113be5d33e5d377dfb1b636ca81fbfdc14ab3c387",
+    "3573f8e2f49aa9e2abe4703f1e854ab40e971d166c64bf6ae1d5a09029ace5f8",
+    "3614018b51752f691dc917e2af08d0b4a23ba15fcd4813de996b38ad8be8a543",
+    "364c3b384b54689e6b5004208a9e3aa39de66d3aeb85a3a5bead2d4d12c0a349",
+    "36890ca8ee31c4b148114c1195e89d65a31f1c0a819ffdefb63b3e8e17803a6c",
+    "389ade0a80fb082ffdeca355d2caace604c3c7f6f96c07c1cea09855713d9696",
+    "3a4b9ffa2a73631c67f2d61e23f9d956b46fbe957344c6061b452f09b3c46ce6",
+    "3b3318bc813db8685289d5cc35805d728f2691379445d62640112e415bf2bac1",
+    "3bd216a87c1d983c9583900fdc337d07cd4a77477ae9a095be9ba2e472d579c8",
+    "3e2a6bc0c0cdf32e8487bed1e22756293bce9871a7a4d2c494f223477044523c",
+    "3e9d3921516c14079e64d55a7fba1c7c380c9ee508818d89c8b5866a8a8d3635",
+    "44899682a12254e5b79268b450255350a9698c156e7e558c6983e8558543839c",
+    "47a22164a211d9cc770fd9720848dc7fd5b68abf240837494e939f1dba6ab667",
+    "47b99d7b2aa99dc41da3fa8769a5a7f400e2f451e04ca1f41df0ca8cf6e8459f",
+    "4c9d22875767322fd3fa4ff5d30ecdec09d6863fe762c412d86fe82e8b66be41",
+    "4d754ff221616882de0a407b0839f18c9fa1d825d02ad2691797e11f3e354612",
+    "595c6f7aed24c96fa9bddcf1bd625fd02a15974154d832130247a95bc717a367",
+    "5a14867c3c348ab28675d547aaf14b95c35177b6f1408719cbdf97a53ce71d47",
+    "5c8936eee691eaa2e61ccdd8c9f08be6b8e23f0279096317bafa4c72e6bcdf59",
+    "5d4e5058d1613da2862e679b335f6df18ffe9a7e674e7346ce69c64b488ec0b7",
+    "610710bfdef207d5135976cb8f30fae276bdf3d8fc9c227dc06d244ec5ac4e3e",
+    "617d62bb9e9d54171d05dd7703043b68096158226741af39076c73005769070d",
+    "61ba5c35fce279c4275ff6327c99c716f911d4529a096a07b61a256059285c3e",
+    "628f6ea343cb2d2c5482e11c1932fc5375550639d234ce2168cdb6aec7ad8831",
+    "62c63c23cfda859751fed22d731a56d1cd8688f19ffdc5892e22cd96d025633b",
+    "63620b398da829b3f3ef67ff6766accc189e9f9d29c7359e09d2759629ad485d",
+    "64ebefa03f2b36903bec21b9dff4dd4c5d0ef23ea3cec5315dddbf415ad779e4",
+    "693bc141ac0060258ad58d5b14ca90ffe72c5b0c27bf1f99203e7b0f21ee1e1e",
+    "6f98f1291065cb0e2a592c9cab5093ba3d063cb567f7fcd73c89af98427765b8",
+    "71aa641b009b13a9afafcc0626e3a39098ee7846462c54e96d74af580ee41095",
+    "72af5a578d503cf77b8c14f390cccef1b884dc26952002da4a50e7e9b33676dc",
+    "76c77ea94421fd75a8ae78ecc56be7b65c43f562072e1d3743e6311fb82402b8",
+    "7e03994586df0a033bf6f7e7963b6facaef49c4daace09dc87158cc90a5f260d",
+    "86a27b097083f8e14e3ca23e253bdba4894535bdb1e0317c061f169dc5634de9",
+    "8756c71eccc43c2cbe0c73edce4849f04d98615e00d51bee3089a001d61601c1",
+    "897f99e893b3626aeb5a4900a15f4fb4f94ca069f0cdefca49c460b8f8e4cd9d",
+    "957e118feddb9f7c7494a1cca22c3fabc65fc996c4a4687a4754cee03bd0a361",
+    "96d8a9cac4d03c58264d58a0aedc42a812a8bfa2718d35c86dd023fadd49e10e",
+    "96fc205c180c40ce063fd2c9c99040293455f6f6ba0ac352fc11697a69970c78",
+    "9848259e48429bd3e65178a6b3e9cf79863041635d9edd1911be9bfb23904e66",
+    "994de5c63626bab01eca19d2738219d58fcc7a633bbefef3cabd8d460aa47241",
+    "9aad5bd742afa89b9c9d835fab69cbbbe2d5c044a4c8c7434fdcd175053028f9",
+    "9fdca8142e5223a0806886c557bff5a624ce79495808bfb1174cdae1b39cc286",
+    "a0345799ea31ce3a3f17a359923c9a4ce3541e1a855d1b91a371f9a012f91c77",
+    "a180d84208b3a0b8f8077a2d48ea884299fe6dcc84bcc1125919317cb4a7a333",
+    "a34a277204f7b91c6956bd7e881da9fcf58147711519a8890d7ff23a4f50fa8c",
+    "a3780fe1301256d598ffd4ed12cb2aea20494202200be276edb498f00308ab6b",
+    "a3bfa548fdb1e2f6ac3d89446114b173e398d8f1e6afb021bcee1535726b42fc",
+    "a9a28d781977cd11b19cc8e75538dd675bda4dda0f1f0273801d8dc24e4a6cb6",
+    "a9d5cf609a9cf72709551085aa8ca54ab8ccd828b1c63d04da5dee0a6d7909c0",
+    "ab16cdfd7073d7985b151a9d97d0aabed7e5ad5e5af47ad633bcffd90751fbc3",
+    "ab38d906ade3472861cf92f130307d5d4931b22a5f5ced9a475383de21c5d873",
+    "ab810ef8aa3730386cc0179d9a15092eea2b036410f82985def6ba2c828d465e",
+    "aee5f90b8d27b9666bb7b6fa2bd23ac525fee5ec4e91402b19bb6b306fcf93ba",
+    "b007760c0b5edf4a67d4639ab8f1f7d01db8dc23a10cf031211eeebe69714633",
+    "b0849ef540fe6b54be37513eae4165f055dc28eb8a0b05dbfe52028a607b6520",
+    "b3d463934caee8a20117794f81cd2b4df56f7ed73c815708c1d0c426ceb901cb",
+    "b67f39001c7456c7bc2e91de601d2132f4b0f0e467f5108cefe7ab3d73eebc0f",
+    "baedb0a9ffd0d99a1a53b5b2d580d63e2ee9c83bf0548a0ee7ca42768bed6e4b",
+    "bb0592b9898ee4dd1d3dbec829f84460198ea0b12892ad2a8c9035bfa12a2441",
+    "bcd562f574d296e060d6acf78bb953a4b1d0bd53478ff696c2e3f708b5471f52",
+    "bd32134233d7a4e8a9d7859626935fb16b4f153033cc4e3ddb14d6e2c19f1450",
+    "be288570adca40db02a2ef68ccdcee04158cf58ecfe66a19011e6fe3b7943f12",
+    "bebd4d07533bfdb2c53b01e5a7bc23e8a670ebe5e1fb65607fdbdd87bdcafdd7",
+    "bf178d0de111bf7afef5a4c6077a95c7f32111bc1835136a4a2e4e3389bbae31",
+    "bf91c09e0b24e8c892c2144a7bb4637280a61da32c43dfcbdc714e146c5abf10",
+    "c08b226ae7c05f68c62ec2605e16067cbac0c951c85c2d90de9630acc3fa71df",
+    "c08f255c79f7f93037d57645cad8bdf0d99c8aa6c8e5324d34a083130ba2ac49",
+    "c15001bd775fead92532f099dae579d9080a52d3c81e385b82bd14615cbe0bb5",
+    "c399f825a274e41105f61c97180930d671247221d29f573d5540e99b5667089d",
+    "c6b679d4d08fc7609b1213a9102c9f4b44d1fbc28efcd50a7c019d0ef1a2aa24",
+    "cb3cb41609f1e81827a0fb26eed095ac25e25db23d5b3fef94eeb2f816578225",
+    "d214302743a2f08cab4f99d7e3f8c9d2739a91c820939fbc94ed39a5dcc665cd",
+    "d243a4da1b87fa54dd3566044e854bd0244d3575da9aa03c9155a007a0ba9af6",
+    "d399017e26a2440dd5d778dfa131864c200d775c880e80fba886ceb8df51b625",
+    "d5896003f5d9a9f7db3cacb7c7d7f25a6f24d947a9e6117e1414016729e255d8",
+    "d814d92e81ec55e8f823287e46f2d8db4952bf9ee9489a043c810f806c258348",
+    "d81ca471035a55227854d8ce5880abb57a30bad2380a4379b543674c84beb5c0",
+    "da4660fbaa24382b07c18919efcc8d1aab3c7bbd306910942c33cdcca6b31a60",
+    "dbf3beafce0ae3de1cc0a63136677678a1086b1b008ded866f834731860809fa",
+    "dc374087732f1bc6d81af85f39598882f8a8311f2b87633adde48e62019676c4",
+    "dccab47e8f736f13d716647dbe420a612b7d209a830eaf60be4a3b9cdca4d828",
+    "ddc76276a5fe2626c8d6730453f08dfd8d502c5f127e57ed027e049de72efa75",
+    "df04b09749ee89684872bcdfb2487a001981972af0aadb80d186bd3cfe023b40",
+    "e20115df52b3d4a2d82bc5212d9ac0d0ba6482b76c7eeef87c8c5a4606ecc352",
+    "e22ea26f969e6fcd49696c1c16dbe986568e8dddd69c9b8f4495f4cf4c8dcd4a",
+    "e318f4c004624fc0298768036bb0b0e4187fc39118f9f8e91a2a02d7a238cd3d",
+    "e48dd9e03fc8ec33e3705c9d916aeb31df21437dd69b670b7d3c737e0c1f94e3",
+    "e50cecdd29c261f0ed100f381b8cdcc6a8e1fd2d1049b143a3ad8d38cbf1e82f",
+    "e530ae920273461c7bf041f09e3f0c3e06e39adb3079e8eac2f5a5d4d5123a52",
+    "e5af5e9099aaa2d4c195322a84a05194dded854d960b0de22ff75f568548b4c4",
+    "e5c9fcd9ae29bd64f59ced101dfd80139bb38bf121b806ec316e65fafc20bc01",
+    "e5d458ff86bf5474b09bcec7713e609f0ca49a0f819480c1d8158a8eb7d31c60",
+    "e70527cd7d6bd9a2b80a1aaf4bc3514e415a3ea4537f1b3a1a8ce6105e020e22",
+    "e8caff2f67d0bac29baabbd5db69e21c223c3ce822abf33460182cfd09fdd9fe",
+    "ea0ebcdcc9dddb0af14574d736cb824505000de346f8f72102655274e6d7294c",
+    "ea8b30c014755936ffaa491720171f782a549f9b90bdfed83d371fc1723733c2",
+    "eeddce83201e2518fe8d8fc6d056557d2e3a3f78f9f6d018546f79f823fabd05",
+    "ef0c6971dd563dc9bd4f8a52227e6036e7cae211792bfab4b543e93da447893f",
+    "f2c76b4cf79409051e3f6fa772c2e2b831fc46e42431d265f64cb656591414f5",
+    "f39eb5be29a112f8ad4e4c683357ccd5c57df7eefe89f77b8ad87c0bf480857f",
+    "f3b602453ee744bb47f95e216c96a8d676b0313e5846cafd792c36b7d0e5d8ca",
+    "f4825368a3fa25c34ba38895558798cbe9bca27f14e24dc102b4e1e7c9dfcad7",
+    "f706fa5c0f63a38995ef6e10bec9d56f43738b7210f0b1afb5afff71c5a61347",
+    "f8af0c54ba571e1e51d00ef5f68d12ae014d03e5fdf800d9b14f66bedce74a90",
+    "f98e5757cf93bf3891ba4cbf4d2bd4d837667258ae7d0bdde6a8f72bee7ed427",
+    "fab79da2508ce50f08b048ebf575c480ba13bacb150690ab1ba17ec47441e80b",
+    "fb628939b264a737f40751ca88fb410641cd6bfbbd611fad150104bdad21ad99",
+    "fbc01b860600564b18f51bb7f7ccf9ff4fb700ebf1091910a635400a9015babb",
+    "fc24e359c5de99f46c0dbc870afe29f5c3e9047e759b838525e340e87c4549fe",
+    "fcdde606668f7fd707e5e47d10ddaabe0c88626865404fa7c943af5986692f5d",
+    "fe138cd11dce5ba6c3d5260df4d69458d542ca38895e06347d7096cac69f51f5",
+    "fed7712ce6edea932d6503b479eabe0caba3e860c7763df335a8646301d91813",
+    "feed5ca5e5141f350159fe449c5d8468b1ab762201c3c6ff3cd24c108926b718",
+    "fefa55e6e949e714f17f633dae03efd017ddd8c799f35caac6c2fd0663732ac2",
+    "ff1b1c999d506b5c4fb041adedf268cdbdbf1be33b5cc706998698ef95ad911d",
+    "ff90cc7bd8218f090672d60567850d3c94d121f0a1388bb9d8545d8b7950773f"
+  ],
+  "train_dev_source_identities": [
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 0
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 1
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 2
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 3
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 4
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 5
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 6
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 7
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 8
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 9
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 10
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 11
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 12
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 13
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 14
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 15
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 16
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 17
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 18
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 19
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 20
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 21
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 22
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 23
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 24
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 25
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 26
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 27
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 28
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 29
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 30
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 31
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 32
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 33
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 34
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 35
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 36
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 37
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 38
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 39
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 40
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 41
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 42
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 43
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 44
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 45
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 46
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 47
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 48
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 49
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 50
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 51
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 52
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 53
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 54
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 55
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 56
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 57
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 58
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 59
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 60
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 61
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 62
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 63
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 64
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 65
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 66
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 67
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 68
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 69
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 70
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 71
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 72
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 73
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 74
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 75
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 76
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 77
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 78
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 79
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 80
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 81
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 82
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 83
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 84
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 85
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 86
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 87
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 88
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 89
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 90
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 91
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 92
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 93
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 94
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 95
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 96
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 97
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 98
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 99
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 100
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 101
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 102
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 103
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 104
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 105
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 106
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 107
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 108
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 109
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 110
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 111
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 112
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 113
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 114
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 115
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 116
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 117
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 118
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 119
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 120
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 121
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 122
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 123
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 124
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 125
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 126
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 127
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 128
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 129
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 130
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 131
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 132
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 133
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 134
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 135
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 136
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 137
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 138
+    },
+    {
+      "source_dataset": "trajectory-v5-agent-codegen",
+      "source_index": 139
+    }
+  ]
+}

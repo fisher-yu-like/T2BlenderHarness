@@ -81,6 +81,7 @@ def test_assistant_local_review_is_scored_by_the_same_aggregate(tmp_path):
         prompt="Observe a table.",
         scene_contract={"events": [{"id": "observe"}]},
         assistant_review=request,
+        scoring_policy="legacy-aggregate",
     )
 
     assert result["status"] == "scored"

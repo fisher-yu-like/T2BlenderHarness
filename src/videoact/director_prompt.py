@@ -7,6 +7,7 @@ choose coordinates, trajectories, camera shots, or Blender implementation.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing_extensions import Literal
 
 from pydantic import Field, model_validator
@@ -20,7 +21,52 @@ from .director_contracts import (
 )
 
 
-DirectiveAction = Literal["carry", "handoff", "place", "pause", "return"]
+DirectiveAction = Literal[
+    "approach",
+    "attach",
+    "carry",
+    "detach",
+    "handoff",
+    "place",
+    "pause",
+    "return",
+    "reveal",
+    # Provider-assisted interpretation also covers benchmark prompts whose
+    # primary event is a physical or spatial action rather than a handoff.
+    # These remain semantic labels; the trajectory and Blender layers choose
+    # the concrete motion primitive.
+    "move",
+    "walk",
+    "run",
+    "jump",
+    "fly",
+    "climb",
+    "sit",
+    "stand",
+    "drink",
+    "sweep",
+    "brush",
+    "write",
+    "pour",
+    "press",
+    "bounce",
+    "open",
+    "close",
+    "interact",
+    "observe",
+]
+
+
+CameraCueAction = Literal["static", "pan", "tilt", "zoom", "orbit", "dolly", "follow"]
+
+
+class DirectorCameraCue(ContractModel):
+    """Prompt-grounded camera instruction retained until CameraPlan creation."""
+
+    id: str = Field(min_length=1)
+    action: CameraCueAction
+    direction: str | None = None
+    evidence_id: str = Field(min_length=1)
 
 
 class DirectorActionDirective(ContractModel):
@@ -37,6 +83,7 @@ class PromptInterpretation(ContractModel):
     request: DirectorRequest
     entities: list[DirectorEntity]
     directives: list[DirectorActionDirective]
+    camera_cues: list[DirectorCameraCue] = Field(default_factory=list)
     evidence: list[DirectorDecisionEvidence]
     assumptions: list[str] = Field(default_factory=list)
     uncertainties: list[DirectorUncertainty] = Field(default_factory=list)
@@ -52,12 +99,33 @@ class PromptInterpretation(ContractModel):
                     raise ValueError(f"directive {directive.id} references unknown entity: {reference}")
             if directive.evidence_id not in evidence_ids:
                 raise ValueError(f"directive {directive.id} references unknown evidence: {directive.evidence_id}")
+        for evidence in self.evidence:
+            if evidence.prompt_span is not None and evidence.quoted_text is not None:
+                start, end = evidence.prompt_span
+                observed = self.request.prompt[start:end]
+                if observed.casefold() != evidence.quoted_text.casefold():
+                    raise ValueError(
+                        f"evidence span does not match quoted_text for {evidence.id}: "
+                        f"{observed!r} != {evidence.quoted_text!r}"
+                    )
         return self
 
 
 class DeterministicPromptInterpreter:
     _ACTOR_LABELS = ("Alice", "Bob", "Carla", "Dana")
     _PROP_RE = re.compile(r"\b(red|blue|green|yellow)\s+(cube|cup|book|ball)\b", re.IGNORECASE)
+    _ACTION_PATTERNS = {
+        "carry": re.compile(r"\b(?:carries|carry|takes|take)\b", re.IGNORECASE),
+        "handoff": re.compile(r"\b(?:hands|hand|passes|pass|gives|give)\b", re.IGNORECASE),
+        "place": re.compile(r"\b(?:places|place)\b", re.IGNORECASE),
+        "pause": re.compile(r"\bpauses?\b", re.IGNORECASE),
+        "return": re.compile(r"\breturns?\b", re.IGNORECASE),
+        "reveal": re.compile(r"\breveals?\b", re.IGNORECASE),
+    }
+    _UNSUPPORTED_ACTION_PATTERN = re.compile(
+        r"\b(?:walks?|runs?|moves?|approaches?|reaches?|lifts?|picks?|puts?|looks?|watches?|waits?|opens?|closes?)\b",
+        re.IGNORECASE,
+    )
 
     def interpret(self, request: DirectorRequest) -> PromptInterpretation:
         prompt = request.prompt.strip()
@@ -135,6 +203,18 @@ class DeterministicPromptInterpreter:
                     )
                     if suffix_match:
                         implied_carry = (suffix_match, reveal_match.end())
+                if reveal_match:
+                    directives.append(
+                        self._directive(
+                            prompt,
+                            evidence,
+                            action="reveal",
+                            actor_id=actor_ids[reveal_match.group("actor")],
+                            prop_id=prop_ids[reveal_match.group("prop").lower()],
+                            evidence_label="reveal",
+                            span=(reveal_match.start(), reveal_match.end()),
+                        )
+                    )
                 if reveal_match and implied_carry:
                     carry_match, carry_offset = implied_carry
                     directives.append(
@@ -176,7 +256,8 @@ class DeterministicPromptInterpreter:
 
         handoff_match = re.search(
             r"\b(?P<giver>[A-Z][a-z]+)\s+(?:hands|passes|gives)\s+the\s+"
-            r"(?P<prop>(?:red|blue|green|yellow)\s+\w+)\s+to\s+(?P<receiver>[A-Z][a-z]+)",
+            r"(?P<prop>[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){0,3}?)\s+"
+            r"to\s+(?P<receiver>[A-Z][a-z]+)",
             prompt,
         )
         if handoff_match:
@@ -347,14 +428,63 @@ class DeterministicPromptInterpreter:
             )
         )
 
-        uncertainties = [
+        observed_actions = Counter(directive.action for directive in directives)
+        expected_actions = Counter(
+            action
+            for action, pattern in self._ACTION_PATTERNS.items()
+            for _match in pattern.finditer(prompt)
+        )
+        uncertainties: list[DirectorUncertainty] = []
+        if not actors or not props:
+            uncertainties.append(
+                DirectorUncertainty(
+                    id="unc_scene_entities",
+                    description="The deterministic baseline could not identify at least one actor and one target object.",
+                    severity="hard",
+                    resolved=False,
+                )
+            )
+        if not directives:
+            uncertainties.append(
+                DirectorUncertainty(
+                    id="unc_no_executable_event",
+                    description="The prompt contains no executable event that the deterministic baseline can safely schedule.",
+                    severity="hard",
+                    resolved=False,
+                )
+            )
+        if any(observed_actions[action] < count for action, count in expected_actions.items()):
+            missing = [
+                action
+                for action, count in expected_actions.items()
+                for _index in range(max(0, count - observed_actions[action]))
+            ]
+            uncertainties.append(
+                DirectorUncertainty(
+                    id="unc_uncovered_prompt_action",
+                    description=f"The deterministic baseline did not map every action occurrence: {missing}.",
+                    severity="hard",
+                    resolved=False,
+                )
+            )
+        unsupported = sorted({match.group(0).lower() for match in self._UNSUPPORTED_ACTION_PATTERN.finditer(prompt)})
+        if unsupported:
+            uncertainties.append(
+                DirectorUncertainty(
+                    id="unc_uncovered_prompt_action",
+                    description=f"Unsupported action wording requires a provider-assisted interpretation: {unsupported}.",
+                    severity="hard",
+                    resolved=False,
+                )
+            )
+        uncertainties.append(
             DirectorUncertainty(
                 id="unc_visual_style",
                 description="Prompt does not fully specify actor appearance, exact object scale, or room dressing.",
                 severity="soft",
                 resolved=False,
             )
-        ]
+        )
         return PromptInterpretation(
             request=request,
             entities=actors + props,
@@ -365,10 +495,23 @@ class DeterministicPromptInterpreter:
 
     def _actors(self, prompt: str) -> list[DirectorEntity]:
         seen: list[str] = []
-        for match in re.finditer(r"\b[A-Z][a-z]+\b", prompt):
-            label = match.group(0)
-            if label in self._ACTOR_LABELS and label not in seen:
+        actor_pattern = (
+            r"\b([A-Z][a-z]+)\b(?=\s+(?:carries|takes|holds|brings|hands|passes|gives|"
+            r"returns|places|reveals|watches|walks|runs|looks|waits|pauses))"
+        )
+        for match in re.finditer(actor_pattern, prompt):
+            label = match.group(1)
+            if label not in seen:
                 seen.append(label)
+        for match in re.finditer(r"\bto\s+([A-Z][a-z]+)\b", prompt):
+            label = match.group(1)
+            if label not in seen:
+                seen.append(label)
+        if not seen:
+            for match in re.finditer(r"\b[A-Z][a-z]+\b", prompt):
+                label = match.group(0)
+                if label not in {"A", "An", "The", "Then", "While"} and label not in seen:
+                    seen.append(label)
         return [
             DirectorEntity(
                 id=f"actor_{chr(ord('a') + index)}",
@@ -383,6 +526,23 @@ class DeterministicPromptInterpreter:
         seen: dict[str, DirectorEntity] = {}
         for match in self._PROP_RE.finditer(prompt):
             label = match.group(0).lower()
+            prop_id = label.replace(" ", "_")
+            if prop_id not in seen:
+                seen[prop_id] = DirectorEntity(
+                    id=prop_id,
+                    kind="prop",
+                    role="target_object",
+                    label=label,
+                )
+        if seen:
+            return list(seen.values())
+        generic = re.compile(
+            r"\bthe\s+(?P<label>[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){0,3}?)"
+            r"(?=\s+(?:while|then|to|from|on|onto|and|before|after)|[,.!?]|$)",
+            re.IGNORECASE,
+        )
+        for match in generic.finditer(prompt):
+            label = " ".join(match.group("label").split()).lower()
             prop_id = label.replace(" ", "_")
             if prop_id not in seen:
                 seen[prop_id] = DirectorEntity(
@@ -431,7 +591,12 @@ class DeterministicPromptInterpreter:
                 claim=f"{evidence_label}: {claim}",
             )
         )
-        directive_id = "_".join(part for part in (action, actor_id, receiver_id, prop_id) if part)
+        directive_parts = (
+            (action, actor_id, receiver_id, prop_id)
+            if action == "handoff"
+            else (action, actor_id, prop_id)
+        )
+        directive_id = "_".join(part for part in directive_parts if part)
         return DirectorActionDirective(
             id=directive_id,
             action=action,

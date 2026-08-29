@@ -53,6 +53,12 @@ def test_real_job_contains_render_telemetry_and_proxy_artifact_steps(tmp_path):
     assert 'camera.data.keyframe_insert(data_path="lens"' in script
     assert '"id": "table", "kind": "support"' in script
     assert '"kind": obj.get("entity_kind", "unknown")' in script
+    assert "orbit_points" in script
+    assert "sample_count = max(8" in script
+    assert "for sample_index in range(sample_count)" in script
+    assert "camera_occlusion_exceeded" in script
+    assert "camera_continuity_violation" in script
+    assert '"rollout_seed": manifest.get("rollout_seed")' in script
 
 
 def test_render_engine_falls_back_to_engine_supported_by_connected_blender():
@@ -111,7 +117,13 @@ def test_real_job_preserves_complex_camera_trajectory_and_support_semantics(tmp_
 def test_prepare_real_jobs_writes_immutable_job_index(tmp_path):
     from scripts.prepare_real_jobs import prepare_jobs
 
-    index = prepare_jobs("calibration", tmp_path, dataset_root="dataset", harness_version="h1")
+    index = prepare_jobs(
+        "calibration",
+        tmp_path,
+        dataset_root="dataset",
+        harness_version="h1",
+        generation_mode="template_baseline",
+    )
 
     assert index["split"] == "calibration"
     assert index["case_count"] == 10

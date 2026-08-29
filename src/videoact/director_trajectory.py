@@ -22,8 +22,6 @@ class DirectorTrajectories(ContractModel):
 
 
 class MultiEntityTrajectoryComposer:
-    _HAND_OFFSET: Point3 = (0.65, -0.05, 1.35)
-
     def __init__(self, *, lane_spacing: float = 2.0, minimum_lane_distance: float = 1.5) -> None:
         self.lane_spacing = lane_spacing
         self.minimum_lane_distance = minimum_lane_distance
@@ -52,7 +50,13 @@ class MultiEntityTrajectoryComposer:
             for event in schedule.events:
                 if actor_id not in event.participant_ids:
                     continue
-                position = self._actor_position(actor_id, event.action, lanes, event.id)
+                position = self._actor_position(
+                    actor_id,
+                    event.action,
+                    lanes,
+                    event.id,
+                    event.participant_ids,
+                )
                 event_frame = frame(event.end)
                 states.append(EntityState(frame=event_frame, position=position))
                 primitives.append(
@@ -69,58 +73,145 @@ class MultiEntityTrajectoryComposer:
                 motion_primitives=primitives,
             )
 
-        for prop_id in prop_ids:
-            states = [EntityState(frame=1, position=self._prop_start(prop_id))]
+        for prop_index, prop_id in enumerate(prop_ids):
+            states = [EntityState(frame=1, position=self._prop_start(prop_index, len(prop_ids)))]
             attachments: list[AttachmentEvent] = []
+            primitives: list[MotionPrimitive] = []
             owner: str | None = None
             for event in schedule.events:
                 if prop_id not in event.target_ids:
                     continue
                 event_frame = frame(event.end)
-                if event.action == "carry":
+                if event.action in {"attach", "carry"}:
                     owner = event.participant_ids[0]
-                    hand_position = self._hand_position(lanes[owner])
-                    states.append(EntityState(frame=frame(event.start), position=hand_position))
-                    states.append(EntityState(frame=event_frame, position=hand_position))
-                    attachments.append(
-                        AttachmentEvent(
-                            frame=frame(event.start),
-                            subject_id=prop_id,
-                            object_id=owner,
-                            action="attach",
+                    if not any(
+                        item.action == "attach"
+                        and item.object_id == owner
+                        and item.frame == frame(event.start)
+                        for item in attachments
+                    ):
+                        attachments.append(
+                            AttachmentEvent(
+                                frame=frame(event.start),
+                                subject_id=prop_id,
+                                object_id=owner,
+                                action="attach",
+                                constraint_type="child_of",
+                                subtarget="hand.R",
+                            )
                         )
-                    )
                 elif event.action == "handoff":
                     owner = event.participant_ids[-1]
-                    states.append(EntityState(frame=event_frame, position=self._hand_position(lanes[owner])))
+                    states.append(
+                        EntityState(
+                            frame=event_frame,
+                            position=self._handoff_prop_position(owner, lanes),
+                        )
+                    )
+                    primitives.append(
+                        MotionPrimitive(
+                            type=self._primitive_for(event.action),
+                            start_frame=frame(event.start),
+                            end_frame=event_frame,
+                            parameters={"event_id": event.id, "prop_id": prop_id, "receiver_id": owner},
+                        )
+                    )
                     attachments.append(
                         AttachmentEvent(
                             frame=frame(event.start),
                             subject_id=prop_id,
                             object_id=owner,
                             action="transfer",
+                            constraint_type="child_of",
+                            subtarget="hand.R",
                         )
                     )
                 elif event.action == "return":
                     owner = event.participant_ids[-1] if len(event.participant_ids) > 1 else event.participant_ids[0]
-                    states.append(EntityState(frame=event_frame, position=self._hand_position(lanes[owner])))
                 elif event.action == "place":
                     owner = None
-                    states.append(EntityState(frame=event_frame, position=self._support_position(prop_id)))
+                    states.append(EntityState(frame=event_frame, position=self._support_position(prop_index, len(prop_ids))))
                     attachments.append(
                         AttachmentEvent(
                             frame=frame(event.end),
                             subject_id=prop_id,
                             object_id="support_surface",
                             action="detach",
+                            constraint_type="support_surface",
                         )
                     )
                     final_support_by_prop[prop_id] = "support_surface"
+                elif event.action == "detach":
+                    owner = None
+                    attachments.append(
+                        AttachmentEvent(
+                            frame=event_frame,
+                            subject_id=prop_id,
+                            object_id="support_surface",
+                            action="detach",
+                            constraint_type="support_surface",
+                        )
+                    )
+                elif event.action not in {"observe", "pause"}:
+                    # Non-transfer benchmark actions (walk, fly, press, and
+                    # similar) still need an observable object trajectory.
+                    # The provider supplies the semantic action; this layer
+                    # adds a bounded state at the event boundary without
+                    # inventing an attachment lifecycle.
+                    states.append(
+                        EntityState(
+                            frame=event_frame,
+                            position=self._prop_action_position(prop_index, len(prop_ids), event.action),
+                        )
+                    )
+                    primitives.append(
+                        MotionPrimitive(
+                            type=self._primitive_for(event.action),
+                            start_frame=frame(event.start),
+                            end_frame=event_frame,
+                            parameters={"event_id": event.id, "prop_id": prop_id},
+                        )
+                    )
+                elif prop_id in event.participant_ids or prop_id in event.target_ids:
+                    # Observation/pause is still an event in the benchmark;
+                    # retain it as a hold primitive so coverage can prove the
+                    # event reached an executable trajectory.
+                    primitives.append(
+                        MotionPrimitive(
+                            type="hold",
+                            start_frame=frame(event.start),
+                            end_frame=event_frame,
+                            parameters={"event_id": event.id, "prop_id": prop_id},
+                        )
+                    )
                 if owner:
                     current_owner_by_event[f"{event.id}:{prop_id}"] = owner
             entities[prop_id] = EntityTrajectory(
                 states=self._unique_states(states, frame_end),
+                motion_primitives=primitives,
                 attachment_events=attachments,
+            )
+
+        # Camera-only and environmental benchmark prompts still need a
+        # traceable trajectory entry.  A static state is honest: it says the
+        # subject is observed while the camera performs the requested cue,
+        # rather than pretending the subject itself moved.
+        known_ids = set(entities)
+        for index, entity in enumerate(interpretation.entities):
+            if entity.id in known_ids:
+                continue
+            entities[entity.id] = EntityTrajectory(
+                states=[
+                    EntityState(
+                        frame=1,
+                        position=(0.0, (float(index) - 0.5) * 1.5, 1.0),
+                    ),
+                    EntityState(
+                        frame=frame_end,
+                        position=(0.0, (float(index) - 0.5) * 1.5, 1.0),
+                    ),
+                ],
+                motion_primitives=[],
             )
 
         return DirectorTrajectories(
@@ -146,9 +237,18 @@ class MultiEntityTrajectoryComposer:
                     raise ValueError(f"lane collision between {left_id} and {right_id}: {distance:.3f}")
 
     @staticmethod
-    def _actor_position(actor_id: str, action: str, lanes: dict[str, Point3], event_id: str) -> Point3:
+    def _actor_position(
+        actor_id: str,
+        action: str,
+        lanes: dict[str, Point3],
+        event_id: str,
+        participants: list[str] | None = None,
+    ) -> Point3:
         start = lanes[actor_id]
         if action in {"handoff", "return"}:
+            participant_set = set(participants or [])
+            if {"actor_a", "actor_b"}.issubset(participant_set) and action == "handoff":
+                return (-0.35 if actor_id == "actor_a" else 0.35, 0.0, 0.0)
             if "actor_a_actor_b" in event_id:
                 return (-0.35 if actor_id == "actor_a" else 0.35, 0.0, 0.0)
             if "actor_b_actor_a" in event_id:
@@ -158,21 +258,45 @@ class MultiEntityTrajectoryComposer:
             return (2.5, start[1], 0.0)
         if action == "pause":
             return (-0.75, start[1], 0.0)
+        if action in {"walk", "run", "move", "jump", "fly", "climb"}:
+            return (1.5, start[1], 0.35 if action in {"jump", "fly"} else 0.0)
+        if action in {"sit", "stand", "observe"}:
+            return (-1.5, start[1], 0.0)
+        if action in {"drink", "sweep", "brush", "write", "pour", "press", "interact", "open", "close"}:
+            return (0.25, start[1], 0.0)
         return (-1.0, start[1], 0.0)
 
+    @staticmethod
+    def _handoff_prop_position(owner_id: str, lanes: dict[str, Point3]) -> Point3:
+        """Place a transferred prop at the receiver's declared hand lane."""
+
+        owner = lanes.get(owner_id, (0.0, 0.0, 0.0))
+        return (owner[0] + 0.65, owner[1] - 0.05, owner[2] + 1.35)
+
     @classmethod
-    def _hand_position(cls, actor_position: Point3) -> Point3:
-        return tuple(
-            coordinate + offset for coordinate, offset in zip(actor_position, cls._HAND_OFFSET)
-        )  # type: ignore[return-value]
+    def _prop_action_position(cls, prop_index: int, prop_count: int, action: str) -> Point3:
+        base = cls._prop_start(prop_index, prop_count)
+        if action in {"move", "walk", "run", "jump", "fly", "climb"}:
+            return (1.6, base[1], 1.15 if action in {"jump", "fly"} else base[2])
+        if action in {"press", "sweep", "brush", "write", "pour", "drink", "interact", "open", "close"}:
+            return (0.4, base[1], base[2])
+        if action == "bounce":
+            return (0.8, base[1], 2.0)
+        return base
 
     @staticmethod
-    def _prop_start(prop_id: str) -> Point3:
-        return (-3.0, -1.0 if prop_id.startswith("red") else 1.0, 0.8)
+    def _layout_y(prop_index: int, prop_count: int) -> float:
+        """Place props by authored order, never by color/name heuristics."""
+        count = max(1, int(prop_count))
+        return (float(prop_index) - (count - 1) / 2.0) * 2.0
 
-    @staticmethod
-    def _support_position(prop_id: str) -> Point3:
-        return (2.5, -1.0 if prop_id.startswith("red") else 1.0, 0.8)
+    @classmethod
+    def _prop_start(cls, prop_index: int, prop_count: int) -> Point3:
+        return (-3.0, cls._layout_y(prop_index, prop_count), 0.8)
+
+    @classmethod
+    def _support_position(cls, prop_index: int, prop_count: int) -> Point3:
+        return (2.5, cls._layout_y(prop_index, prop_count), 0.8)
 
     @staticmethod
     def _primitive_for(action: str) -> str:
@@ -182,6 +306,16 @@ class MultiEntityTrajectoryComposer:
             "return": "bezier",
             "place": "zigzag",
             "pause": "bezier",
+            "observe": "hold",
+            "sit": "hold",
+            "stand": "ease_in_out",
+            "walk": "s_curve",
+            "run": "s_curve",
+            "move": "s_curve",
+            "jump": "arc",
+            "fly": "arc",
+            "climb": "arc",
+            "bounce": "arc",
         }.get(action, "bezier")
 
     @staticmethod
