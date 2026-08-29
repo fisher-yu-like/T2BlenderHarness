@@ -1,0 +1,39 @@
+{
+  "cases": 140,
+  "dataset_id": "trajectory-v5-agent-codegen",
+  "dev_policy": "six disjoint paired holdout families; dev is never edited or used to construct labels",
+  "families": {
+    "dev": [
+      "dev_three_actor_two_prop",
+      "dev_two_actor_three_prop",
+      "dev_three_actor_three_prop",
+      "dev_role_reversal",
+      "dev_occlusion_countermotion",
+      "dev_four_prop_camera_constraint"
+    ],
+    "test": [
+      "test_role_reversal_final_owner",
+      "test_counterfactual_camera_visibility"
+    ],
+    "train": [
+      "sequential_transfers",
+      "repeated_handoffs",
+      "concurrent_independent_work",
+      "occlusion_reveal",
+      "role_swap_pause_return_crossing",
+      "subjectless_handoff"
+    ]
+  },
+  "fingerprint": "263ace138a7187cc841bab35e926d64701f41341fdaf763105a1f3dc3d6e8e87",
+  "generator_version": "agent-codegen-dataset-v1",
+  "prompt_policy": "every case has a unique prompt hash and multi-entity scene with at least two actors and two props",
+  "round_count": 6,
+  "schema_version": "trajectory-dataset-v5-agent-codegen",
+  "splits": {
+    "dev": 60,
+    "test": 20,
+    "train": 60
+  },
+  "test_policy": "twenty disjoint blind cases; test is milestone-only and cannot enter proposal or acceptance selection",
+  "train_policy": "six disjoint ten-case families; only repeated failures across two train cases may propose a patch"
+}

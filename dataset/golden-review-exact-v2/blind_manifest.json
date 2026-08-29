@@ -1,0 +1,516 @@
+{
+  "mapping": {
+    "vbench2-dev-01-14": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "a68dc4de4fdfb165c37e9c673b44a3ac6752b65fcbe984b8747dda4fa4048839",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-01-14"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "a68dc4de4fdfb165c37e9c673b44a3ac6752b65fcbe984b8747dda4fa4048839",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-01-14"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "a68dc4de4fdfb165c37e9c673b44a3ac6752b65fcbe984b8747dda4fa4048839",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-01-14"
+      }
+    },
+    "vbench2-dev-02-12": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "2ce859c03122862cab3527ff6766999ed95c7367abd446ec910ace71dc1ce1ce",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-02-12"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "2ce859c03122862cab3527ff6766999ed95c7367abd446ec910ace71dc1ce1ce",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-02-12"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "2ce859c03122862cab3527ff6766999ed95c7367abd446ec910ace71dc1ce1ce",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-02-12"
+      }
+    },
+    "vbench2-dev-02-14": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "da4b33679552b569e03cf327b9180408c8e303cef841dc64933cd7dcbd3558c3",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-02-14"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "da4b33679552b569e03cf327b9180408c8e303cef841dc64933cd7dcbd3558c3",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-02-14"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "da4b33679552b569e03cf327b9180408c8e303cef841dc64933cd7dcbd3558c3",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-02-14"
+      }
+    },
+    "vbench2-dev-02-16": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "c08df4b7d63770f42774bb73e1b4414d1c1da1d32dfa3f9f955d12de7aca7d89",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-02-16"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "c08df4b7d63770f42774bb73e1b4414d1c1da1d32dfa3f9f955d12de7aca7d89",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-02-16"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "c08df4b7d63770f42774bb73e1b4414d1c1da1d32dfa3f9f955d12de7aca7d89",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-02-16"
+      }
+    },
+    "vbench2-dev-03-17": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "81dcc2076b837e22b296e65c18fd2b910686f8469535b2ec3b94f8869de87267",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-03-17"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "81dcc2076b837e22b296e65c18fd2b910686f8469535b2ec3b94f8869de87267",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-03-17"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "81dcc2076b837e22b296e65c18fd2b910686f8469535b2ec3b94f8869de87267",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-03-17"
+      }
+    },
+    "vbench2-dev-03-18": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "f3cb309bd8befecb5e4e16e29852facdfdad84a0e2a09f32f86020a81f42dabb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-03-18"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "f3cb309bd8befecb5e4e16e29852facdfdad84a0e2a09f32f86020a81f42dabb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-03-18"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "f3cb309bd8befecb5e4e16e29852facdfdad84a0e2a09f32f86020a81f42dabb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-03-18"
+      }
+    },
+    "vbench2-dev-03-19": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "40ad7dc1f281a1bbb29764a8e82c5a722d0ec40491785df84904b2f56ed9b7f3",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-03-19"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "40ad7dc1f281a1bbb29764a8e82c5a722d0ec40491785df84904b2f56ed9b7f3",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-03-19"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "40ad7dc1f281a1bbb29764a8e82c5a722d0ec40491785df84904b2f56ed9b7f3",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-03-19"
+      }
+    },
+    "vbench2-dev-04-15": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "8c2dfcb7557a5239c84c2b242aa1f1228115b28ea42b86aab61550b498346524",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-04-15"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "8c2dfcb7557a5239c84c2b242aa1f1228115b28ea42b86aab61550b498346524",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-04-15"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "8c2dfcb7557a5239c84c2b242aa1f1228115b28ea42b86aab61550b498346524",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-04-15"
+      }
+    },
+    "vbench2-dev-04-16": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "9a951cdc31e894a8556a4d91a76db58101c7f39b67c897d2a1ebad9211bda5fa",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-04-16"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "9a951cdc31e894a8556a4d91a76db58101c7f39b67c897d2a1ebad9211bda5fa",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-04-16"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "9a951cdc31e894a8556a4d91a76db58101c7f39b67c897d2a1ebad9211bda5fa",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-04-16"
+      }
+    },
+    "vbench2-dev-05-13": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "e7df6eb179cb1092f1dfecf0a1316c1d1ec0893e91b6b0df7bcbc4de3eaa8ce2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-05-13"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "e7df6eb179cb1092f1dfecf0a1316c1d1ec0893e91b6b0df7bcbc4de3eaa8ce2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-05-13"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "e7df6eb179cb1092f1dfecf0a1316c1d1ec0893e91b6b0df7bcbc4de3eaa8ce2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-05-13"
+      }
+    },
+    "vbench2-dev-05-17": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "6be8b51867d0b3e7356d64a68ab7eff4030e5e1c265bbbb20077e7e46e34d0ca",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-05-17"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "6be8b51867d0b3e7356d64a68ab7eff4030e5e1c265bbbb20077e7e46e34d0ca",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-05-17"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "6be8b51867d0b3e7356d64a68ab7eff4030e5e1c265bbbb20077e7e46e34d0ca",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-05-17"
+      }
+    },
+    "vbench2-dev-05-18": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "76b5b7321693705e5305343d5b33aa42f91c03aba96ff59fe4c4c70998aa655a",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-05-18"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "76b5b7321693705e5305343d5b33aa42f91c03aba96ff59fe4c4c70998aa655a",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-05-18"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "76b5b7321693705e5305343d5b33aa42f91c03aba96ff59fe4c4c70998aa655a",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-05-18"
+      }
+    },
+    "vbench2-dev-05-20": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "c08e750f11f473955104963631633960c3ac25aa5a79b91f5da2eb4ee63a58dc",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-05-20"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "c08e750f11f473955104963631633960c3ac25aa5a79b91f5da2eb4ee63a58dc",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-05-20"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "c08e750f11f473955104963631633960c3ac25aa5a79b91f5da2eb4ee63a58dc",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-05-20"
+      }
+    },
+    "vbench2-dev-06-19": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "2627c95b22735be0ab1203e585027f3b44117ec146132ccd6631761379122e9b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\dev\\vbench2-dev-06-19"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "2627c95b22735be0ab1203e585027f3b44117ec146132ccd6631761379122e9b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\dev\\vbench2-dev-06-19"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "2627c95b22735be0ab1203e585027f3b44117ec146132ccd6631761379122e9b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\dev\\vbench2-dev-06-19"
+      }
+    },
+    "vbench2-train-01-04": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "2e70c3c98d1235f100791d366170045504b8baff9fb86f74cbb68ebe3139725b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-01-04"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "2e70c3c98d1235f100791d366170045504b8baff9fb86f74cbb68ebe3139725b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-01-04"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "2e70c3c98d1235f100791d366170045504b8baff9fb86f74cbb68ebe3139725b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-01-04"
+      }
+    },
+    "vbench2-train-01-09": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "b6b08f39e7d1491af57e4bf0138e55bd5abe1095518a7125e4587fe844fcebdd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-01-09"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "b6b08f39e7d1491af57e4bf0138e55bd5abe1095518a7125e4587fe844fcebdd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-01-09"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "b6b08f39e7d1491af57e4bf0138e55bd5abe1095518a7125e4587fe844fcebdd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-01-09"
+      }
+    },
+    "vbench2-train-02-03": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "b76f6595e21422292cab5168b70d9207d110f2a51cd7952fbc4e95a2b795cccd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-02-03"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "b76f6595e21422292cab5168b70d9207d110f2a51cd7952fbc4e95a2b795cccd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-02-03"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "b76f6595e21422292cab5168b70d9207d110f2a51cd7952fbc4e95a2b795cccd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-02-03"
+      }
+    },
+    "vbench2-train-02-04": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "f587ec41cf4d2f0ccfd694067206ca964be284e2aff096aadfda206a69f10213",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-02-04"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "f587ec41cf4d2f0ccfd694067206ca964be284e2aff096aadfda206a69f10213",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-02-04"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "f587ec41cf4d2f0ccfd694067206ca964be284e2aff096aadfda206a69f10213",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-02-04"
+      }
+    },
+    "vbench2-train-02-05": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "8416eb3e0a5d6c683d57bf0076a0bd7b1f6e9a739f77f69efb9593079b74171e",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-02-05"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "8416eb3e0a5d6c683d57bf0076a0bd7b1f6e9a739f77f69efb9593079b74171e",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-02-05"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "8416eb3e0a5d6c683d57bf0076a0bd7b1f6e9a739f77f69efb9593079b74171e",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-02-05"
+      }
+    },
+    "vbench2-train-02-10": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "120e9d6c264b483a9983a49a1155b121437576ac0de403df3eb5564c90aefb55",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-02-10"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "120e9d6c264b483a9983a49a1155b121437576ac0de403df3eb5564c90aefb55",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-02-10"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "120e9d6c264b483a9983a49a1155b121437576ac0de403df3eb5564c90aefb55",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-02-10"
+      }
+    },
+    "vbench2-train-03-01": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "cc49f2e5600c6fe3077dfb3908155ed7270bfe2fd54925456b11b5251dd1e54b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-03-01"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "cc49f2e5600c6fe3077dfb3908155ed7270bfe2fd54925456b11b5251dd1e54b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-03-01"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "cc49f2e5600c6fe3077dfb3908155ed7270bfe2fd54925456b11b5251dd1e54b",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-03-01"
+      }
+    },
+    "vbench2-train-03-06": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "e47dabdec8ff6274350e8388b6872174bcada0481b657050d0d0eef14ea07c80",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-03-06"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "e47dabdec8ff6274350e8388b6872174bcada0481b657050d0d0eef14ea07c80",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-03-06"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "e47dabdec8ff6274350e8388b6872174bcada0481b657050d0d0eef14ea07c80",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-03-06"
+      }
+    },
+    "vbench2-train-03-08": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "1014438c247f16905c68b56ceceea35735fb555f8c8b731c6bc355f6c137baf2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-03-08"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "1014438c247f16905c68b56ceceea35735fb555f8c8b731c6bc355f6c137baf2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-03-08"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "1014438c247f16905c68b56ceceea35735fb555f8c8b731c6bc355f6c137baf2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-03-08"
+      }
+    },
+    "vbench2-train-04-09": {
+      "sample_a": {
+        "arm": "direct_code",
+        "render_prompt_hash": "69c14470ffa99a6de4f672d7b441cd82c54ceb857733e1562761acb7e47fcab0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-04-09"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "69c14470ffa99a6de4f672d7b441cd82c54ceb857733e1562761acb7e47fcab0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-04-09"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "69c14470ffa99a6de4f672d7b441cd82c54ceb857733e1562761acb7e47fcab0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-04-09"
+      }
+    },
+    "vbench2-train-05-01": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "b149bfa3a54bd30c9e89e8c1fbfb53bcaf0da1b3ebabc80846258dfef3fcb1ed",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-05-01"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "b149bfa3a54bd30c9e89e8c1fbfb53bcaf0da1b3ebabc80846258dfef3fcb1ed",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-05-01"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "b149bfa3a54bd30c9e89e8c1fbfb53bcaf0da1b3ebabc80846258dfef3fcb1ed",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-05-01"
+      }
+    },
+    "vbench2-train-05-04": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "16cc8c828b8804b1716e73f0037fa55e146fe4839f14613c0d256d130392b3ec",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-05-04"
+      },
+      "sample_b": {
+        "arm": "trained",
+        "render_prompt_hash": "16cc8c828b8804b1716e73f0037fa55e146fe4839f14613c0d256d130392b3ec",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-05-04"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "16cc8c828b8804b1716e73f0037fa55e146fe4839f14613c0d256d130392b3ec",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-05-04"
+      }
+    },
+    "vbench2-train-05-07": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "46dea50366dcf708512f95a6fd1d86def1e0735d5b631e0a111e116e4c780029",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-05-07"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "46dea50366dcf708512f95a6fd1d86def1e0735d5b631e0a111e116e4c780029",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-05-07"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "46dea50366dcf708512f95a6fd1d86def1e0735d5b631e0a111e116e4c780029",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-05-07"
+      }
+    },
+    "vbench2-train-05-10": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "22dcc02e93d3a6d1c837446a84f61737cdf3f356ccd9084060161075f6c303bb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-05-10"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "22dcc02e93d3a6d1c837446a84f61737cdf3f356ccd9084060161075f6c303bb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-05-10"
+      },
+      "sample_c": {
+        "arm": "trained",
+        "render_prompt_hash": "22dcc02e93d3a6d1c837446a84f61737cdf3f356ccd9084060161075f6c303bb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-05-10"
+      }
+    },
+    "vbench2-train-06-03": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "7dbd370fe35a7f56ba8bc608a20a6e266746c874ef22835bfa0bcc14eaea4fcd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-06-03"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "7dbd370fe35a7f56ba8bc608a20a6e266746c874ef22835bfa0bcc14eaea4fcd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-06-03"
+      },
+      "sample_c": {
+        "arm": "direct_code",
+        "render_prompt_hash": "7dbd370fe35a7f56ba8bc608a20a6e266746c874ef22835bfa0bcc14eaea4fcd",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-06-03"
+      }
+    },
+    "vbench2-train-06-08": {
+      "sample_a": {
+        "arm": "trained",
+        "render_prompt_hash": "24fc97cbf5cb2ac7e61fe8c2f8f43acaa14f71be1e441f2070189cb84774cdb1",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\trained\\real\\train\\vbench2-train-06-08"
+      },
+      "sample_b": {
+        "arm": "direct_code",
+        "render_prompt_hash": "24fc97cbf5cb2ac7e61fe8c2f8f43acaa14f71be1e441f2070189cb84774cdb1",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\direct_code\\real\\train\\vbench2-train-06-08"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "24fc97cbf5cb2ac7e61fe8c2f8f43acaa14f71be1e441f2070189cb84774cdb1",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\preflight\\golden-review-exact-v2\\arms\\pretrain\\real\\train\\vbench2-train-06-08"
+      }
+    }
+  },
+  "seed": 20260828,
+  "version": "golden-review-v1"
+}

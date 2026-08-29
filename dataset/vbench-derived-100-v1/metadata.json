@@ -1,0 +1,528 @@
+{
+  "adaptation_policy": "Source prompt is preserved verbatim in source_prompt; executable prompt adds a fixed two-actor/two-proxy contract so trajectories and camera choreography are observable by this Blender Harness.",
+  "cases": 100,
+  "category_counts": {
+    "camera_motion": 20,
+    "complex_plot": 20,
+    "dynamic_spatial_relationship": 20,
+    "human_interaction": 20,
+    "motion_order": 20
+  },
+  "comparison_policy": "The exact same 100 records, render settings, Blender binary, evaluator version, and sampled-frame policy are used for pretraining baseline and current Harness.",
+  "dataset_id": "vbench-derived-100-v1",
+  "fingerprint": "1462a9b077e403266213d18be52ec2845cc1ca2d7d189ae8443613a581117995",
+  "generator_version": "vbench-derived-builder-v1",
+  "schema_version": "trajectory-dataset-v4-multi",
+  "selected_sources": [
+    {
+      "case_id": "vbench2-camera_motion-001",
+      "source_dimension": "Camera_Motion",
+      "source_index": 0
+    },
+    {
+      "case_id": "vbench2-camera_motion-002",
+      "source_dimension": "Camera_Motion",
+      "source_index": 6
+    },
+    {
+      "case_id": "vbench2-camera_motion-003",
+      "source_dimension": "Camera_Motion",
+      "source_index": 11
+    },
+    {
+      "case_id": "vbench2-camera_motion-004",
+      "source_dimension": "Camera_Motion",
+      "source_index": 17
+    },
+    {
+      "case_id": "vbench2-camera_motion-005",
+      "source_dimension": "Camera_Motion",
+      "source_index": 23
+    },
+    {
+      "case_id": "vbench2-camera_motion-006",
+      "source_dimension": "Camera_Motion",
+      "source_index": 28
+    },
+    {
+      "case_id": "vbench2-camera_motion-007",
+      "source_dimension": "Camera_Motion",
+      "source_index": 34
+    },
+    {
+      "case_id": "vbench2-camera_motion-008",
+      "source_dimension": "Camera_Motion",
+      "source_index": 39
+    },
+    {
+      "case_id": "vbench2-camera_motion-009",
+      "source_dimension": "Camera_Motion",
+      "source_index": 45
+    },
+    {
+      "case_id": "vbench2-camera_motion-010",
+      "source_dimension": "Camera_Motion",
+      "source_index": 51
+    },
+    {
+      "case_id": "vbench2-camera_motion-011",
+      "source_dimension": "Camera_Motion",
+      "source_index": 56
+    },
+    {
+      "case_id": "vbench2-camera_motion-012",
+      "source_dimension": "Camera_Motion",
+      "source_index": 62
+    },
+    {
+      "case_id": "vbench2-camera_motion-013",
+      "source_dimension": "Camera_Motion",
+      "source_index": 68
+    },
+    {
+      "case_id": "vbench2-camera_motion-014",
+      "source_dimension": "Camera_Motion",
+      "source_index": 73
+    },
+    {
+      "case_id": "vbench2-camera_motion-015",
+      "source_dimension": "Camera_Motion",
+      "source_index": 79
+    },
+    {
+      "case_id": "vbench2-camera_motion-016",
+      "source_dimension": "Camera_Motion",
+      "source_index": 84
+    },
+    {
+      "case_id": "vbench2-camera_motion-017",
+      "source_dimension": "Camera_Motion",
+      "source_index": 90
+    },
+    {
+      "case_id": "vbench2-camera_motion-018",
+      "source_dimension": "Camera_Motion",
+      "source_index": 96
+    },
+    {
+      "case_id": "vbench2-camera_motion-019",
+      "source_dimension": "Camera_Motion",
+      "source_index": 101
+    },
+    {
+      "case_id": "vbench2-camera_motion-020",
+      "source_dimension": "Camera_Motion",
+      "source_index": 107
+    },
+    {
+      "case_id": "vbench2-human_interaction-021",
+      "source_dimension": "Human_Interaction",
+      "source_index": 662
+    },
+    {
+      "case_id": "vbench2-human_interaction-022",
+      "source_dimension": "Human_Interaction",
+      "source_index": 667
+    },
+    {
+      "case_id": "vbench2-human_interaction-023",
+      "source_dimension": "Human_Interaction",
+      "source_index": 672
+    },
+    {
+      "case_id": "vbench2-human_interaction-024",
+      "source_dimension": "Human_Interaction",
+      "source_index": 678
+    },
+    {
+      "case_id": "vbench2-human_interaction-025",
+      "source_dimension": "Human_Interaction",
+      "source_index": 683
+    },
+    {
+      "case_id": "vbench2-human_interaction-026",
+      "source_dimension": "Human_Interaction",
+      "source_index": 688
+    },
+    {
+      "case_id": "vbench2-human_interaction-027",
+      "source_dimension": "Human_Interaction",
+      "source_index": 693
+    },
+    {
+      "case_id": "vbench2-human_interaction-028",
+      "source_dimension": "Human_Interaction",
+      "source_index": 698
+    },
+    {
+      "case_id": "vbench2-human_interaction-029",
+      "source_dimension": "Human_Interaction",
+      "source_index": 704
+    },
+    {
+      "case_id": "vbench2-human_interaction-030",
+      "source_dimension": "Human_Interaction",
+      "source_index": 709
+    },
+    {
+      "case_id": "vbench2-human_interaction-031",
+      "source_dimension": "Human_Interaction",
+      "source_index": 714
+    },
+    {
+      "case_id": "vbench2-human_interaction-032",
+      "source_dimension": "Human_Interaction",
+      "source_index": 719
+    },
+    {
+      "case_id": "vbench2-human_interaction-033",
+      "source_dimension": "Human_Interaction",
+      "source_index": 725
+    },
+    {
+      "case_id": "vbench2-human_interaction-034",
+      "source_dimension": "Human_Interaction",
+      "source_index": 730
+    },
+    {
+      "case_id": "vbench2-human_interaction-035",
+      "source_dimension": "Human_Interaction",
+      "source_index": 735
+    },
+    {
+      "case_id": "vbench2-human_interaction-036",
+      "source_dimension": "Human_Interaction",
+      "source_index": 740
+    },
+    {
+      "case_id": "vbench2-human_interaction-037",
+      "source_dimension": "Human_Interaction",
+      "source_index": 745
+    },
+    {
+      "case_id": "vbench2-human_interaction-038",
+      "source_dimension": "Human_Interaction",
+      "source_index": 751
+    },
+    {
+      "case_id": "vbench2-human_interaction-039",
+      "source_dimension": "Human_Interaction",
+      "source_index": 756
+    },
+    {
+      "case_id": "vbench2-human_interaction-040",
+      "source_dimension": "Human_Interaction",
+      "source_index": 761
+    },
+    {
+      "case_id": "vbench2-motion_order-041",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 926
+    },
+    {
+      "case_id": "vbench2-motion_order-042",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 931
+    },
+    {
+      "case_id": "vbench2-motion_order-043",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 936
+    },
+    {
+      "case_id": "vbench2-motion_order-044",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 941
+    },
+    {
+      "case_id": "vbench2-motion_order-045",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 947
+    },
+    {
+      "case_id": "vbench2-motion_order-046",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 952
+    },
+    {
+      "case_id": "vbench2-motion_order-047",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 957
+    },
+    {
+      "case_id": "vbench2-motion_order-048",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 962
+    },
+    {
+      "case_id": "vbench2-motion_order-049",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 967
+    },
+    {
+      "case_id": "vbench2-motion_order-050",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 972
+    },
+    {
+      "case_id": "vbench2-motion_order-051",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 978
+    },
+    {
+      "case_id": "vbench2-motion_order-052",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 983
+    },
+    {
+      "case_id": "vbench2-motion_order-053",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 988
+    },
+    {
+      "case_id": "vbench2-motion_order-054",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 993
+    },
+    {
+      "case_id": "vbench2-motion_order-055",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 998
+    },
+    {
+      "case_id": "vbench2-motion_order-056",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1003
+    },
+    {
+      "case_id": "vbench2-motion_order-057",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1009
+    },
+    {
+      "case_id": "vbench2-motion_order-058",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1014
+    },
+    {
+      "case_id": "vbench2-motion_order-059",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1019
+    },
+    {
+      "case_id": "vbench2-motion_order-060",
+      "source_dimension": "Motion_Order_Understanding",
+      "source_index": 1024
+    },
+    {
+      "case_id": "vbench2-complex_plot-061",
+      "source_dimension": "Complex_Plot",
+      "source_index": 138
+    },
+    {
+      "case_id": "vbench2-complex_plot-062",
+      "source_dimension": "Complex_Plot",
+      "source_index": 141
+    },
+    {
+      "case_id": "vbench2-complex_plot-063",
+      "source_dimension": "Complex_Plot",
+      "source_index": 144
+    },
+    {
+      "case_id": "vbench2-complex_plot-064",
+      "source_dimension": "Complex_Plot",
+      "source_index": 147
+    },
+    {
+      "case_id": "vbench2-complex_plot-065",
+      "source_dimension": "Complex_Plot",
+      "source_index": 150
+    },
+    {
+      "case_id": "vbench2-complex_plot-066",
+      "source_dimension": "Complex_Plot",
+      "source_index": 154
+    },
+    {
+      "case_id": "vbench2-complex_plot-067",
+      "source_dimension": "Complex_Plot",
+      "source_index": 157
+    },
+    {
+      "case_id": "vbench2-complex_plot-068",
+      "source_dimension": "Complex_Plot",
+      "source_index": 160
+    },
+    {
+      "case_id": "vbench2-complex_plot-069",
+      "source_dimension": "Complex_Plot",
+      "source_index": 163
+    },
+    {
+      "case_id": "vbench2-complex_plot-070",
+      "source_dimension": "Complex_Plot",
+      "source_index": 166
+    },
+    {
+      "case_id": "vbench2-complex_plot-071",
+      "source_dimension": "Complex_Plot",
+      "source_index": 169
+    },
+    {
+      "case_id": "vbench2-complex_plot-072",
+      "source_dimension": "Complex_Plot",
+      "source_index": 172
+    },
+    {
+      "case_id": "vbench2-complex_plot-073",
+      "source_dimension": "Complex_Plot",
+      "source_index": 175
+    },
+    {
+      "case_id": "vbench2-complex_plot-074",
+      "source_dimension": "Complex_Plot",
+      "source_index": 178
+    },
+    {
+      "case_id": "vbench2-complex_plot-075",
+      "source_dimension": "Complex_Plot",
+      "source_index": 181
+    },
+    {
+      "case_id": "vbench2-complex_plot-076",
+      "source_dimension": "Complex_Plot",
+      "source_index": 185
+    },
+    {
+      "case_id": "vbench2-complex_plot-077",
+      "source_dimension": "Complex_Plot",
+      "source_index": 188
+    },
+    {
+      "case_id": "vbench2-complex_plot-078",
+      "source_dimension": "Complex_Plot",
+      "source_index": 191
+    },
+    {
+      "case_id": "vbench2-complex_plot-079",
+      "source_dimension": "Complex_Plot",
+      "source_index": 194
+    },
+    {
+      "case_id": "vbench2-complex_plot-080",
+      "source_dimension": "Complex_Plot",
+      "source_index": 197
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-081",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 352
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-082",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 356
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-083",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 359
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-084",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 363
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-085",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 366
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-086",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 370
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-087",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 373
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-088",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 377
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-089",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 381
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-090",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 384
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-091",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 388
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-092",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 391
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-093",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 395
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-094",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 399
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-095",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 402
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-096",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 406
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-097",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 409
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-098",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 413
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-099",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 416
+    },
+    {
+      "case_id": "vbench2-dynamic_spatial_relationship-100",
+      "source_dimension": "Dynamic_Spatial_Relationship",
+      "source_index": 420
+    }
+  ],
+  "source_dataset": "VBench-2.0",
+  "source_file": "VBench2_full_info.json",
+  "source_sha256": "115e54e02ffbeee118ffe598fb497e9a4e40232a4ac4e0a3fd4e33867590a272",
+  "source_url": "https://raw.githubusercontent.com/Vchitect/VBench/master/VBench-2.0/vbench2/VBench2_full_info.json",
+  "split_policy": "Each source dimension contributes 14 train and 6 held-out dev prompts; dev is never used for Harness patch selection.",
+  "splits": {
+    "dev": 30,
+    "test": 0,
+    "train": 70
+  }
+}

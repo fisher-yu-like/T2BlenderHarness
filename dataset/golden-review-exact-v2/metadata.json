@@ -1,0 +1,32 @@
+{
+  "annotation_granularity": "case_sample",
+  "annotators": [],
+  "arm_count": 3,
+  "arms_hidden": true,
+  "benchmark_prompt_count": 30,
+  "case_count": 30,
+  "comparison_only": false,
+  "comparison_only_reason": null,
+  "dataset_id": "golden-review-exact-v2",
+  "fingerprint": "736da99b370690e70a24d77c99db2b5addd017fe93d92ce99fd2b6ada613d7de",
+  "inter_rater_agreement": {},
+  "patch_selection_allowed": false,
+  "prompt_policy": "use source_prompt verbatim when present; never rewrite benchmark prompt for human review",
+  "render_prompt_mismatch_count": 0,
+  "reproducibility_seed": 20260828,
+  "review_splits": [
+    "dev",
+    "train"
+  ],
+  "run_manifest_prompt_hash_policy": "every available run_manifest.prompt_hash must equal sha256(displayed prompt)",
+  "sample_labels": [
+    "sample_a",
+    "sample_b",
+    "sample_c"
+  ],
+  "source_dataset": [
+    "VBench-2.0"
+  ],
+  "status": "awaiting_human_annotations",
+  "video_count": 90
+}

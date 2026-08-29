@@ -1,0 +1,516 @@
+{
+  "mapping": {
+    "vbench2-camera_motion-001": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "0472024df49b885227b7e4d999bb9194ca2f6cdbbb639e78b14766cd3c834c7c",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-camera_motion-001"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "0472024df49b885227b7e4d999bb9194ca2f6cdbbb639e78b14766cd3c834c7c",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-camera_motion-001"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "0472024df49b885227b7e4d999bb9194ca2f6cdbbb639e78b14766cd3c834c7c",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-camera_motion-001"
+      }
+    },
+    "vbench2-camera_motion-005": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "5fd68157275d2d1f46cf79bd1f22e0810f3f97de9cd030d23baec7a6992216a2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-camera_motion-005"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "5fd68157275d2d1f46cf79bd1f22e0810f3f97de9cd030d23baec7a6992216a2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-camera_motion-005"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "5fd68157275d2d1f46cf79bd1f22e0810f3f97de9cd030d23baec7a6992216a2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-camera_motion-005"
+      }
+    },
+    "vbench2-camera_motion-008": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "abfe3e5d4301b08d245af87b156e58e1efadac74b01296f8001b3b14f7ed50aa",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-camera_motion-008"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "abfe3e5d4301b08d245af87b156e58e1efadac74b01296f8001b3b14f7ed50aa",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-camera_motion-008"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "abfe3e5d4301b08d245af87b156e58e1efadac74b01296f8001b3b14f7ed50aa",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-camera_motion-008"
+      }
+    },
+    "vbench2-camera_motion-009": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "ee84d52293fbff7bd3cf557fb497e269ed82c56a8ace8aa3728bcfc4830d61f9",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-camera_motion-009"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "ee84d52293fbff7bd3cf557fb497e269ed82c56a8ace8aa3728bcfc4830d61f9",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-camera_motion-009"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "ee84d52293fbff7bd3cf557fb497e269ed82c56a8ace8aa3728bcfc4830d61f9",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-camera_motion-009"
+      }
+    },
+    "vbench2-camera_motion-014": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "45007cc9ed964c9d88d2706fa8ee0f7bc0a6285883a3920920cbd54a37aaae69",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-camera_motion-014"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "45007cc9ed964c9d88d2706fa8ee0f7bc0a6285883a3920920cbd54a37aaae69",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-camera_motion-014"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "45007cc9ed964c9d88d2706fa8ee0f7bc0a6285883a3920920cbd54a37aaae69",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-camera_motion-014"
+      }
+    },
+    "vbench2-camera_motion-017": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "1f5b9414dc9459d5d358e65a3dccf34bae8344c97879e5217259ebd2a2b54c8d",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-camera_motion-017"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "1f5b9414dc9459d5d358e65a3dccf34bae8344c97879e5217259ebd2a2b54c8d",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-camera_motion-017"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "1f5b9414dc9459d5d358e65a3dccf34bae8344c97879e5217259ebd2a2b54c8d",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-camera_motion-017"
+      }
+    },
+    "vbench2-complex_plot-067": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "389432e2e95db721dbf8c2bb8283d6fe5b7fc79890fa3465d102e10c1b83e2bb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-complex_plot-067"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "389432e2e95db721dbf8c2bb8283d6fe5b7fc79890fa3465d102e10c1b83e2bb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-complex_plot-067"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "389432e2e95db721dbf8c2bb8283d6fe5b7fc79890fa3465d102e10c1b83e2bb",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-complex_plot-067"
+      }
+    },
+    "vbench2-complex_plot-070": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "e9b879fe2a699827723cd159ae0c54a7601f4edd4f5056e18471a76d5b93ecde",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-complex_plot-070"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "e9b879fe2a699827723cd159ae0c54a7601f4edd4f5056e18471a76d5b93ecde",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-complex_plot-070"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "e9b879fe2a699827723cd159ae0c54a7601f4edd4f5056e18471a76d5b93ecde",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-complex_plot-070"
+      }
+    },
+    "vbench2-complex_plot-072": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "c65bb52bd9f1c71d4f2004b4bbd79118b7983dcc7bf3cd06d6a332aa9dba8304",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-complex_plot-072"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "c65bb52bd9f1c71d4f2004b4bbd79118b7983dcc7bf3cd06d6a332aa9dba8304",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-complex_plot-072"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "c65bb52bd9f1c71d4f2004b4bbd79118b7983dcc7bf3cd06d6a332aa9dba8304",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-complex_plot-072"
+      }
+    },
+    "vbench2-complex_plot-075": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "de86c6a7817d8a2dc0a4cea81417df7b5b084ab7243850c837caee23edb9d845",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-complex_plot-075"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "de86c6a7817d8a2dc0a4cea81417df7b5b084ab7243850c837caee23edb9d845",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-complex_plot-075"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "de86c6a7817d8a2dc0a4cea81417df7b5b084ab7243850c837caee23edb9d845",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-complex_plot-075"
+      }
+    },
+    "vbench2-complex_plot-079": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "72a433eb5af893a9fd5791819a4afc1267f8c8cc81a804d8920d446d0790f203",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-complex_plot-079"
+      },
+      "sample_b": {
+        "arm": "direct",
+        "render_prompt_hash": "72a433eb5af893a9fd5791819a4afc1267f8c8cc81a804d8920d446d0790f203",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-complex_plot-079"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "72a433eb5af893a9fd5791819a4afc1267f8c8cc81a804d8920d446d0790f203",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-complex_plot-079"
+      }
+    },
+    "vbench2-complex_plot-080": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "22b3e6748ba34133b6feb01504ab3ecae9dde5ac1969e1dc8afa573e94916c91",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-complex_plot-080"
+      },
+      "sample_b": {
+        "arm": "direct",
+        "render_prompt_hash": "22b3e6748ba34133b6feb01504ab3ecae9dde5ac1969e1dc8afa573e94916c91",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-complex_plot-080"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "22b3e6748ba34133b6feb01504ab3ecae9dde5ac1969e1dc8afa573e94916c91",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-complex_plot-080"
+      }
+    },
+    "vbench2-dynamic_spatial_relationship-082": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "bd72250ff6908c5dd50cea6c7fdfea7423e95a151396a6dbcc1c8ea4bfdb57fe",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-dynamic_spatial_relationship-082"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "bd72250ff6908c5dd50cea6c7fdfea7423e95a151396a6dbcc1c8ea4bfdb57fe",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-dynamic_spatial_relationship-082"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "bd72250ff6908c5dd50cea6c7fdfea7423e95a151396a6dbcc1c8ea4bfdb57fe",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-dynamic_spatial_relationship-082"
+      }
+    },
+    "vbench2-dynamic_spatial_relationship-089": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "756502a0eba076931ce853b4227a63055cdf717a5c5c0892f5e1550e5f682584",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-dynamic_spatial_relationship-089"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "756502a0eba076931ce853b4227a63055cdf717a5c5c0892f5e1550e5f682584",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-dynamic_spatial_relationship-089"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "756502a0eba076931ce853b4227a63055cdf717a5c5c0892f5e1550e5f682584",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-dynamic_spatial_relationship-089"
+      }
+    },
+    "vbench2-dynamic_spatial_relationship-094": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "300059ec529a5dd9abcfe0334a766b4a5e70b271ab62b3a783274afbd08437c0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-dynamic_spatial_relationship-094"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "300059ec529a5dd9abcfe0334a766b4a5e70b271ab62b3a783274afbd08437c0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-dynamic_spatial_relationship-094"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "300059ec529a5dd9abcfe0334a766b4a5e70b271ab62b3a783274afbd08437c0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-dynamic_spatial_relationship-094"
+      }
+    },
+    "vbench2-dynamic_spatial_relationship-095": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "4fea39d65b6c5f1240567dfb572e5269da3d4fe7476a0fd0e4d49a77ce59c382",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-dynamic_spatial_relationship-095"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "4fea39d65b6c5f1240567dfb572e5269da3d4fe7476a0fd0e4d49a77ce59c382",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-dynamic_spatial_relationship-095"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "4fea39d65b6c5f1240567dfb572e5269da3d4fe7476a0fd0e4d49a77ce59c382",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-dynamic_spatial_relationship-095"
+      }
+    },
+    "vbench2-dynamic_spatial_relationship-096": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "e6a3972fc1f286dba16ace79b338ce3c4cf86c511ec809fff48b27272f5c5118",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-dynamic_spatial_relationship-096"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "e6a3972fc1f286dba16ace79b338ce3c4cf86c511ec809fff48b27272f5c5118",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-dynamic_spatial_relationship-096"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "e6a3972fc1f286dba16ace79b338ce3c4cf86c511ec809fff48b27272f5c5118",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-dynamic_spatial_relationship-096"
+      }
+    },
+    "vbench2-dynamic_spatial_relationship-097": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "8ed88c46dcf2bbb13c49649db1455e0734aa9b415045d40c75e6ab90a749918e",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-dynamic_spatial_relationship-097"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "8ed88c46dcf2bbb13c49649db1455e0734aa9b415045d40c75e6ab90a749918e",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-dynamic_spatial_relationship-097"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "8ed88c46dcf2bbb13c49649db1455e0734aa9b415045d40c75e6ab90a749918e",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-dynamic_spatial_relationship-097"
+      }
+    },
+    "vbench2-human_interaction-022": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "6ed4ece7b78757f49c668b512f949d75794910b95b99784250fef263abedb0b5",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-human_interaction-022"
+      },
+      "sample_b": {
+        "arm": "direct",
+        "render_prompt_hash": "6ed4ece7b78757f49c668b512f949d75794910b95b99784250fef263abedb0b5",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-human_interaction-022"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "6ed4ece7b78757f49c668b512f949d75794910b95b99784250fef263abedb0b5",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-human_interaction-022"
+      }
+    },
+    "vbench2-human_interaction-027": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "3cfb0293be9d6cb93d96f0a0adfc23ec32a522c5d1aff90deab894cd1bb9e1ae",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-human_interaction-027"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "3cfb0293be9d6cb93d96f0a0adfc23ec32a522c5d1aff90deab894cd1bb9e1ae",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-human_interaction-027"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "3cfb0293be9d6cb93d96f0a0adfc23ec32a522c5d1aff90deab894cd1bb9e1ae",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-human_interaction-027"
+      }
+    },
+    "vbench2-human_interaction-034": {
+      "sample_a": {
+        "arm": "pretrain",
+        "render_prompt_hash": "7a05518048f9d819d99965f5f6bd7de573dabf6112090e86ea1c045975117074",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-human_interaction-034"
+      },
+      "sample_b": {
+        "arm": "direct",
+        "render_prompt_hash": "7a05518048f9d819d99965f5f6bd7de573dabf6112090e86ea1c045975117074",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-human_interaction-034"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "7a05518048f9d819d99965f5f6bd7de573dabf6112090e86ea1c045975117074",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-human_interaction-034"
+      }
+    },
+    "vbench2-human_interaction-035": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "8d6904d3677f1fed69480f4ff28e91592fd05c1178804882610f8bfc7f2d3f30",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-human_interaction-035"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "8d6904d3677f1fed69480f4ff28e91592fd05c1178804882610f8bfc7f2d3f30",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-human_interaction-035"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "8d6904d3677f1fed69480f4ff28e91592fd05c1178804882610f8bfc7f2d3f30",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-human_interaction-035"
+      }
+    },
+    "vbench2-human_interaction-038": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "89581097bdafb1b457e461358a4039a736971f9c5696300f16fecc524fda3a45",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-human_interaction-038"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "89581097bdafb1b457e461358a4039a736971f9c5696300f16fecc524fda3a45",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-human_interaction-038"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "89581097bdafb1b457e461358a4039a736971f9c5696300f16fecc524fda3a45",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-human_interaction-038"
+      }
+    },
+    "vbench2-human_interaction-040": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "0a4ec08986ee1acd530374021057d360a57e765c0eac8564ccd80f498281f6b1",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-human_interaction-040"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "0a4ec08986ee1acd530374021057d360a57e765c0eac8564ccd80f498281f6b1",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-human_interaction-040"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "0a4ec08986ee1acd530374021057d360a57e765c0eac8564ccd80f498281f6b1",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-human_interaction-040"
+      }
+    },
+    "vbench2-motion_order-042": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "24ea4df74ae4185934c66338b2bb6014cef4953310736deb38e413f7af35312f",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-motion_order-042"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "24ea4df74ae4185934c66338b2bb6014cef4953310736deb38e413f7af35312f",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-motion_order-042"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "24ea4df74ae4185934c66338b2bb6014cef4953310736deb38e413f7af35312f",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-motion_order-042"
+      }
+    },
+    "vbench2-motion_order-048": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "eeafe17cf7b9b4ab36d1960632b3a5ac196c0b90f5dd1a7ef688b2fd89e21a14",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-motion_order-048"
+      },
+      "sample_b": {
+        "arm": "direct",
+        "render_prompt_hash": "eeafe17cf7b9b4ab36d1960632b3a5ac196c0b90f5dd1a7ef688b2fd89e21a14",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-motion_order-048"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "eeafe17cf7b9b4ab36d1960632b3a5ac196c0b90f5dd1a7ef688b2fd89e21a14",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-motion_order-048"
+      }
+    },
+    "vbench2-motion_order-053": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "c5e846cf1539290fe139d351bda9ddb579b2e1a47ed395f414c9e2fad5ff2445",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\train\\vbench2-motion_order-053"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "c5e846cf1539290fe139d351bda9ddb579b2e1a47ed395f414c9e2fad5ff2445",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\train\\vbench2-motion_order-053"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "c5e846cf1539290fe139d351bda9ddb579b2e1a47ed395f414c9e2fad5ff2445",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\train\\vbench2-motion_order-053"
+      }
+    },
+    "vbench2-motion_order-055": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "ca411557854c39ced08b7f791a23a76e794de4701df789ecd871842b6b5de5b2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-motion_order-055"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "ca411557854c39ced08b7f791a23a76e794de4701df789ecd871842b6b5de5b2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-motion_order-055"
+      },
+      "sample_c": {
+        "arm": "current",
+        "render_prompt_hash": "ca411557854c39ced08b7f791a23a76e794de4701df789ecd871842b6b5de5b2",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-motion_order-055"
+      }
+    },
+    "vbench2-motion_order-057": {
+      "sample_a": {
+        "arm": "current",
+        "render_prompt_hash": "5ac48bd6e05ff1a32e714548432d7b9b34b060f5a7daf4d579cc375adaad1fa0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-motion_order-057"
+      },
+      "sample_b": {
+        "arm": "pretrain",
+        "render_prompt_hash": "5ac48bd6e05ff1a32e714548432d7b9b34b060f5a7daf4d579cc375adaad1fa0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-motion_order-057"
+      },
+      "sample_c": {
+        "arm": "direct",
+        "render_prompt_hash": "5ac48bd6e05ff1a32e714548432d7b9b34b060f5a7daf4d579cc375adaad1fa0",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-motion_order-057"
+      }
+    },
+    "vbench2-motion_order-060": {
+      "sample_a": {
+        "arm": "direct",
+        "render_prompt_hash": "33ef3b3413aad50d55dd1e9747700e5a57f9f72947b7dfc596c2c7737945be10",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-three-arm-ablation-v1\\direct\\real\\dev\\vbench2-motion_order-060"
+      },
+      "sample_b": {
+        "arm": "current",
+        "render_prompt_hash": "33ef3b3413aad50d55dd1e9747700e5a57f9f72947b7dfc596c2c7737945be10",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\current\\real\\dev\\vbench2-motion_order-060"
+      },
+      "sample_c": {
+        "arm": "pretrain",
+        "render_prompt_hash": "33ef3b3413aad50d55dd1e9747700e5a57f9f72947b7dfc596c2c7737945be10",
+        "run_dir": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\out\\benchmarks\\vbench-100-current-vs-pretrain-v1\\pretrain\\real\\dev\\vbench2-motion_order-060"
+      }
+    }
+  },
+  "seed": 20260827,
+  "version": "golden-review-v1"
+}

@@ -1,0 +1,744 @@
+{
+  "case_count": 60,
+  "dataset_id": "frozen-eval-v2",
+  "evaluation_slices": {
+    "ood_unseen_dimensions": {
+      "case_count": 60,
+      "dimensions": [
+        "Human_Identity",
+        "Instance_Preservation",
+        "Material",
+        "Multi-View_Consistency",
+        "Thermotics"
+      ],
+      "min_case_count": 12,
+      "selection_rule": "source dimensions absent from active train/dev and prior frozen references"
+    }
+  },
+  "excluded_reference_count": 260,
+  "excluded_reference_datasets": [
+    "vbench-derived-100-v1",
+    "trajectory-v4-multi",
+    "frozen-eval-v1"
+  ],
+  "fingerprint": "4a98c7282560de196183e288e01434210c97bb1fd82adbfad7d43405adf670dc",
+  "patch_selection_allowed": false,
+  "proposal_generation_allowed": false,
+  "schema_version": "frozen-eval-manifest-v1",
+  "selected_dimensions": [
+    "Human_Identity",
+    "Instance_Preservation",
+    "Material",
+    "Multi-View_Consistency",
+    "Thermotics"
+  ],
+  "source_dataset": "VBench-2.0-unused-dimension-holdout",
+  "source_kind": "raw_json",
+  "source_policy": "raw VBench source; excludes all explicitly referenced dataset identities, prompt hashes, and used dimensions",
+  "source_root": "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\data\\vbench-source\\VBench2_full_info.json",
+  "split": "frozen_eval",
+  "train_dev_prompt_hashes": [
+    "0268390969f35f19d2efe6c3ee6de3b7b3230cfaf75c9a9a9522d07ba04e7e22",
+    "042bfa20ed4300418ae9c0365017fe1a3167d8aeca8c7ff0c0277b23552f13ba",
+    "05b5f46a89feb6440fb76f10f16dbb3e515c2c77c5df8f40a5eb73ecb7d57b66",
+    "0a1dd1fc2560b7327903c616a79fa2bd5d2e30404b7aa4056ad2984656a13265",
+    "0b5c683cf153ba5b3fecb9abbe201e557f35e9d99b02ba6953d495c6e9476243",
+    "1014438c247f16905c68b56ceceea35735fb555f8c8b731c6bc355f6c137baf2",
+    "11a505890288b1eabeb1cd9c1628e46910aa98a58a3ce591b2a210bf6a4db34c",
+    "120e9d6c264b483a9983a49a1155b121437576ac0de403df3eb5564c90aefb55",
+    "14b42a8c4d55017cf274bd1214788cf3ed715b767057c4ab4a6c7a0f818a1937",
+    "15b056cd2a68da57093600a3c63304223b61d4d2e9e11696b344ca6d84c1c654",
+    "1675a0596cc3c79225a29e04fd9b94567e96b842bb340db4e7830569a5dfb99a",
+    "16cc8c828b8804b1716e73f0037fa55e146fe4839f14613c0d256d130392b3ec",
+    "1c27110e074e25fba92fc8430d7f02a12756ff99b0197adb74699b1e19588055",
+    "1d008e9a8efc07c94228038a0c220794d83f2020c11061bdbb19f11665492937",
+    "213c0e7d19e66ac8eea8d34fff7a2a9f86f8ea917501818de1c6feef2da6d25b",
+    "22dcc02e93d3a6d1c837446a84f61737cdf3f356ccd9084060161075f6c303bb",
+    "235b4357b1884b40783e9c615a71fe5b1b00820b1cdda698a24b4df17148093c",
+    "23fecdb07f7e4fe132b15957772e15c663a57b6580488d4dd9e5a1459504fba1",
+    "24fc97cbf5cb2ac7e61fe8c2f8f43acaa14f71be1e441f2070189cb84774cdb1",
+    "255cc09b8b38025f2f8272f4de4865dbf8812c38b7bbc9f39f949767757af077",
+    "2627c95b22735be0ab1203e585027f3b44117ec146132ccd6631761379122e9b",
+    "2a03ab2304badbb2c068b14a5d9c5537df342c84a24ffbbb6f4419cb02839567",
+    "2a46841b1324beba98371ae48b66fffaf37d9202880e65e2050c51b59bc8eaf4",
+    "2c48faeef0a2585b218674f66996d1b3c24b3e306234310c934630d23eb187df",
+    "2ce859c03122862cab3527ff6766999ed95c7367abd446ec910ace71dc1ce1ce",
+    "2e70c3c98d1235f100791d366170045504b8baff9fb86f74cbb68ebe3139725b",
+    "2f4b6c064f7552854c4d4b6afa8c1f6f43357c63c4d556c45412ef7f9539b2ba",
+    "30e0e4230c2f4b8a28e4ad02c0c8bbd86a6ab4e3de4a1f578d3abd41f65851b2",
+    "31fc361a9ac0a1feb0d1d6580c59a0e8cb8339d0bed45fb0142b5cdc63eb699e",
+    "331f94b04c8d546b5be1155c163494ef5a1c9cb2a9fee646eb10d01d81e0328f",
+    "35631d12429f6b3075fc043994acf6bbf875331ed80bf48c94704416727fba8c",
+    "38df9d6b0c6661fd6c1405bfb1e739280dd54f8f883a6e0f1890442edc04388d",
+    "38f1bda3f02950a240c3e553151109905dbbecbee21218f0184d645109b2b5b3",
+    "3acc45a37ff9692372bc6ef6d88586f66e2931596b08a4bd65932a0740c7bfd5",
+    "3b22a87f68448401ae6fbd421f717701e9e5cdbd11d9d46e1f5f188062075d5f",
+    "3d00806e02a8eade17956946135c23296f7c41879df38b28d453cd31ff4439b9",
+    "3e2b41b683035a70ece2f3419fefb230f1c39558c0bcc97cfc3f0bf344efbfd1",
+    "3f372aa2303b70596d891357b12852f783ca6272a472918c9b058e8418174364",
+    "4086a175133e0ba79f69a69d016e15ae382fc6ddea0458607b21508c700d6c77",
+    "40ad7dc1f281a1bbb29764a8e82c5a722d0ec40491785df84904b2f56ed9b7f3",
+    "426294e1c5d142b8d7cad1d54b74adbfb519d05fc5bb3aab1fccd1879e30e950",
+    "43f50d7767eda916b4cdb8c16d99377f8126bdf558508039e347c3f3e74747d5",
+    "44a4320d92779acfd69ed5d566fb422c71e1d86427d6cb6f6587816c65a42137",
+    "46dea50366dcf708512f95a6fd1d86def1e0735d5b631e0a111e116e4c780029",
+    "499bed080db26bde00ce4a9350065d7d3414ace220f40dd69f3834129571fcd5",
+    "49ccc2c62952d28a35de0e89426a43b5cf7dfc5d99f308e7441788ec9a4c8145",
+    "4c4d1fbd699246fe98f55d134a3c2801d6193397fa79b3b747d882445bfa0f10",
+    "4f39e6c4f30f921999e28c3fad20a8bfd4ac42c9a39136ec40cfefae4e50172b",
+    "51ac605ae55fd1c22eb09bb4d09a6fef29dde3eb4fd63952b5ac5862dbd3874a",
+    "530633718be0e198d4d1a9c9aa7de4ecf646cbd801dae39141ced5ffe934c2b4",
+    "55acf84c6e388ab4b365407033a79cd4b18a341e3c40f856b4522929066e756b",
+    "56db503ff74a7fab1fd78bb94c53d5bde90e884bc3ccd3beb82637a1ef203541",
+    "589e71775a8bf67dc9420af58fb198cec427a748b59746e6a8dfe18b6a3dc684",
+    "59122c63df8fa464f07b54bc7938c846b96d9267b1270776e4fde5c01da82a83",
+    "59e9aacca392f8fb293956e453c284815749145f6178eb8569b4429dc652e97b",
+    "5a36a09adae2699d7975f29b85154e62eafd3bfc515bb5a9c038515af0ed2b75",
+    "5c0f246bdc14387a6db985b491750c213c5ae61c55d91cc3d3ff85408aaa2069",
+    "6072f1f434f118c65412dfdc87bcc55d1729d123f40c5dc1a038d4f7ec223e73",
+    "60d9825d3ecee1a92e7a051eb54c2310f70e886c53b33417c4459d669b12f38e",
+    "638e1cbc26fa6a04192ff95ea3d74a6af47023d796610d05f39b439854c97d47",
+    "69c14470ffa99a6de4f672d7b441cd82c54ceb857733e1562761acb7e47fcab0",
+    "6a12d3102bec208ad464b48a6fb695b0ad26ec3fdb74916c00aca483f56c8141",
+    "6be8b51867d0b3e7356d64a68ab7eff4030e5e1c265bbbb20077e7e46e34d0ca",
+    "6e5b148ca7eda1b531350eb4cd7fd58486976253909009b3e86a5dc35f8deb70",
+    "709c4770e505e490ebdbaf780b59bcb1cdad495f3f96ac581f9da5568b04e2f8",
+    "70cef71fabcd41dcb9f552c8c312a126e1d3ba71dd522040a6c7781e7a0127c7",
+    "713a25f6908c6f798238c9749404219a6a801e6d2d132e11983aa5a5d4a840ec",
+    "73eca5001a8ae519ce7a5551ae53f2147a49a42269f648bdb25c4c0c3cfc2ba5",
+    "75b01c61971872e1a9171613302c0d3b7dbcaeb3eeaa2d0574857463a117bce7",
+    "75f7232fe38c51322a677665490ed82a5a6cb43fc308ff0849edaf58bb1e8432",
+    "76b5b7321693705e5305343d5b33aa42f91c03aba96ff59fe4c4c70998aa655a",
+    "785ac54ca945bd85cb86d4789247f4a56c2c4202ed3af63f89c665ddfa363b92",
+    "78a58298f674b38facd588982b509006dfd46169f4118f71339b2e169693933f",
+    "7994a2a98168aa4d41ba1c46f9f95ea2bab80d67272311e14507f3516e7918ef",
+    "7b06067742d970707f8b94ff84b6bee296bff21f05f115084977b47169afe76d",
+    "7d886063c3bb178225554678e243da865212408d050a0932f17b85d5d242cd6a",
+    "7d9bc9c143eb363c600fb82fe113d42c25c16b91374d54262fe47a08393228b5",
+    "7dbd370fe35a7f56ba8bc608a20a6e266746c874ef22835bfa0bcc14eaea4fcd",
+    "81dcc2076b837e22b296e65c18fd2b910686f8469535b2ec3b94f8869de87267",
+    "8330de938a21ad62e1a3127dddb5fbc8b267dc0c479b97e4f76f698c3b032453",
+    "8416eb3e0a5d6c683d57bf0076a0bd7b1f6e9a739f77f69efb9593079b74171e",
+    "853a4a1ff0d2c68c264566c3abe989ceaf65654a3650f340e25cf7e84280eb81",
+    "87b0527a3c8a4eda7e10a2f4fe8649134f147eb30340d68d2050b169f5cadec5",
+    "89f615041f989872f00edb125c95ae4ce70d6e63494473b08c0d5cc269ece3bd",
+    "8b24e8ea091b1b35f3b268e7cdd432d40cf8d409abb7fc3f150d8a9068096120",
+    "8c2dfcb7557a5239c84c2b242aa1f1228115b28ea42b86aab61550b498346524",
+    "8de03cd14df998d2047b054ad51c1ea90d0a579710adb3a5e84ed2c1049f7b93",
+    "90302f4238c768b6b2694989d63fbc22493868083980755d77fcf0309d971b16",
+    "907fe65650158f6e81f1c5dad3ba82cd476dddb75b922381ed3a3c1637256166",
+    "925b0b3352dc4e503df02cdd9b337f6ed85c515ba4b2ef37d39250a2a0fe93b8",
+    "953a9f6eeb34b7374fe6af6bfab9349da4980b975f71bb135019443004971354",
+    "97cb2245953929676cdcc19396c9c3e2f05c91a9231b54ab806bc872962cd0da",
+    "9a951cdc31e894a8556a4d91a76db58101c7f39b67c897d2a1ebad9211bda5fa",
+    "9c946a12425bb52ddeefa9fb92cd568c27eb0b5a509119adba97587ce5cd9f17",
+    "9d202846f77043591f75141307fda74a415220ccac5e1296516d1e00e9c46a71",
+    "9fb3f3aceea85adcf72dd327828f1a24f28187a00dc0cf072e1f523211a61395",
+    "a5b2b4b02e093dd0cfc389cf831878fdc97686c4fd9db37f9feeb348099b8847",
+    "a68dc4de4fdfb165c37e9c673b44a3ac6752b65fcbe984b8747dda4fa4048839",
+    "a7587e35fb7c4079d6fb38396fe69e2bd57bf30ffa96b032cd237ec9583e40ef",
+    "adc1fee9861d89cf3e7efa40b4b3d1798de631e9a8bd612d91f745e9679f98a1",
+    "b0bfe1deb25e0a761f33f464f0a2ecc138d1ef53080e7e70946c04344d27edf0",
+    "b0f5dc804f02f46d4dbfe01c2401e9889b69ffc56801f00d7de0e4b6af8800c0",
+    "b149bfa3a54bd30c9e89e8c1fbfb53bcaf0da1b3ebabc80846258dfef3fcb1ed",
+    "b2125633113ed4291f0750c9b3c601c9be86bbdde9bb46ab4782ccf68afdde60",
+    "b482d338eabfbd29030202daa7842e8adf1f5f4aa8ad975ebca674d26cf7936e",
+    "b5ce17a07a4394227282de40a83d5b9a3a58f2c7331d6a3f9ed1480d9ffa1f33",
+    "b6b08f39e7d1491af57e4bf0138e55bd5abe1095518a7125e4587fe844fcebdd",
+    "b76f6595e21422292cab5168b70d9207d110f2a51cd7952fbc4e95a2b795cccd",
+    "ba20fbf3db8a55db10ad33dd20e0f6266bb6cf2c47fd84860f51c76658bf8991",
+    "bbd46c9f82df960be934eb4659cf915ad884a25c576330470196231ceec3295f",
+    "bcac892d7bdee9d5f7e78066e9a880813e3ac8179a2fea4be3cafecb35eeebae",
+    "bd52e92eae6a3325bb39ea44262750ea9493f0646a126800ee6551a6f0d108e6",
+    "c08df4b7d63770f42774bb73e1b4414d1c1da1d32dfa3f9f955d12de7aca7d89",
+    "c08e750f11f473955104963631633960c3ac25aa5a79b91f5da2eb4ee63a58dc",
+    "c1f5abfe1529ca7a88ef531e35e00221461f98d2b22396720dbe5ba8b217a7d9",
+    "c4b08fd16f2ca57f4116fd8deb3d5c135f34443f24d3a8d81ad645900bba6954",
+    "c565e87f0bb5bae49a647dbdc5c5c675101ad71532e7bd274574970b1e385c34",
+    "c64f6f45f4ad30f5e58248e79d822d7efb56806ba53ef2805ba65eaad139eb48",
+    "c8406004fc3d137544f60464dd903e005d2ab0238652ebb7afd763b2e7b2430e",
+    "c89f07ddf8fa553bfcab83234d35b26204919478f048cfeef4bf28fa10b61bd7",
+    "cc49f2e5600c6fe3077dfb3908155ed7270bfe2fd54925456b11b5251dd1e54b",
+    "d0fd57ae110fbee9db6bfdb4ae55c2a09cd482855792748410e138cb4df14a63",
+    "d1cef3a0df516fa44c94cbadc1cbc39495cff0beaa7e0f022669e530a93e90e3",
+    "d254c4512cbc0fa85b52b00a8b3ffd2d626bb1fd476921874f43a51416ce27a6",
+    "da4b33679552b569e03cf327b9180408c8e303cef841dc64933cd7dcbd3558c3",
+    "df80ecbdc7e84ee61b8e9232ba393cd44a93433d6b4943bd138fa88e989a6b94",
+    "e0b1b4502de1e82b90ed1a911a6c063b1e44d708120dd542556b09fb19a4d400",
+    "e47dabdec8ff6274350e8388b6872174bcada0481b657050d0d0eef14ea07c80",
+    "e77429fab0a0517883ddc523ef0d221b3f77c04478ad7a9043cf0865b3e118b3",
+    "e7df6eb179cb1092f1dfecf0a1316c1d1ec0893e91b6b0df7bcbc4de3eaa8ce2",
+    "e82cc3ce91e0e276ee30a29b5b5f2661a5a2b0d4b79e54aa12492ee8ab90fd2c",
+    "f25508b4c2719e87c2c1b3dcc480f025a9ff13dd3a87a3c889bec4cc745e10d9",
+    "f2a7378b63820bfde34f4b1d57d491f264eeae6ffd8c9881b938be0e1c160313",
+    "f3cb309bd8befecb5e4e16e29852facdfdad84a0e2a09f32f86020a81f42dabb",
+    "f587ec41cf4d2f0ccfd694067206ca964be284e2aff096aadfda206a69f10213",
+    "f704bcfa1ac693b8df98df3aa773af55b40dbdaa63f81b73ad249f764ccb5568",
+    "f8c570c4238d83300c496e6e019910ebb52228e7aab98ff9d7395ad48829ba04",
+    "fb403eac88fd8197696011592503c9ec89483fcaebff628de1c6dc6d039452f1",
+    "fcc1c4954554a18ef34c7cfcef7c3e204f69b1fd318be24e6729f930a3c6d0b3",
+    "ff317fd6fbd930e0e7e5d56ab520c0b9702a5935a7ebf11b0b6ef1df0bf10045"
+  ],
+  "train_dev_source_identities": [
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 7
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 12
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 18
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 22
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 29
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 33
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 40
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 46
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 50
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 57
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 61
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 67
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 74
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 78
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 85
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 89
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 95
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 100
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 106
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 139
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 142
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 145
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 148
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 151
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 153
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 156
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 159
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 162
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 165
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 170
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 173
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 176
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 179
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 182
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 184
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 187
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 190
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 193
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 196
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 353
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 357
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 360
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 364
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 367
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 371
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 374
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 378
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 380
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 385
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 387
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 392
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 394
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 398
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 401
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 405
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 408
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 412
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 415
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 419
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 544
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 551
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 556
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 562
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 569
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 578
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 586
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 596
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 604
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 614
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 663
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 668
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 673
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 677
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 684
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 689
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 694
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 699
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 703
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 708
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 715
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 720
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 724
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 729
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 734
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 739
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 746
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 750
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 755
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 760
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 869
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 872
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 875
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 878
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 882
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 884
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 887
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 890
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 893
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 896
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 899
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 902
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 905
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 908
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 911
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 913
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 916
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 919
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 922
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 925
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 927
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 932
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 937
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 942
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 946
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 953
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 958
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 963
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 968
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 973
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 977
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 982
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 987
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 992
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 997
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1004
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1008
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1013
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1018
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1023
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1025
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1031
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1038
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1044
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1050
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1057
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1063
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1069
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1076
+    },
+    {
+      "source_dataset": "VBench-2.0",
+      "source_index": 1082
+    }
+  ]
+}
