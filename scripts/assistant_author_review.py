@@ -41,7 +41,10 @@ def main() -> int:
         raise SystemExit("assistant review request is missing case_id")
     payload = {
         "review_version": ASSISTANT_REVIEW_VERSION,
-        "review_source": "assistant_local_review",
+        # The scoring gate only accepts registered review sources; the
+        # driving-assistant in-process review is the codex-local diagnostic
+        # arm (no external endpoint), so it must declare that identity.
+        "review_source": "codex_local_visual_review",
         "reviewer": REVIEWER,
         "case_id": case_id,
         "sampled_frames": request.get("sampled_frames", []),
