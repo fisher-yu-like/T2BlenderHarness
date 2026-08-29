@@ -53,6 +53,9 @@ DIRECTOR_PLAN_HASH = "__PLAN_HASH__"
 REQUIRED_ENTITY_IDS = __REQUIRED_ENTITIES__
 REQUIRED_EVENT_IDS = __REQUIRED_EVENTS__
 REQUIRED_CAMERA_EVENT_IDS = __REQUIRED_CAMERA_EVENTS__
+# Per-subject base offset (lowest local z) used to align the staging
+# surface with the plan prop height so the subject base is supported.
+SUBJECT_BASE_Z = __SUBJECT_BASE_Z__
 SAMPLE_FRAMES = [1, 60, 120]
 FPS = int(DIRECTOR_PLAN["request"]["fps"])
 FRAME_END = int(DIRECTOR_PLAN["request"]["duration_s"] * FPS)
@@ -137,7 +140,8 @@ __SUBJECT_EXTRA__
 
 
 def look_at(camera, target):
-    direction = (target[0] - camera.location.x, target[1] - camera.location.y, target[2] - camera.location.z)
+    # Index access keeps this correct for real Blender vectors and mock runs.
+    direction = (target[0] - camera.location[0], target[1] - camera.location[1], target[2] - camera.location[2])
     if (direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2) > 0.0:
         from mathutils import Vector
 
@@ -610,6 +614,7 @@ def materialize(request_path: Path, out_path: Path) -> dict:
         "__REQUIRED_ENTITIES__": repr(sorted(entity["id"] for entity in plan["entities"])),
         "__REQUIRED_EVENTS__": repr(sorted({event["id"] for event in plan["events"]})),
         "__REQUIRED_CAMERA_EVENTS__": repr(sorted(plan.get("coverage_obligations") or [])),
+        "__SUBJECT_BASE_Z__": repr(SUBJECT_BASE_Z),
         "__ENV_GROUND__": "rounded_box((0.0, 0.0, 0.0), (18.0, 13.0, 0.3), 0.1)",
         "__SUBJECT_MESH__": mesh,
         "__SUBJECT_EXTRA__": extra,

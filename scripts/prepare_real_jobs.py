@@ -669,16 +669,41 @@ def prepare_jobs(
                 jobs.append(job_entry)
                 continue
             if cached_source is None and provider_mode != "glm":
-                cache.store(
-                    director_plan_hash,
-                    harness_version,
-                    source,
-                    llm_call_id=response.llm_call_id,
-                    metadata={
-                        "context_status": context_status,
-                        "context_example_ids": [example.case_id for example in context_examples],
-                    },
-                )
+                try:
+                    cache.store(
+                        director_plan_hash,
+                        harness_version,
+                        source,
+                        llm_call_id=response.llm_call_id,
+                        metadata={
+                            "context_status": context_status,
+                            "context_example_ids": [example.case_id for example in context_examples],
+                        },
+                    )
+                except ValueError as exc:
+                    # Regenerating a different source for an unchanged plan is
+                    # the inner loop's designed behavior; version the slot so
+                    # regeneration never collides with a frozen candidate.
+                    if "frozen source already exists" not in str(exc):
+                        raise
+                    version = 2
+                    while True:
+                        try:
+                            cache.store(
+                                f"{director_plan_hash}-v{version}",
+                                harness_version,
+                                source,
+                                llm_call_id=response.llm_call_id,
+                                metadata={
+                                    "context_status": context_status,
+                                    "context_example_ids": [example.case_id for example in context_examples],
+                                },
+                            )
+                            break
+                        except ValueError as retry_exc:
+                            if "frozen source already exists" not in str(retry_exc):
+                                raise
+                            version += 1
             code_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
             manifest = manifest.model_copy(update={"code_hash": code_hash})
             write_manifest(manifest, run_dir / "run_manifest.json")

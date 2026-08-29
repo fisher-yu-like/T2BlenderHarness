@@ -40,6 +40,20 @@ while idle < IDLE_ROUNDS:
             text=True,
         )
         status = "ok" if result.returncode == 0 else "FAIL"
+        if result.returncode == 0:
+            # Mock-Blender dry-run: catch runtime errors (undefined names,
+            # frozen-dataclass writes) before a real render is spent.
+            template = None
+            for candidate in Path("out/training/glm-flash-diagnostic-v1/round-01/attempt-01/real/train").glob("vbench2-train-01-01"):
+                template = candidate
+            dry = subprocess.run(
+                [sys.executable, "scripts/mock_blender_dryrun.py", f"out/assistant-session/authoring/{scene}.py", str(template) if template else ""],
+                capture_output=True,
+                text=True,
+            )
+            if dry.returncode != 0:
+                status = "DRYRUN_FAIL"
+                print((dry.stdout or "")[-500:], flush=True)
         served += 1
         print(f"{scene} {token[-8:]} {status}", flush=True)
         if result.returncode != 0:
