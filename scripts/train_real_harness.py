@@ -1798,7 +1798,10 @@ def run_outer_attempt(
             director_agent=director_agent,
             code_agent=code_agent,
             provider_mode=provider_mode,
-            code_cache_dir=code_cache_dir or (Path(output_root) / "code_cache"),
+            code_cache_dir=code_cache_dir
+            or (
+                Path(output_root) / "code_cache" / f"outer-{attempt_number:02d}"
+            ),
             # Bounded execution recovery: at most two fresh candidates per
             # case (initial attempt + one regeneration).
             max_inner_attempts=2,
@@ -1854,7 +1857,10 @@ def run_outer_overall(
             director_agent=director_agent,
             code_agent=code_agent,
             provider_mode=provider_mode,
-            code_cache_dir=code_cache_dir or (Path(output_root) / "code_cache"),
+            code_cache_dir=code_cache_dir
+            or (
+                Path(output_root) / "code_cache" / f"outer-overall-{round_number:02d}"
+            ),
             # Bounded execution recovery: at most two fresh candidates per
             # case (initial attempt + one regeneration).
             max_inner_attempts=2,
