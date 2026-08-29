@@ -21,16 +21,31 @@
 
 | 项目 | 状态 | 说明 |
 |---|---|---|
-| 动态 DirectorAgent | 已实现 | 由 in-process codex-local 根据原始 prompt 生成实体、事件、轨迹和摄像机计划 |
+| 动态 DirectorAgent | 已实现 | 正式 model 路径由外部结构化 provider 按 case 调用；Blender code 仍由本地 Codex 生成；codex-local 仅为显式 baseline |
 | per-case Blender code | 已实现 | 每个 case 独立生成 blender_job.py，并记录 plan/code/artifact provenance |
 | 固定模板回退 | 禁止 | provider、schema、coverage、source 或 render 失败均 fail-closed |
 | 真实 Blender 渲染 | 已验证 | 使用 D:\blender\blender.exe 生成真实 MP4、BLEND、PNG 和逐帧 telemetry |
 | MP4 + runtime 评估 | 已实现 | 必须解码真实 proxy.mp4，并要求 Blender runtime_observations |
 | 严格 VLM 证据门槛 | 训练前固化 | 正式训练前启用逐维度证据绑定和缺证据拒绝规则，之后冻结 evaluator |
 | 六轮 Harness 训练 | 未开始 | 当前 readiness 仍被 golden_review 和 paired_gate 阻塞 |
-| 最近全量测试 | 通过 | 441 passed；另有 28 条 Pillow 弃用警告 |
+| 最近全量测试 | 以当前 CI/验证报告为准 | 不在 README 中手工固定通过数量；运行命令会生成 machine-readable 报告 |
 
 当前 training_allowed=false 代表训练接受门禁尚未全部满足，不代表真实视频链路没有跑通。
+
+本分支按 `D:/sy/T2BlenderHarness-improvement-plan-zh.md` 增加了可复核的
+`source-fingerprint-v1`、`paired-statistics-v1`、
+`physics-oracle-v2-obb-bvh-contact-ownership`、`experiment-fingerprint-v1` 和
+`active-sampling-v2-replay`。正式放行采用 G0（身份/可信边界）→ G1（evaluator
+冻结与人工校准）→ G2（10 train + 10 dev paired pilot）→ G3（不改 Harness
+的 60 train + 60 dev shadow）→ G4（六轮训练）；
+`scripts/check_formal_release_gates.py` 产生带内容哈希的 G0--G3 报告，正式
+训练入口会验证该报告。
+
+T16 的历史回放审计入口为
+[`scripts/audit_active_sampling.py`](scripts/audit_active_sampling.py)，协议见
+[`docs/active-sampling-replay-v2.md`](docs/active-sampling-replay-v2.md)。它只接受
+train/dev 的真实历史 paired delta 和 render cost；达不到 30% render cost 节省或
+95% 决策一致率时直接阻止该效率门禁，不把合成 fixture 当作正式证据。
 
 ## 1. Harness 架构
 
@@ -165,7 +180,7 @@ Outer loop 才修改 Harness：
 ### 1.2 实际数据流
 
     exact prompt
-      -> codex-local DirectorAgent
+      -> 外部结构化 DirectorAgent (provider_mode=model)
       -> DirectorPlan / evidence / event graph
       -> plan schema + coverage gate
       -> per-case BlenderCodeAgent
@@ -187,9 +202,9 @@ Outer loop 才修改 Harness：
 | 阶段 | Python 固定部分 | 大模型动态部分 | 产物 |
 |---|---|---|---|
 | 选择 case | 读取原始 VBench manifest、固定 train/dev 批次、保留 prompt 原文 | 不修改 prompt | case manifest |
-| Director 解释 | Pydantic contract、事件调度、轨迹/相机 composer、证据和 fail-closed 校验 | `codex-local` 根据完整 prompt 解释实体、事件顺序、参与者、物体所有权和 camera cue | DirectorPlan、trajectory、camera plan |
+| Director 解释 | Pydantic contract、事件调度、轨迹/相机 composer、证据和 fail-closed 校验 | 外部 OpenAI-compatible structured provider 根据完整 prompt 解释实体、事件顺序、参与者、物体所有权和 camera cue | DirectorPlan、trajectory、camera plan |
 | 计划门禁 | 检查 schema、ID、时间、coverage、hard uncertainty 和 evidence span | 不得绕过 gate | pass 或 NOT_RENDERED |
-| Blender code 生成 | 构造 codegen payload、提供 verified `blender/lib` 签名、AST/运行时/coverage 校验 | `codex-local` 根据当前 case 的 DirectorPlan 生成 case-specific `blender_job.py` | 冻结 source、code_hash |
+| Blender code 生成 | 构造 codegen payload、提供 verified `blender/lib` 签名、AST/运行时/coverage 校验 | 本地 `CodexExecProvider` 根据当前 case 的 DirectorPlan 生成 case-specific `blender_job.py` | 冻结 source、code_hash |
 | 真实执行 | Python Host 隔离目录、冻结 source、启动 Blender、收集日志和重试状态 | 不在运行中偷偷改场景 | `proxy.blend`、`proxy.mp4`、PNG、telemetry |
 | 画面和物理证据 | 解码 MP4、读取逐帧 transform/bbox/camera/rig、运行 deterministic evaluator | local Codex visual review 或显式 VLM 审查真实帧 | 14 维 review、四个真实通道 |
 | 外循环进化 | 聚合 train/dev、执行接受门禁、写 memory、回滚和画曲线 | 根据重复失败提出一个 Harness owner 的候选修复 | patch manifest、新 Harness 版本 |
@@ -197,12 +212,22 @@ Outer loop 才修改 Harness：
 实际执行顺序是：
 
 1. `scripts/train_real_harness.py` 读取 `dataset/vbench2-agent-training-index-v1`，只取原始 prompt，不生成新 prompt。
-2. Python `DirectorAgent` 调用 in-process `codex-local` provider。大模型负责语义解释；Python 负责把返回值转成 typed DirectorPlan，并验证实体、事件、时间和 coverage。
-3. 通过计划 gate 后，Python `BlenderCodeAgent` 把当前 plan 和 verified library 能力传给 `codex-local`。大模型只生成当前 case 的 Blender source；Python 负责 AST、安全、运行时标记、case coverage 和 hash 校验。
+2. 正式 `provider_mode=model` 下，Python `DirectorAgent` 通过外部结构化 provider 发起当前 case 的 Director call。外部大模型只负责语义解释；Python 负责把返回值转成 typed DirectorPlan，并验证实体、事件、时间和 coverage。外部 endpoint、模型和 call hash 会写入 Director provenance。
+3. 通过计划 gate 后，Python `BlenderCodeAgent` 把当前 plan 和 verified library 能力传给本地 `CodexExecProvider` codegen call。本地 Codex 只生成当前 case 的 Blender source；Python 负责 AST、安全、运行时标记、case coverage 和 hash 校验。两个阶段不能共享 provider 记录或互相替代。
 4. Python Host 冻结 `blender_job.py`，再调用 `D:\blender\blender.exe`。这个 job 是已经由大模型针对该 case 生成的 Python，不是预先写好的场景模板。
 5. Blender 内部执行该 job，生成真实几何、人物 rig、动作 keyframes、物体轨迹、摄像机调度、`proxy.blend` 和动画渲染结果。Host 从真实 MP4 解码帧，并读取 Blender 写出的 runtime observations。
-6. evaluator 先运行 artifact/deterministic gate，再让 local Codex visual review 或 `gpt-5.6-luna`/`gpt-5.6-terra` 审查真实时间序列帧。缺帧、缺 telemetry 或缺逐维证据不会补成分数。
+6. evaluator 先运行 artifact/deterministic gate，再让符合配置的 blind `gpt-5.6-luna`/`gpt-5.6-terra` 或显式本地 Codex 审查真实时间序列帧。缺帧、缺 telemetry 或缺逐维证据不会补成分数；本地路径无 external endpoint 且只能作诊断。
 7. Python 外循环只根据重复失败决定是否提出 patch；每次 patch 只能修改一个 Harness owner，随后重新生成受影响 case 的 plan 和 Blender code，并用 paired dev 及完整 dev 验证。
+
+在 Codex app 内还支持一个明确隔离的 `assistant_diagnostic` 路径：本次
+`vbench2-dev-06-15` 没有调用 `codex exec`，而是由当前 Codex 会话直接提供
+case-specific Director interpretation 和 Blender source，再交给同一个
+`BlenderCodeAgent` 静态 gate、`D:\blender\blender.exe`、trusted observer 和
+evaluator。该路径记录 `provider_kind=assistant_generated`，禁止模板/fallback，
+只用于验证“当前 Codex 生成 → 真实 Blender → 真实观测”的链路；它不是一个可由
+独立脚本自行调用的模型 provider，也不能满足正式 `provider_mode=model`、G0 或六轮
+训练准入。真实运行记录见
+`out/preflight/assistant-full-chain-vbench-06-15-v5/assistant_diagnostic_provenance.json`。
 
 因此，Python 文件负责“可重复、可审计、不能被绕过的基础设施”；大模型负责“不能靠固定关键词可靠完成的语义解释、case-specific code 和视觉判断”。任何一侧失败都 fail-closed，不会偷偷换回本地模板。
 
@@ -328,7 +353,7 @@ hard failure 时不进入视觉分数，也不能据此接受 Harness patch。
     camera_score =
         mean(camera_coverage, camera_innovation)
 
-观察到的本地分数封顶 95，semantic compliance 封顶 90，避免“plan 完整”被误报为“视频完美”。
+当前不再用 95/90 的人工封顶掩盖不确定性。分数、confidence 和 evidence completeness 分离；低证据进入 `needs_human_review`，而不是机械压分。
 
 ### 3.3 14 个视觉维度
 
@@ -356,19 +381,22 @@ hard failure 时不进入视觉分数，也不能据此接受 Harness patch。
 
 几何平均用于短板保护。一个关键维度很低时，不能被其他高分完全抵消。
 
-    semantic = GM(prompt_compliance,
-                   physical_plausibility,
-                   object_trajectory,
-                   event_timing)
+    semantic_core = GM(applicable required dimensions:
+                       prompt_compliance,
+                       physical_plausibility,
+                       object_trajectory,
+                       event_timing,
+                       character_trajectory only when an actor is applicable)
 
     choreography = GM(camera_coverage,
-                      camera_innovation,
-                      character_trajectory,
+                      camera_innovation only when camera motion is required,
+                      character_trajectory only when an actor is applicable,
                       temporal_smoothness)
 
-    task_score = 0.45 * semantic
-               + 0.45 * choreography
-               + 0.10 * visual_clarity
+    observability = GM(camera_coverage, visual_clarity)
+
+    task_score = 0.75 * semantic_core
+               + 0.25 * observability
 
     realism_vlm = GM(appearance_detail,
                      physical_realism,
@@ -391,6 +419,10 @@ evaluator/realism.py 还生成 reviewed realism：
 - realism_score 通常指包含 geometry/frame evidence 的 reviewed realism；
 - task_score 和 realism_score 不互相替代；
 - overall_vlm_score 只是汇总观察值，不能隐藏单项回归。
+- `camera_innovation` 只在 prompt/plan 明确要求相机运动时适用；其实现
+  结果以 `camera_effectiveness` 命名，静态镜头不会因为没有运动被扣 task。
+- 任一 required event 的证据分数低于 25 时，语义状态为
+  `failed_required_event`，task 上限为 49；缺证据为 `uncertain`，不当作 0。
 
 ### 3.5 严格 VLM 证据门槛
 
@@ -436,12 +468,15 @@ DirectorPlan、文件名和单独的 telemetry 不能作为视觉证据。teleme
 
 ### 3.6 VLM 来源
 
-本地正式路径：
+本地 Codex 路径：
 
     review_source = codex_local_visual_review
     vlm_model = codex-local
 
-该路径由当前 Codex 进程处理真实 MP4 帧和 Blender runtime evidence，不调用外部 key，也不会把缺失 review 改写成数字。
+该路径由当前 Codex 进程处理真实 MP4 帧和 Blender runtime evidence，不调用外部
+endpoint；它是显式诊断/人工辅助路径，不满足正式的独立 judge gate，也不会把
+缺失 review 改写成数字。正式 model-driven 生成仍必须记录外部结构化
+Director provider 与本地 `CodexExecProvider` Blender-code 两次调用。
 
 如果显式启用外部 OpenAI-compatible endpoint，只允许使用小写模型标识：
 
@@ -622,9 +657,9 @@ event_timing=6.09、motion_naturalness=37.58，说明实体解析已经修复，
 
 数据集验证：
 
-    uv run python scripts/validate_benchmark_prompt_index.py --root dataset/vbench2-agent-training-index-v1 --source data/vbench-source/VBench2_full_info.json --reference-root dataset/frozen-eval-v1 --reference-root dataset/vbench-derived-100-v1 --reference-root dataset/trajectory-v4-multi --reference-root dataset/trajectory-v5-agent-codegen
+    uv run python scripts/validate_benchmark_prompt_index.py --root dataset/vbench2-agent-training-index-v1 --source data/vbench-source/VBench2_full_info.json --reference-root dataset/frozen-eval-v2 --reference-root dataset/vbench-derived-100-v1 --reference-root dataset/trajectory-v4-multi --reference-root dataset/trajectory-v5-agent-codegen
 
-    uv run python scripts/validate_frozen_eval_set.py --root dataset/frozen-eval-v1
+    uv run python scripts/validate_frozen_eval_set.py --root dataset/frozen-eval-v2 --reference-root dataset/vbench2-agent-training-index-v1 --reference-root dataset/vbench-derived-100-v1 --reference-root dataset/trajectory-v4-multi --reference-root dataset/frozen-eval-v1
 
 启动中文人工校准界面：
 
@@ -632,7 +667,8 @@ event_timing=6.09、motion_naturalness=37.58，说明实体解析已经修复，
 
 正式 readiness 通过后运行六轮：
 
-    uv run python scripts/train_real_harness.py --mode six-rounds --dataset-root dataset/vbench2-agent-training-index-v1 --readiness-report out/training_readiness_report.json --round-root out/training/agent-six-rounds-v1 --blender-bin D:\blender\blender.exe --workers 4 --vlm-model gpt-5.6-luna --markdown-path docs/t2blendercodeharness-agent-training-memory-v1.md
+    uv run python scripts/check_formal_release_gates.py --g0 out/preflight/g0.json --g1 out/preflight/g1.json --pilot out/preflight/paired-pilot.json --shadow out/preflight/shadow-round.json --out out/formal_release_gate_report.json
+    uv run python scripts/train_real_harness.py --mode six-rounds --dataset-root dataset/vbench2-agent-training-index-v1 --readiness-report out/training_readiness_report.json --formal-release-report out/formal_release_gate_report.json --round-root out/training/agent-six-rounds-v1 --blender-bin D:\blender\blender.exe --workers 4 --vlm-model gpt-5.6-luna --markdown-path docs/t2blendercodeharness-agent-training-memory-v1.md
 
 ## 8. 相关文档
 

@@ -18,8 +18,11 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
     "executing": {"rendered", "failed"},
     "rendered": {"artifact_valid", "failed"},
     "artifact_valid": {"evaluated", "failed"},
-    "evaluated": set(),
-    "failed": set(),
+    # An explicit rerender may reopen a terminal artifact state.  The history
+    # is append-only, so this cannot erase the prior evaluation/failure; the
+    # executor still records a fresh render attempt and hashes it separately.
+    "evaluated": {"executing"},
+    "failed": {"executing"},
 }
 
 

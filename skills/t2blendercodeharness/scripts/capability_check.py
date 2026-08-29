@@ -35,6 +35,7 @@ REQUIRED_COMPONENTS = {
     "blender_code_agent": "src/videoact/blender_code_agent.py",
     "codegen_context": "src/videoact/codegen_context.py",
     "codex_exec_provider": "src/videoact/codex_exec_provider.py",
+    "external_structured_provider": "src/videoact/external_structured_provider.py",
     "fallback_codegen": "src/videoact/fallback_codegen.py",
     "case_coverage_gate": "src/videoact/case_coverage.py",
     "runtime_scaffolding": "blender/lib/scaffolding.py",
@@ -82,11 +83,12 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         from videoact.scene_contract import SceneContractBuilder
         from videoact.trajectory import TrajectoryPlanner
         from videoact.blender_code_agent import BlenderCodeAgent
+        from videoact.external_structured_provider import OpenAICompatibleStructuredProvider
         from videoact.codegen_contracts import CodegenRequest
         from blender.lib.__meta__ import collect_library_signatures
         from scripts.validate_frozen_eval_set import validate_frozen_eval_set
 
-        checks.append(_check("imports", True, "DirectorAgent, contract, planner, artifact gate, evaluator, and optimizer imported"))
+        checks.append(_check("imports", True, "DirectorAgent, external structured provider, contract, planner, artifact gate, evaluator, and optimizer imported"))
     except Exception as exc:  # pragma: no cover - exercised by a missing runtime
         checks.append(_check("imports", False, f"{type(exc).__name__}: {exc}"))
         return {"skill_version": SKILL_VERSION, "project_root": str(root), "status": "fail", "checks": checks}

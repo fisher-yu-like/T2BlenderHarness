@@ -131,6 +131,66 @@ def test_vlm_evaluation_runs_only_after_deterministic_pass(tmp_path):
     assert (tmp_path / "vlm_report.json").exists()
 
 
+def test_vlm_still_runs_for_playable_video_when_deterministic_has_a_finding(tmp_path):
+    from evaluator.schemas import VLMJudgeResponse
+    from scripts.evaluate_real_videos import evaluate_vlm_run
+
+    (tmp_path / "frames" / "animation").mkdir(parents=True)
+    frame_paths = []
+    for frame_number in (1, 2, 3):
+        frame = tmp_path / "frames" / "animation" / f"frame_{frame_number:06d}.png"
+        Image.new("RGB", (8, 8), (8, 8, 8)).save(frame)
+        frame_paths.append(frame)
+    (tmp_path / "frames" / "index.json").write_text(
+        json.dumps({"frames": [{"frame": n, "path": f"animation/frame_{n:06d}.png"} for n in (1, 2, 3)]}),
+        encoding="utf-8",
+    )
+    assemble_mp4_from_pngs(frame_paths, tmp_path / "proxy.mp4", fps=3)
+    (tmp_path / "deterministic_report.json").write_text(
+        json.dumps(
+            {
+                "terminal_status": "fail",
+                "hard_gate_failed": False,
+                "score": 70,
+                "findings": ["telemetry_missing_entity"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "run_manifest.json").write_text(json.dumps({"case_id": "case-01"}), encoding="utf-8")
+    calls = []
+
+    class Provider:
+        def evaluate(self, **kwargs):
+            calls.append(kwargs)
+            return VLMJudgeResponse(
+                prompt_compliance=5,
+                physical_plausibility=10,
+                camera_coverage=0,
+                camera_innovation=0,
+                character_trajectory=0,
+                object_trajectory=0,
+                event_timing=0,
+                temporal_smoothness=10,
+                visual_clarity=0,
+                visible_evidence=["frames are nearly black"],
+                weaknesses=["subject is not visible"],
+                confidence=0.95,
+            ), {"id": "visual-after-deterministic-finding"}
+
+    result = evaluate_vlm_run(
+        tmp_path,
+        prompt="Observe a table.",
+        scene_contract={"events": [], "fps": 3},
+        provider=Provider(),
+        scoring_policy="legacy-aggregate",
+    )
+
+    assert calls
+    assert result["status"] == "scored"
+    assert result["deterministic_status"] == "fail"
+
+
 def test_vlm_evaluation_requires_a_playable_proxy_video(tmp_path):
     from evaluator.schemas import VLMJudgeResponse
     from scripts.evaluate_real_videos import evaluate_vlm_run

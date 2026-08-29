@@ -5,7 +5,8 @@
 | `DirectorAgent` | exact prompt, case obligations, duration, FPS | evidence-backed `DirectorPlan`, trajectories, camera cues, compatibility projections | unresolved hard uncertainty, unknown IDs, broken order, or missing coverage stops the case |
 | `blender/lib` verified library | typed primitive parameters | geometry, rigging, constraints, camera, layout, and runtime scaffolding calls | signatures and unit contracts are the only L2 capabilities exposed to codegen |
 | `BlenderCodeAgent` | DirectorPlan, library signatures, constraints, Harness version | one case-specific `blender_job.py` | schema/AST/runtime/case-coverage failure is fail-closed; no template fallback |
-| `CodexExecProvider` | structured Director/codegen request | provider response with schema and call evidence | provider/network/policy errors stay hard uncertainty |
+| external structured provider | Director interpretation request via `OPENAI_BASE_URL` | prompt interpretation with schema and call evidence | endpoint/network/schema errors stay hard uncertainty |
+| `CodexExecProvider` | local Blender-code request | per-case source response with schema and call evidence | CLI/JSON/policy errors stay hard uncertainty |
 | `CodeCache` | plan hash + Harness version | immutable source and code hash | cache hit reuses exact source; regeneration is explicit |
 | Blender CLI renderer | frozen source, isolated run directory | `.blend`, animation frames, telemetry, render response | real `D:\blender\blender.exe`; max 12 workers; retries reuse source at most twice |
 | `RealArtifactGate` | run directory and manifest | artifact status, per-file hashes, aggregate artifact hash | missing/unreadable/stale artifact blocks visual scoring |

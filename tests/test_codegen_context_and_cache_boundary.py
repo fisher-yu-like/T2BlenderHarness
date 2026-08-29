@@ -59,6 +59,20 @@ def test_valid_context_provenance_is_present_in_codegen_payload() -> None:
     assert payload["context_examples"][0]["review_source"] == "human_review"
 
 
+def test_codegen_payload_explains_geometry_mesh_data_adapter_contract() -> None:
+    from videoact.blender_code_agent import BlenderCodeAgent
+    from videoact.codegen_contracts import CodegenRequest
+
+    payload = BlenderCodeAgent(model="glm-5.3-flash").build_payload(
+        CodegenRequest(director_plan={"id": "plan-a"}, harness_version="h1")
+    )
+
+    instructions = " ".join(payload["instructions"])
+    assert "vertices" in instructions
+    assert "faces" in instructions
+    assert "from_pydata" in instructions
+
+
 def test_code_cache_manifest_preserves_context_provenance(tmp_path: Path) -> None:
     from videoact.code_cache import CodeCache
 

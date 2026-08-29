@@ -9,9 +9,9 @@ silent production fallbacks.
 
 ```text
 exact prompt + case metadata
- -> DirectorAgent
+ -> external structured DirectorAgent
  -> DirectorPlan evidence/order/trajectory/camera gate
- -> BlenderCodeAgent + CodexLocalProvider
+ -> BlenderCodeAgent + local CodexExecProvider (provider_mode=model)
  -> static/runtime/case coverage gate
  -> frozen per-case blender_job.py
  -> D:\blender\blender.exe in an isolated directory
@@ -26,13 +26,21 @@ prompt interpretation, event scheduling, actor/prop trajectories, interaction
 lifecycle, and multi-target camera choreography. `SceneContract` and
 `TrajectoryPlan` are compatibility projections for existing adapters.
 
-`BlenderCodeAgent` receives the exact DirectorPlan and verified
-`blender/lib/signatures.json`, then generates one case-specific source. The
-source must pass schema, AST, runtime, and `case coverage gate` checks before it
-is frozen. `CodexLocalProvider` is the structured in-process Codex bridge for
-the official training path; there is no external endpoint.
-`CodexExecProvider` is retained only for explicit diagnostics. Provider,
+`DirectorAgent` first uses an external OpenAI-compatible structured provider;
+it reads `OPENAI_API_KEY` and `OPENAI_BASE_URL` and calls the documented
+`/v1/chat/completions` path. `BlenderCodeAgent` then receives the exact
+DirectorPlan and verified `blender/lib/signatures.json`, and generates one
+case-specific source through the local `CodexExecProvider`/`codex exec` CLI.
+The source must pass schema, AST, runtime, and `case coverage gate` checks
+before it is frozen. Provider kinds, model IDs, call IDs, request hashes, and
+response hashes are recorded as separate stages. `CodexLocalProvider`/
+`codex-local` is retained only as the explicit `rule_template_baseline`
+diagnostic arm. There is no template fallback in the formal path. Provider,
 schema, static, or coverage errors are `fail-closed`.
+
+The optional local Codex visual-review diagnostic uses no external endpoint;
+that statement applies only to visual review, not to the external Director
+provider described above.
 
 `template_baseline` is permitted only when explicitly requested for a historical
 paired comparison. It is never an agent fallback. The official local inner
@@ -103,11 +111,15 @@ Deterministic values are gate/diagnostic outputs. For an eligible shared visual
 review:
 
 ```text
-semantic = GM(prompt_compliance, physical_plausibility,
-               object_trajectory, event_timing)
-choreography = GM(camera_coverage, camera_innovation,
-                  character_trajectory, temporal_smoothness)
-task_score = .45 * semantic + .45 * choreography + .10 * visual_clarity
+semantic_core = GM(applicable prompt_compliance, physical_plausibility,
+                    object_trajectory, event_timing,
+                    character_trajectory when an actor is applicable)
+choreography = GM(camera_coverage,
+                  camera_innovation when camera motion is required,
+                  character_trajectory when an actor is applicable,
+                  temporal_smoothness)
+observability = GM(camera_coverage, visual_clarity)
+task_score = .75 * semantic_core + .25 * observability
 task_final_score = task_score
 realism_vlm = GM(appearance_detail, physical_realism,
                   spatial_consistency, motion_naturalness,
@@ -116,5 +128,10 @@ reviewed_realism = .15 * geometry_score + .15 * frame_evidence_score + .70 * rea
 ```
 
 Task and realism are separate channels. Frame statistics can report artifact
-health only; they cannot create semantic or realism scores. A VLM transport or
-schema failure stays unavailable and cannot be converted to zero or 100.
+health only; they cannot create semantic or realism scores. The optional
+`overall_vlm_score` is a reporting summary (`.70 * task_score + .30 *
+realism_vlm`), not a replacement for either channel. A VLM transport or schema
+failure stays unavailable and cannot be converted to zero or 100. Every
+applicable dimension must have evidence references and completeness 1.0 for
+the strict formal visual score; low confidence enters human-review rather than
+being imputed.

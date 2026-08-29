@@ -33,6 +33,9 @@ class EventScheduler:
     def schedule(self, request: DirectorRequest, interpretation: PromptInterpretation) -> DirectorSchedule:
         directives = interpretation.directives
         if not directives:
+            camera_only = self._camera_only_events(request, interpretation)
+            if camera_only:
+                return DirectorSchedule(events=camera_only, interactions=[])
             return DirectorSchedule(events=[], interactions=[])
 
         windows = self._windows(request.duration_s, directives)
@@ -73,7 +76,15 @@ class EventScheduler:
                         event.id for event in events if event.concurrency_group == previous_group
                     )
                     dependencies = list(dict.fromkeys(dependencies))
+            # Some VBench mechanics/spatial prompts describe an action whose
+            # subject is a prop (for example, a ball bouncing or a droplet
+            # sliding) and do not name a human actor.  The event contract
+            # still needs a participant so the subject reaches trajectory and
+            # camera coverage.  Use the prop itself as the participant rather
+            # than inventing an unsupported actor or dropping the event.
             participants = [directive.actor_id] if directive.actor_id else []
+            if not participants and directive.prop_id:
+                participants = [directive.prop_id]
             if directive.action == "handoff" and directive.receiver_id:
                 participants.append(directive.receiver_id)
             events.append(
@@ -91,6 +102,55 @@ class EventScheduler:
             self._remember(directive, event_id, last_by_prop, last_by_actor)
 
         return DirectorSchedule(events=events, interactions=self._lifecycles(directives, events))
+
+    @staticmethod
+    def _camera_only_events(
+        request: DirectorRequest,
+        interpretation: PromptInterpretation,
+    ) -> list[DirectorEvent]:
+        """Materialize a camera cue when the benchmark has no action verb.
+
+        Prompts such as ``"Vase, tilt down."`` describe a visible subject and
+        a camera operation, but no actor/prop action directive.  Dropping the
+        cue would make the DirectorPlan unexecutable and would incorrectly
+        reject valid VBench camera-motion cases.  The synthesized ``observe``
+        event does not invent motion: it gives the camera cue a subject and a
+        full evidence/coverage interval while the trajectory layer emits a
+        hold primitive for that subject.
+        """
+
+        cues = list(getattr(interpretation, "camera_cues", []) or [])
+        if not cues:
+            return []
+        entities = [
+            entity
+            for entity in interpretation.entities
+            if str(entity.kind).lower() in {"actor", "prop", "support", "environment"}
+        ]
+        if not entities:
+            return []
+        actor_ids = [entity.id for entity in entities if entity.kind == "actor"]
+        prop_ids = [entity.id for entity in entities if entity.kind == "prop"]
+        participants = [actor_ids[0] if actor_ids else entities[0].id]
+        targets = list(prop_ids) if prop_ids else [entities[0].id]
+        duration = float(request.duration_s)
+        slot = duration / max(1, len(cues))
+        events: list[DirectorEvent] = []
+        for index, cue in enumerate(cues):
+            start = round(index * slot, 4)
+            end = round(duration if index == len(cues) - 1 else (index + 1) * slot, 4)
+            events.append(
+                DirectorEvent(
+                    id=f"camera_observe_{cue.id}",
+                    action="observe",
+                    participant_ids=list(participants),
+                    target_ids=list(targets),
+                    depends_on=[events[-1].id] if events else [],
+                    start=start,
+                    end=end,
+                )
+            )
+        return events
 
     @staticmethod
     def _windows(duration_s: float, directives: list[DirectorActionDirective]) -> list[tuple[float, float]]:

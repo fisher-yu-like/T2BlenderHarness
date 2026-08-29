@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from videoact.contracts import Finding, SceneContract, TrajectoryPlan
+from .physics_oracle import evaluate_physics_oracle
 
 
 def _finding(
@@ -154,6 +155,8 @@ def evaluate_independent_oracle(
     contract: SceneContract,
     plan: TrajectoryPlan,
     telemetry: dict[str, Any] | None = None,
+    *,
+    physics_report: dict[str, Any] | None = None,
 ) -> list[Finding]:
     """Return hard findings for mismatches against authored expectations."""
     oracle = record.get("oracle_expectations")
@@ -295,70 +298,41 @@ def evaluate_independent_oracle(
         )
 
     negative_constraints = set(oracle.get("required_negative_constraints", []))
-    if negative_constraints:
-        runtime = telemetry or {}
-        violations: list[str] = []
-        missing_evidence: list[str] = []
-        if "no_prop_penetration" in negative_constraints:
-            if "attachment_penetration" not in runtime:
-                missing_evidence.append("attachment_penetration")
-            elif runtime.get("attachment_penetration"):
-                violations.append("no_prop_penetration")
-        if "no_identity_swap" in negative_constraints:
-            objects = runtime.get("objects")
-            if not isinstance(objects, dict) or not objects:
-                missing_evidence.append("objects")
-            elif any(
-                observed.get("source_entity_id")
-                and observed.get("source_entity_id") != entity_id
-                for entity_id, observed in objects.items()
-                if isinstance(observed, dict)
-            ):
-                violations.append("no_identity_swap")
-        if "handoff_requires_same_window_detach_attach" in negative_constraints:
-            transfers = runtime.get("transfer_constraints")
-            if not isinstance(transfers, list):
-                missing_evidence.append("transfer_constraints")
-            elif any(isinstance(item, dict) and item.get("valid") is not True for item in transfers):
-                violations.append("handoff_requires_same_window_detach_attach")
-        if "all_required_targets_visible_in_event_shot" in negative_constraints:
-            if "visibility" not in runtime:
-                missing_evidence.append("visibility")
-            elif any(
-                isinstance(item, dict) and item.get("max_occlusion", 1.0) > 0.5
-                for item in runtime.get("visibility", []) or []
-            ):
-                violations.append("all_required_targets_visible_in_event_shot")
-        if "no_unplanned_actor_crossing" in negative_constraints:
-            runtime_crossings = runtime.get("actor_crossings")
-            if isinstance(runtime_crossings, list) and any(
-                not isinstance(item, dict) or item.get("planned") is not True
-                for item in runtime_crossings
-            ):
-                violations.append("no_unplanned_actor_crossing")
-            else:
-                trajectory_crossings = _find_unplanned_actor_crossings(oracle, contract, plan)
-                if trajectory_crossings:
-                    violations.append("no_unplanned_actor_crossing")
-                    evidence.extend(trajectory_crossings)
-        for constraint in violations:
+    if "no_unplanned_actor_crossing" in negative_constraints:
+        trajectory_crossings = _find_unplanned_actor_crossings(oracle, contract, plan)
+        if trajectory_crossings:
             findings.append(
                 _finding(
                     "oracle_negative_constraint_violated",
                     "proxy_renderer",
-                    f"runtime evidence violates authored negative constraint: {constraint}",
-                    evidence + [constraint],
-                    root_cause_id=f"negative_constraint:{constraint}",
+                    "trajectory evidence contains an unplanned actor lane crossing",
+                    evidence + trajectory_crossings,
+                    root_cause_id="negative_constraint:no_unplanned_actor_crossing",
                 )
             )
-        for field in missing_evidence:
-            findings.append(
-                _finding(
-                    "oracle_negative_evidence_missing",
-                    "proxy_renderer",
-                    f"runtime evidence required to verify authored negative constraints is missing: {field}",
-                    evidence + [field],
-                    root_cause_id=f"negative_evidence:{field}",
-                )
-            )
+
+    # Runtime negative constraints are derived from the trusted observer's raw
+    # transforms, bounds, and pose bones.  Generated fields such as
+    # ``attachment_penetration`` and ``transfer_constraints`` are deliberately
+    # ignored at this boundary.
+    # Keep plan-only callers separate from the real-video runtime boundary.
+    # ``telemetry=None`` means that no runtime claim was supplied; it must not
+    # manufacture a physical failure while checking authored plan semantics.
+    # The real-video path passes telemetry (including an empty mapping when
+    # the artifact is missing) or an explicit physics report, so that path
+    # remains fail-closed through ``evaluate_physics_oracle``.
+    if physics_report is not None:
+        physics = physics_report
+    elif telemetry is not None:
+        physics = evaluate_physics_oracle(
+            record,
+            telemetry,
+            contract=contract,
+            trajectory_plan=plan,
+        )
+    else:
+        physics = None
+    for item in (physics or {}).get("findings", []) or []:
+        if isinstance(item, dict):
+            findings.append(Finding.model_validate(item))
     return findings

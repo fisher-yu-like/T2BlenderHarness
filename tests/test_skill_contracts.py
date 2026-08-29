@@ -230,3 +230,19 @@ def test_active_evaluator_and_chinese_docs_point_to_exact_review_bundle():
     for path in paths:
         text = path.read_text(encoding="utf-8")
         assert "dataset/golden-review-exact-v2" in text
+
+
+def test_active_skills_document_model_provider_and_trusted_observer_boundary():
+    training = (ROOT / "skills" / "t2blendercodeharness-training" / "SKILL.md").read_text(encoding="utf-8")
+    harness = (ROOT / "skills" / "t2blendercodeharness" / "SKILL.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "skills" / "t2blendercodeharness-zh" / "SKILL.md").read_text(encoding="utf-8")
+
+    for text in (training, harness, chinese):
+        assert "provider_mode=model" in text
+        assert "rule_template_baseline" in text
+        assert "trusted observer" in text.lower()
+        assert "candidate.blend" in text
+        assert "primary-blind-v1" in text
+        assert "formal-evaluator-v1" in text
+    assert "gpt-5.6-luna" in training and "gpt-5.6-terra" in training
+    assert "current official training path uses the in-process `codex-local` provider" not in training

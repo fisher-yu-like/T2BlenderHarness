@@ -60,17 +60,10 @@ def build_responses_payload(
     model: str,
     harness_version: str | None = None,
 ) -> dict[str, Any]:
-    del harness_version
-    if hasattr(scene_contract, "model_dump"):
-        scene_contract = scene_contract.model_dump(mode="json")
-    normalized_findings = [
-        item.model_dump(mode="json") if hasattr(item, "model_dump") else item
-        for item in deterministic_findings
-    ]
+    del scene_contract, deterministic_findings, harness_version
     context = {
+        "blind_review_version": "primary-blind-v1",
         "prompt": prompt,
-        "scene_contract": scene_contract,
-        "deterministic_findings": normalized_findings,
     }
     content: list[dict[str, Any]] = [
         {
@@ -107,7 +100,8 @@ def build_responses_payload(
             "spatial_consistency, motion_naturalness, and visual_presentation for the separate realism channel. "
             "Do not infer geometry from the plan: score visible character/object detail, material/light response, "
             "contact and penetration, identity persistence, motion naturalness, and composition from the frames. "
-            "Confidence is 0 to 1."
+            "Return event_scores keyed by distinct required events visible in the prompt, using null when "
+            "a required event cannot be independently established from the supplied frames. Confidence is 0 to 1."
         ),
         "input": [{"role": "user", "content": content}],
         "text": {

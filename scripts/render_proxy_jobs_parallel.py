@@ -27,6 +27,7 @@ if str(ROOT / "src") not in sys.path:
 from videoact.real_pipeline import RealRunStateMachine  # noqa: E402
 from videoact.real_artifacts import probe_mp4  # noqa: E402
 from videoact.real_video import assemble_mp4_from_pngs  # noqa: E402
+from videoact.observer_contract import sha256_file, write_observer_request  # noqa: E402
 
 
 def build_blender_command(job_dir: str | Path, blender_bin: str) -> list[str]:
@@ -54,6 +55,8 @@ def mark_render_state(job_dir: str | Path, *, return_code: int, blender_version:
     """Persist the CLI outcome in the same state machine used by real evaluation."""
     root = Path(job_dir)
     machine = RealRunStateMachine(root, case_id=root.name)
+    if machine.state in {"evaluated", "failed"}:
+        machine.transition("executing", {"backend": "blender-cli", "explicit_rerender": True})
     if machine.state == "prepared":
         machine.transition("executing", {"backend": "blender-cli"})
     response = {
@@ -63,12 +66,35 @@ def mark_render_state(job_dir: str | Path, *, return_code: int, blender_version:
     }
     if blender_version:
         response["blender_version"] = blender_version
+        manifest_path = root / "run_manifest.json"
+        if manifest_path.is_file():
+            try:
+                manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(manifest_payload, dict):
+                    manifest_payload["blender_version"] = str(blender_version).strip()
+                    manifest_path.write_text(
+                        json.dumps(manifest_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                # The state record still preserves the CLI evidence; the
+                # final ExperimentFingerprint gate will fail closed if the
+                # manifest cannot be updated.
+                pass
     machine.record_mcp_response(response)
 
 
 def _clear_render_outputs(job_dir: Path) -> None:
     """Clear only generated render outputs before a retry; keep immutable inputs."""
-    for relative in ("proxy.blend", "proxy.mp4", "telemetry.json"):
+    for relative in (
+        "proxy.blend",
+        "candidate.blend",
+        "proxy.mp4",
+        "telemetry.json",
+        "telemetry_manifest.json",
+        "observer_request.json",
+        "untrusted_candidate_telemetry.json",
+    ):
         path = job_dir / relative
         if path.is_file():
             path.unlink()
@@ -77,14 +103,129 @@ def _clear_render_outputs(job_dir: Path) -> None:
         shutil.rmtree(frames_dir)
 
 
-def _render_artifacts_ready(job_dir: Path) -> bool:
-    required = (
+def _render_artifacts_ready(job_dir: Path, *, trusted_observer_required: bool = False) -> bool:
+    required = [
         job_dir / "proxy.blend",
         job_dir / "telemetry.json",
         job_dir / "frames" / "index.json",
-    )
+    ]
+    if trusted_observer_required:
+        required.extend(
+            [
+                job_dir / "candidate.blend",
+                job_dir / "observer_request.json",
+                job_dir / "telemetry_manifest.json",
+            ]
+        )
     animation_frames = sorted((job_dir / "frames" / "animation").glob("frame_*.png"))
     return all(path.is_file() and path.stat().st_size > 0 for path in required) and bool(animation_frames)
+
+
+def _observer_command(job_dir: Path, blender_bin: str, request_path: Path, observer_source_hash: str) -> list[str]:
+    return [
+        blender_bin,
+        "-b",
+        str((job_dir / "candidate.blend").resolve()),
+        "--python",
+        str(OBSERVER_SOURCE.resolve()),
+        "--",
+        "--run-dir",
+        str(job_dir.resolve()),
+        "--request",
+        str(request_path.resolve()),
+        "--observer-source-sha256",
+        observer_source_hash,
+    ]
+
+
+OBSERVER_SOURCE = ROOT / "blender" / "trusted_observer.py"
+
+
+def _mesh_entity_ids_for_observer(job_dir: Path) -> list[str]:
+    """Request mesh narrow-phase data only for physical scene entities."""
+
+    contract_path = job_dir / "scene_contract.json"
+    if not contract_path.is_file():
+        return []
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return []
+    entity_ids: list[str] = []
+    for entity in contract.get("entities", []) if isinstance(contract, dict) else []:
+        if not isinstance(entity, dict):
+            continue
+        kind = str(entity.get("kind") or "").lower()
+        entity_id = str(entity.get("id") or "").strip()
+        if entity_id and kind in {"actor", "character", "prop", "support", "environment"}:
+            entity_ids.append(entity_id)
+    return list(dict.fromkeys(entity_ids))
+
+
+def _run_trusted_observer(
+    job_dir: Path,
+    *,
+    blender_bin: str,
+    timeout_s: int,
+    manifest_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Run the fixed observer after quarantining all generated telemetry."""
+
+    candidate = job_dir / "candidate.blend"
+    proxy = job_dir / "proxy.blend"
+    if not candidate.is_file():
+        return {"status": "failed", "error": "candidate_blend_missing"}
+    if proxy.is_file() and sha256_file(proxy) != sha256_file(candidate):
+        return {"status": "failed", "error": "candidate_proxy_blend_hash_mismatch"}
+    if not proxy.is_file():
+        shutil.copy2(candidate, proxy)
+    observer_hash = sha256_file(OBSERVER_SOURCE)
+    declared_hash = str(manifest_payload.get("observer_source_hash") or "")
+    if declared_hash and declared_hash != observer_hash:
+        return {"status": "failed", "error": "observer_source_hash_not_allowlisted"}
+    for relative in ("proxy.mp4", "telemetry_manifest.json", "observer_request.json"):
+        path = job_dir / relative
+        if path.is_file():
+            path.unlink()
+    generated_telemetry = job_dir / "telemetry.json"
+    if generated_telemetry.is_file():
+        generated_telemetry.replace(job_dir / "untrusted_candidate_telemetry.json")
+    frames_dir = job_dir / "frames"
+    if frames_dir.is_dir():
+        shutil.rmtree(frames_dir)
+    request_path = job_dir / "observer_request.json"
+    request = write_observer_request(
+        request_path,
+        candidate_blend_hash=sha256_file(candidate),
+        observer_source_hash=observer_hash,
+        mesh_entity_ids=_mesh_entity_ids_for_observer(job_dir),
+    )
+    command = _observer_command(job_dir, blender_bin, request_path, observer_hash)
+    inherited_pythonpath = os.environ.get("PYTHONPATH", "")
+    pythonpath = os.pathsep.join(item for item in (str(ROOT), inherited_pythonpath) if item)
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(job_dir),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+            env={**os.environ, "PYTHONPATH": pythonpath},
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {"status": "timeout", "error": f"observer_timeout:{exc}", "command": command, "request": request}
+    except OSError as exc:
+        return {"status": "failed", "error": f"observer_oserror:{exc}", "command": command, "request": request}
+    return {
+        "status": "success" if completed.returncode == 0 else "failed",
+        "return_code": completed.returncode,
+        "command": command,
+        "request": request,
+        "stdout_tail": (completed.stdout or "")[-2000:],
+        "stderr_tail": (completed.stderr or "")[-2000:],
+        "error": None if completed.returncode == 0 else "trusted_observer_nonzero_exit",
+    }
 
 
 def _assemble_and_probe_video(job_dir: Path) -> dict[str, Any]:
@@ -115,19 +256,26 @@ def _run_one(
     job_path = job_dir / "blender_job.py"
     if not job_path.is_file():
         return {"case_id": job_dir.name, "status": "missing_job", "job_dir": str(job_dir.resolve())}
+    existing_state = RealRunStateMachine(job_dir, case_id=job_dir.name).state
+    if existing_state in {"evaluated", "failed"}:
+        _clear_render_outputs(job_dir)
     command = build_blender_command(job_dir, blender_bin)
     frozen_source_hash = hashlib.sha256(job_path.read_bytes()).hexdigest()
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
     expected_manifest_code_hash = None
+    manifest_payload: dict[str, Any] = {}
     manifest_path = job_dir / "run_manifest.json"
     if manifest_path.is_file():
         try:
-            expected_manifest_code_hash = json.loads(
-                manifest_path.read_text(encoding="utf-8")
-            ).get("code_hash")
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(manifest_payload, dict):
+                manifest_payload = {}
+            expected_manifest_code_hash = manifest_payload.get("code_hash")
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             expected_manifest_code_hash = None
+            manifest_payload = {}
+    trusted_observer_required = bool(manifest_payload.get("trusted_observer_required"))
     if expected_manifest_code_hash and expected_manifest_code_hash != frozen_source_hash:
         return {
             "case_id": job_dir.name,
@@ -173,7 +321,20 @@ def _run_one(
             error = f"timeout:{exc}"
         except OSError as exc:
             error = f"oserror:{exc}"
-        render_artifacts_ready = _render_artifacts_ready(job_dir)
+        observer_result: dict[str, Any] | None = None
+        if trusted_observer_required and completed is not None and completed.returncode == 0:
+            observer_result = _run_trusted_observer(
+                job_dir,
+                blender_bin=blender_bin,
+                timeout_s=timeout_s,
+                manifest_payload=manifest_payload,
+            )
+            if observer_result.get("status") != "success":
+                error = (error + ";" if error else "") + str(observer_result.get("error") or "trusted_observer_failed")
+        render_artifacts_ready = _render_artifacts_ready(
+            job_dir,
+            trusted_observer_required=trusted_observer_required,
+        )
         current_source_hash = hashlib.sha256(job_path.read_bytes()).hexdigest() if job_path.is_file() else None
         source_unchanged = current_source_hash == frozen_source_hash
         if not source_unchanged:
@@ -205,6 +366,8 @@ def _run_one(
             "source_hash": current_source_hash,
             "source_unchanged": source_unchanged,
             "manifest_code_hash": manifest_code_hash,
+            "trusted_observer_required": trusted_observer_required,
+            "trusted_observer": observer_result,
         }
         attempts.append(attempt_result)
         if (
@@ -212,6 +375,7 @@ def _run_one(
             and return_code == 0
             and render_artifacts_ready
             and video_probe.get("playable")
+            and (not trusted_observer_required or (observer_result or {}).get("status") == "success")
             and (not expected_manifest_code_hash or manifest_code_hash == frozen_source_hash)
         ):
             result = {

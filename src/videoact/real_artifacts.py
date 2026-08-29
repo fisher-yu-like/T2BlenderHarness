@@ -32,6 +32,10 @@ class RealRunManifest(BaseModel):
     render_settings: dict[str, Any]
     fingerprint: str
     state: Literal["prepared", "executing", "rendered", "artifact_valid", "evaluated", "failed"]
+    trusted_observer_required: bool = False
+    observer_version: str | None = None
+    observer_source_hash: str | None = None
+    experiment_fingerprint: dict[str, Any] | None = None
 
 
 class RealArtifactReport(BaseModel):
@@ -226,6 +230,55 @@ class RealArtifactGate:
                 manifest = RealRunManifest.model_validate(json.loads(manifest_path.read_text(encoding="utf-8")))
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 failures.append(f"invalid_manifest:{type(exc).__name__}")
+
+        if manifest is not None and manifest.trusted_observer_required:
+            for relative in ("candidate.blend", "observer_request.json", "telemetry_manifest.json", "experiment_fingerprint.json"):
+                path = root / relative
+                if not path.is_file() or path.stat().st_size == 0:
+                    failures.append(f"missing_trusted_observer_artifact:{relative}")
+                else:
+                    hashes[relative] = _sha256(path)
+            candidate = root / "candidate.blend"
+            proxy = root / "proxy.blend"
+            if candidate.is_file() and proxy.is_file() and _sha256(candidate) != _sha256(proxy):
+                failures.append("candidate_proxy_blend_hash_mismatch")
+            try:
+                from .observer_contract import read_trusted_observer_output
+
+                observer_report = read_trusted_observer_output(
+                    root,
+                    observer_source_path=Path(__file__).resolve().parents[2] / "blender" / "trusted_observer.py",
+                )
+                if observer_report.get("status") != "pass":
+                    failures.extend(
+                        f"trusted_observer:{item}"
+                        for item in observer_report.get("failures", ["observer_validation_failed"])
+                    )
+                elif manifest.observer_source_hash and (
+                    observer_report.get("manifest") or {}
+                ).get("observer_source_hash") != manifest.observer_source_hash:
+                    failures.append("trusted_observer:run_manifest_source_hash_mismatch")
+            except (OSError, RuntimeError, ValueError, TypeError):
+                failures.append("trusted_observer:validation_error")
+            fingerprint_payload = manifest.experiment_fingerprint
+            if not isinstance(fingerprint_payload, dict):
+                failures.append("missing_experiment_fingerprint")
+            else:
+                try:
+                    from .experiment_fingerprint import ExperimentFingerprint
+
+                    fingerprint = ExperimentFingerprint.model_validate(fingerprint_payload)
+                    if fingerprint.with_digest().digest != fingerprint.digest:
+                        failures.append("experiment_fingerprint_digest_mismatch")
+                    fingerprint_path = root / "experiment_fingerprint.json"
+                    if fingerprint_path.is_file():
+                        stored = json.loads(fingerprint_path.read_text(encoding="utf-8"))
+                        if stored != fingerprint.model_dump(mode="json"):
+                            failures.append("experiment_fingerprint_file_mismatch")
+                except (TypeError, ValueError):
+                    failures.append("invalid_experiment_fingerprint")
+                except (OSError, json.JSONDecodeError):
+                    failures.append("experiment_fingerprint_file_unreadable")
 
         director_plan_path = root / "director_plan.json"
         if director_plan_path.is_file():

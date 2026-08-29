@@ -84,3 +84,20 @@ def test_frame_statistics_and_low_confidence_never_become_numeric_scores() -> No
     assert frame_result.overall_vlm_score is None
     assert low_confidence.status == "needs_human_review"
     assert low_confidence.task_score is None
+
+
+def test_visual_primary_exposes_scoring_v7_status_and_applicability() -> None:
+    result = score_visual_review(
+        _response(event_scores={"event_01": 12}),
+        artifact_gate_pass=True,
+        source="gpt-5.6-luna",
+        applicability={"character_trajectory": False, "camera_motion": False},
+        required_event_ids=["event_01"],
+    )
+
+    assert result.evaluator_version == "scoring-v7-independent-channels"
+    assert result.semantic_status == "failed_required_event"
+    assert result.required_event_gate_failed is True
+    assert result.task_score == 49
+    assert result.applicability["character_trajectory"] is False
+    assert result.applicability["camera_innovation"] is False

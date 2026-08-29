@@ -44,3 +44,20 @@ def test_mcp_response_failure_is_recorded_as_terminal_failed(tmp_path):
     assert machine.state == "failed"
     response = json.loads((tmp_path / "mcp_response.json").read_text(encoding="utf-8"))
     assert response["isError"] is True
+
+
+def test_render_state_can_explicitly_reopen_a_previous_terminal_run(tmp_path):
+    from scripts.render_proxy_jobs_parallel import mark_render_state
+    from videoact.real_pipeline import RealRunStateMachine
+
+    machine = RealRunStateMachine(tmp_path, case_id="case-01")
+    machine.transition("executing")
+    machine.transition("rendered")
+    machine.transition("artifact_valid")
+    machine.transition("evaluated")
+
+    mark_render_state(tmp_path, return_code=1)
+
+    reopened = RealRunStateMachine(tmp_path, case_id="case-01")
+    assert reopened.state == "failed"
+    assert [entry["state"] for entry in reopened.record.history][-2:] == ["executing", "failed"]

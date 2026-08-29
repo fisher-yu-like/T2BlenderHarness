@@ -24,9 +24,9 @@ def test_assistant_local_mode_uses_real_mp4_evidence_when_runtime_observations_e
         assistant_local=True,
     )
 
-    assert result["status"] == "scored"
-    assert result["review_source"] == "codex_local_visual_review"
-    assert result["vlm_model"] == "codex-local"
-    assert result["local_video_evidence"]["source"] == "actual_proxy_mp4_and_runtime_observations"
-    assert result["task_score"] is not None
-    assert result["realism_score"] is not None
+    assert result["status"] == "unavailable"
+    assert result["review_source"] == "deterministic_video_proxy_metrics"
+    assert result["reason"] == "deterministic_video_proxy_metrics_not_a_visual_judge"
+    assert result["deterministic_video_proxy_metrics"]["source"] == "actual_proxy_mp4_and_runtime_observations"
+    assert result["task_score"] is None
+    assert result["realism_score"] is None

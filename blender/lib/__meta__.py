@@ -9,6 +9,35 @@ from typing import Any
 from . import primitive_registry
 
 
+_RETURN_CONTRACTS = {
+    "geometry": "mesh_data_vertices_faces",
+    "camera": "camera_keyframes",
+    "constraints": "constraint_spec",
+    "rigging": {
+        "minimal_humanoid_armature": "armature_spec",
+        "bind_mesh_to_armature": "vertex_weight_map",
+        "add_ik_constraint": "constraint_spec",
+    },
+    "layout": {
+        "lane_separated_paths": "trajectories_by_entity",
+        "place_on_surface": "translation_vector",
+        "handoff_constraint_sequence": "constraint_specs",
+        "avoid_penetration": "trajectory",
+    },
+    "scaffolding": {
+        "build_runtime_contract": "runtime_contract",
+        "validate_runtime_contract": "validation_failures",
+    },
+}
+
+
+def _return_contract(category: str, name: str) -> str:
+    value = _RETURN_CONTRACTS.get(category, "verified_value")
+    if isinstance(value, dict):
+        return str(value.get(name, "verified_value"))
+    return str(value)
+
+
 def _library_functions() -> list[Callable[..., Any]]:
     # Imports are intentionally local: importing ``blender.lib`` alone should
     # remain cheap, while signature export eagerly loads every public module.
@@ -33,6 +62,10 @@ def collect_library_signatures() -> dict[str, list[dict[str, Any]]]:
         metadata = dict(registry[function.__name__])
         metadata["signature"] = f"{function.__name__}{inspect.signature(function)}"
         metadata["docstring"] = (function.__doc__ or "").strip()
+        metadata["module"] = str(function.__module__)
+        metadata["return_contract"] = _return_contract(
+            str(metadata["category"]), function.__name__
+        )
         grouped.setdefault(str(metadata["category"]), []).append(metadata)
     return {
         category: sorted(entries, key=lambda item: str(item["name"]))

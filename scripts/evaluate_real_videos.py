@@ -27,9 +27,10 @@ from evaluator.shared_review import score_shared_visual_review  # noqa: E402
 from evaluator.realism import score_realism  # noqa: E402
 from evaluator.real_video_metrics import (  # noqa: E402
     LOCAL_REVIEW_SOURCE,
-    build_local_vlm_response,
     evaluate_real_video,
 )
+from evaluator.result_contract import build_evaluation_result  # noqa: E402
+from evaluator.scoring_v7 import score_v7  # noqa: E402
 from evaluator.schemas import VLMJudgeResponse  # noqa: E402
 from evaluator.visual_primary import VISUAL_PRIMARY_VERSION, score_visual_review  # noqa: E402
 from videoact.real_artifacts import probe_mp4, sample_event_aligned_frame_paths  # noqa: E402
@@ -112,9 +113,11 @@ def evaluate_vlm_run(
                 response=response,
                 source=str(assistant_review.get("review_source") or "human_review").lower(),
                 review_source_label=str(assistant_review.get("review_source") or "human_review").lower(),
+                scene_contract=scene_contract,
                 frame_paths=frames,
                 video_probe=video_probe,
                 raw_response_id=None,
+                strict_evidence=use_visual_primary and scoring_policy == VISUAL_PRIMARY_VERSION,
             )
         return score_assistant_local_review(
             root,
@@ -140,18 +143,29 @@ def evaluate_vlm_run(
             except (OSError, TypeError, ValueError, json.JSONDecodeError):
                 local_evidence = None
             if local_evidence and local_evidence.get("status") == "scored":
-                local_response = build_local_vlm_response(local_evidence)
-                return _score_visual_primary(
-                    root,
-                    deterministic=deterministic,
-                    response=local_response,
-                    source=LOCAL_REVIEW_SOURCE,
-                    review_source_label=LOCAL_REVIEW_SOURCE,
-                    frame_paths=frames,
-                    video_probe=video_probe,
-                    model="codex-local",
-                    local_video_evidence=local_evidence,
+                # These measurements are useful diagnostics, but they are not
+                # an independent visual judge. Never convert them into a
+                # VLMJudgeResponse or a formal task score.
+                (root / "deterministic_video_proxy_metrics.json").write_text(
+                    json.dumps(local_evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
                 )
+                result = {
+                    "status": "unavailable",
+                    "review_source": LOCAL_REVIEW_SOURCE,
+                    "reason": "deterministic_video_proxy_metrics_not_a_visual_judge",
+                    "video_probe": video_probe,
+                    "frame_count": len(frames),
+                    "sampled_frames": [str(path.resolve()) for path in frames],
+                    "deterministic_video_proxy_metrics": local_evidence,
+                    "task_score": None,
+                    "realism_score": None,
+                }
+                (root / "vlm_report.json").write_text(
+                    json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                return result
         request = build_assistant_review_request(
             root,
             prompt=prompt,
@@ -207,9 +221,11 @@ def evaluate_vlm_run(
             source=str(review_source).lower(),
             review_source_label="external_vlm",
             model=str(review_source).lower(),
+            scene_contract=scene_contract,
             frame_paths=frames,
             video_probe=video_probe,
             raw_response_id=raw_response.get("id"),
+            strict_evidence=use_visual_primary and scoring_policy == VISUAL_PRIMARY_VERSION,
         )
     result = score_shared_visual_review(
         root,
@@ -234,11 +250,13 @@ def _score_visual_primary(
     response: VLMJudgeResponse,
     source: str,
     review_source_label: str,
+    scene_contract: Any,
     frame_paths: list[str | Path],
     video_probe: dict[str, Any],
     model: str | None = None,
     raw_response_id: str | None = None,
     local_video_evidence: dict[str, Any] | None = None,
+    strict_evidence: bool = False,
 ) -> dict[str, Any]:
     """Persist the new evaluator channels without legacy deterministic fusion."""
 
@@ -248,7 +266,35 @@ def _score_visual_primary(
             json.dumps(local_video_evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-    primary = score_visual_review(response, artifact_gate_pass=True, source=source)
+    contract = scene_contract.model_dump(mode="json") if hasattr(scene_contract, "model_dump") else scene_contract
+    contract = contract if isinstance(contract, dict) else {}
+    entities = [item for item in contract.get("entities", []) if isinstance(item, dict)]
+    actor_present = any(str(item.get("kind") or "").lower() in {"actor", "character"} for item in entities)
+    prop_present = any(str(item.get("kind") or "").lower() == "prop" for item in entities)
+    camera_constraints = " ".join(str(item) for item in contract.get("camera_constraints", []) or []).lower()
+    camera_motion = any(token in camera_constraints for token in ("orbit", "dolly", "zoom", "pan", "tilt", "follow", "reframe"))
+    required_event_ids = [
+        str(event.get("id"))
+        for event in contract.get("events", []) or []
+        if isinstance(event, dict) and str(event.get("id") or "").strip()
+        and (
+            not contract.get("must_show")
+            or str(event.get("id")) in {str(item) for item in contract.get("must_show", [])}
+        )
+    ]
+    primary = score_visual_review(
+        response,
+        artifact_gate_pass=True,
+        source=source,
+        applicability={
+            "character_trajectory": actor_present,
+            "object_trajectory": prop_present,
+            "camera_motion": camera_motion,
+        },
+        required_event_ids=required_event_ids,
+        required_event_scores=response.event_scores,
+        strict_evidence=strict_evidence,
+    )
     if primary.status != "scored":
         result = {
             "status": primary.status,
@@ -282,6 +328,39 @@ def _score_visual_primary(
         },
     }
     realism = score_realism(geometry, visual_evidence, independent_review)
+    evaluation_result = None
+    artifact_report_path = root / "artifact_report.json"
+    telemetry_path = root / "telemetry.json"
+    if artifact_report_path.is_file():
+        try:
+            artifact_payload = json.loads(artifact_report_path.read_text(encoding="utf-8"))
+            telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8")) if telemetry_path.is_file() else {}
+            observations = telemetry_payload.get("observations") or telemetry_payload.get("runtime_observations") or []
+            evaluation_result = build_evaluation_result(
+                artifact_status=artifact_payload.get("artifact_status"),
+                video_probe=video_probe,
+                runtime_observation_count=len(observations) if isinstance(observations, list) else 0,
+                visual_status=primary.status,
+                semantic_score=primary.semantic_score,
+                observability_score=primary.observability_score,
+                presentation_score=primary.presentation_score,
+                task_score=primary.task_score,
+                realism_score=realism.get("score"),
+                required_event_scores=primary.required_event_scores,
+                confidence=response.confidence,
+            ).model_dump(mode="json")
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            evaluation_result = build_evaluation_result(
+                artifact_status="unavailable",
+                video_probe=video_probe,
+                runtime_observation_count=None,
+                visual_status=primary.status,
+                semantic_score=None,
+                observability_score=None,
+                presentation_score=None,
+                task_score=None,
+                realism_score=None,
+            ).model_dump(mode="json")
     result = {
         "status": "scored",
         "evaluator_version": VISUAL_PRIMARY_VERSION,
@@ -291,6 +370,16 @@ def _score_visual_primary(
         "video_probe": video_probe,
         "vlm_response": response.model_dump(mode="json"),
         "visual_primary": primary.model_dump(mode="json"),
+        "scoring_v7": score_v7(
+            response,
+            applicability={
+                "character_trajectory": actor_present,
+                "object_trajectory": prop_present,
+                "camera_motion": camera_motion,
+            },
+            required_event_ids=required_event_ids,
+            required_event_scores=response.event_scores,
+        ).model_dump(mode="json"),
         "task_score": primary.task_score,
         "task_final_score": primary.task_score,
         "realism_vlm_score": primary.realism_score,
@@ -303,6 +392,7 @@ def _score_visual_primary(
         "sampled_frames": [str(Path(path).resolve()) for path in frame_paths],
         "raw_response_id": raw_response_id,
         "local_video_evidence": local_video_evidence,
+        "evaluation_result": evaluation_result,
         "score_channels": {
             "task_score": "visual-primary VLM task channel",
             "realism_score": "independent realism channel with VLM as primary evidence",

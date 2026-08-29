@@ -27,6 +27,23 @@ def test_library_signatures_cover_all_public_categories() -> None:
             assert item["usage_count"] == 0
 
 
+def test_library_signatures_expose_exact_import_module_and_return_contract() -> None:
+    payload = collect_library_signatures()
+
+    by_name = {
+        item["name"]: item
+        for entries in payload.values()
+        for item in entries
+    }
+
+    assert by_name["box"]["module"] == "blender.lib.geometry"
+    assert by_name["box"]["return_contract"] == "mesh_data_vertices_faces"
+    assert by_name["track_to_constraint"]["module"] == "blender.lib.constraints"
+    assert by_name["track_to_constraint"]["return_contract"] == "constraint_spec"
+    assert by_name["follow_camera"]["module"] == "blender.lib.camera"
+    assert by_name["follow_camera"]["return_contract"] == "camera_keyframes"
+
+
 def test_exported_signatures_are_valid_json(tmp_path) -> None:
     path = export_library_signatures(tmp_path / "signatures.json")
 

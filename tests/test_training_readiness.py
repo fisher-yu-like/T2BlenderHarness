@@ -95,6 +95,49 @@ def test_readiness_requires_complete_agent_artifact_and_both_provider_stages() -
     assert report["gates"]["dynamic_agent_provider"]["status"] == "blocked"
 
 
+def test_formal_model_readiness_requires_distinct_generator_and_judge_snapshots() -> None:
+    from scripts.check_training_readiness import build_training_readiness
+
+    base = build_training_readiness(
+        automated_checks=_automated_passes(),
+        real_blender_smoke={"status": "pass", "generation_mode": "agent", "artifact_status": "complete"},
+        golden_review={"status": "pass", "annotators_per_sample": 2},
+        dynamic_agent_provider={
+            "status": "pass",
+            "provider_mode": "model",
+            "director": "pass",
+            "blender_code": "pass",
+            "generator_model_id": "codex-v1",
+            "primary_judge_model_id": "codex-v1",
+            "audit_judge_model_id": "terra-v1",
+        },
+        paired_gate={"status": "pass", "case_count": 20},
+    )
+
+    assert base["training_allowed"] is False
+    assert base["gates"]["dynamic_agent_provider"]["reason"] == "generator_and_judge_model_snapshots_must_be_distinct"
+
+
+def test_explicit_rule_template_provider_cannot_satisfy_readiness() -> None:
+    from scripts.check_training_readiness import build_training_readiness
+
+    report = build_training_readiness(
+        automated_checks=_automated_passes(),
+        real_blender_smoke={"status": "pass", "generation_mode": "agent", "artifact_status": "complete"},
+        golden_review={"status": "pass", "annotators_per_sample": 2},
+        dynamic_agent_provider={
+            "status": "pass",
+            "provider_mode": "rule_template_baseline",
+            "director": "pass",
+            "blender_code": "pass",
+        },
+        paired_gate={"status": "pass", "case_count": 20},
+    )
+
+    assert report["training_allowed"] is False
+    assert report["gates"]["dynamic_agent_provider"]["reason"] == "rule_template_baseline_is_diagnostic_only"
+
+
 def test_readiness_rejects_historical_self_built_dataset() -> None:
     from scripts.check_training_readiness import _dataset_evidence
 
@@ -177,6 +220,145 @@ def test_training_entry_requires_a_passing_readiness_report(tmp_path: Path) -> N
     allowed = tmp_path / "allowed.json"
     allowed.write_text('{"training_allowed": true}', encoding="utf-8")
     assert require_training_readiness(allowed)["training_allowed"] is True
+
+
+def test_formal_training_entry_requires_verified_g0_to_g3_release_report(tmp_path: Path) -> None:
+    from scripts.train_real_harness import require_formal_training_release
+    from videoact.release_gates import build_formal_release_report, seal_report
+
+    readiness = tmp_path / "readiness.json"
+    readiness.write_text('{"training_allowed": true}', encoding="utf-8")
+    g0 = seal_report({"status": "pass", "gate_id": "G0"})
+    g1 = seal_report({"status": "pass", "gate_id": "G1"})
+    pilot = seal_report(
+        {
+            "status": "pass",
+            "gate_id": "G2",
+            "case_count": 20,
+            "split_case_counts": {"train": 10, "dev": 10},
+            "all_artifacts_complete": True,
+            "trusted_observer_complete": True,
+            "blind_review_complete": True,
+            "disagreement_audit_complete": True,
+            "paired_outcome_registered": True,
+            "baseline_arm": "rule_template_baseline",
+            "candidate_arm": "model_driven_candidate",
+            "primary_outcome": "task_score",
+            "noninferiority_margin": -1.0,
+            "hard_failure_rule": "no_regression",
+        }
+    )
+    shadow = seal_report(
+        {
+            "status": "pass",
+            "gate_id": "G3",
+            "case_count": 120,
+            "split_case_counts": {"train": 60, "dev": 60},
+            "patch_applied": False,
+            "resume_verified": True,
+            "fingerprints_stable": True,
+            "memory_complete": True,
+            "cost_slo_pass": True,
+            "artifact_completion_slo_pass": True,
+            "hard_failure_slo_pass": True,
+            "judge_unavailable_slo_pass": True,
+        }
+    )
+    release = build_formal_release_report(g0, g1, pilot, shadow)
+    release_path = tmp_path / "release.json"
+    release_path.write_text(__import__("json").dumps(release), encoding="utf-8")
+
+    result = require_formal_training_release(readiness, release_path)
+
+    assert result["training_allowed"] is True
+
+
+def test_formal_training_entry_rejects_readiness_only(tmp_path: Path) -> None:
+    from scripts.train_real_harness import require_formal_training_release
+
+    readiness = tmp_path / "readiness.json"
+    readiness.write_text('{"training_allowed": true}', encoding="utf-8")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="formal release"):
+        require_formal_training_release(readiness, tmp_path / "missing-release.json")
+
+
+def test_readiness_can_reference_and_verify_a_formal_release_report(tmp_path: Path) -> None:
+    import json
+
+    from scripts.check_training_readiness import build_training_readiness_from_project
+    from videoact.release_gates import build_formal_release_report, seal_report
+
+    release = build_formal_release_report(
+        seal_report({"status": "pass", "gate_id": "G0"}),
+        seal_report({"status": "pass", "gate_id": "G1"}),
+        seal_report(
+            {
+                "status": "pass",
+                "gate_id": "G2",
+                "case_count": 20,
+                "split_case_counts": {"train": 10, "dev": 10},
+                "all_artifacts_complete": True,
+                "trusted_observer_complete": True,
+                "blind_review_complete": True,
+                "disagreement_audit_complete": True,
+                "paired_outcome_registered": True,
+                "baseline_arm": "rule_template_baseline",
+                "candidate_arm": "model_driven_candidate",
+                "primary_outcome": "task_score",
+                "noninferiority_margin": -1.0,
+                "hard_failure_rule": "no_regression",
+            }
+        ),
+        seal_report(
+            {
+                "status": "pass",
+                "gate_id": "G3",
+                "case_count": 120,
+                "split_case_counts": {"train": 60, "dev": 60},
+                "patch_applied": False,
+                "resume_verified": True,
+                "fingerprints_stable": True,
+                "memory_complete": True,
+                "cost_slo_pass": True,
+                "artifact_completion_slo_pass": True,
+                "hard_failure_slo_pass": True,
+                "judge_unavailable_slo_pass": True,
+            }
+        ),
+    )
+    release_path = tmp_path / "release.json"
+    release_path.write_text(json.dumps(release), encoding="utf-8")
+
+    report = build_training_readiness_from_project(
+        project_root=tmp_path,
+        formal_release_report=release_path,
+    )
+
+    assert report["gates"]["formal_release"]["status"] == "pass"
+    assert report["formal_release"]["gate_report_hashes"]["G0"]
+
+
+def test_readiness_blocks_a_tampered_formal_release_report(tmp_path: Path) -> None:
+    import json
+
+    from scripts.check_training_readiness import build_training_readiness_from_project
+
+    release_path = tmp_path / "release.json"
+    release_path.write_text(
+        json.dumps({"status": "pass", "training_allowed": True, "gate_reports": {}}),
+        encoding="utf-8",
+    )
+
+    report = build_training_readiness_from_project(
+        project_root=tmp_path,
+        formal_release_report=release_path,
+    )
+
+    assert report["training_allowed"] is False
+    assert report["gates"]["formal_release"]["status"] == "blocked"
 
 
 def test_diagnostic_training_allows_only_human_pending_blockers(tmp_path: Path) -> None:

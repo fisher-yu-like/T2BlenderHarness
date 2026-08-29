@@ -114,3 +114,97 @@ def test_scheduler_honors_provider_supplied_event_ids_for_dataset_traceability()
     schedule = EventScheduler().schedule(request, interpretation)
 
     assert [event.id for event in schedule.events] == ["attach_01"]
+
+
+def test_scheduler_accepts_prop_only_benchmark_actions_as_self_participant():
+    """A physical prop action must remain executable without inventing an actor."""
+
+    from videoact.director_contracts import DirectorDecisionEvidence, DirectorEntity, DirectorRequest
+    from videoact.director_prompt import DirectorActionDirective, PromptInterpretation
+    from videoact.director_schedule import EventScheduler
+
+    request = DirectorRequest(
+        prompt="A rubber ball bounces on the hard floor.",
+        scene_id="prop-only-event",
+        duration_s=8,
+        fps=24,
+        provider="assistant-diagnostic",
+        policy="director-v5",
+    )
+    interpretation = PromptInterpretation(
+        request=request,
+        entities=[
+            DirectorEntity(id="ball_1", kind="prop", role="bouncing object", label="rubber ball"),
+            DirectorEntity(id="floor_1", kind="support", role="contact surface", label="hard floor"),
+        ],
+        directives=[
+            DirectorActionDirective(
+                id="bounce_01",
+                action="bounce",
+                prop_id="ball_1",
+                evidence_id="ev_bounce",
+            )
+        ],
+        evidence=[DirectorDecisionEvidence(id="ev_bounce", source="prompt", claim="the ball bounces")],
+    )
+
+    schedule = EventScheduler().schedule(request, interpretation)
+
+    assert len(schedule.events) == 1
+    assert schedule.events[0].participant_ids == ["ball_1"]
+    assert schedule.events[0].target_ids == ["ball_1"]
+
+
+def test_scheduler_materializes_camera_only_prompt_as_observable_subject_event():
+    from videoact.director_contracts import DirectorDecisionEvidence, DirectorEntity, DirectorRequest
+    from videoact.director_prompt import DirectorCameraCue, PromptInterpretation
+    from videoact.director_schedule import EventScheduler
+
+    request = DirectorRequest(
+        prompt="Vase, tilt down.",
+        scene_id="camera-only-vase",
+        duration_s=10.0,
+        fps=12,
+        provider="external-glm",
+        policy="director-v5-glm-structured",
+    )
+    interpretation = PromptInterpretation(
+        request=request,
+        entities=[DirectorEntity(id="vase", kind="prop", role="subject", label="Vase")],
+        directives=[],
+        camera_cues=[
+            DirectorCameraCue(
+                id="cam_tilt_down",
+                action="tilt",
+                direction="down",
+                evidence_id="ev_tilt_down",
+            )
+        ],
+        evidence=[
+            DirectorDecisionEvidence(
+                id="ev_vase",
+                source="prompt",
+                prompt_span=(0, 4),
+                quoted_text="Vase",
+                claim="the vase is the visible subject",
+            ),
+            DirectorDecisionEvidence(
+                id="ev_tilt_down",
+                source="prompt",
+                prompt_span=(6, 15),
+                quoted_text="tilt down",
+                claim="the camera tilts down",
+            ),
+        ],
+    )
+
+    schedule = EventScheduler().schedule(request, interpretation)
+
+    assert len(schedule.events) == 1
+    event = schedule.events[0]
+    assert event.id == "camera_observe_cam_tilt_down"
+    assert event.action == "observe"
+    assert event.participant_ids == ["vase"]
+    assert event.target_ids == ["vase"]
+    assert event.start == 0.0
+    assert event.end == 10.0

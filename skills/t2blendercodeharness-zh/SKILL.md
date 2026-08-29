@@ -16,6 +16,12 @@ prompt、中文辅助翻译、匿名真实 MP4 和 14 个视觉维度。生产�
 的 `vbench-derived-100-v1` 当作训练集；prompt/source SHA、split 和零重叠
 检查未通过时必须停止。
 
+主视觉评审使用 `primary-blind-v1`：只提供原始 prompt、按时间排序的真实
+视频帧/时间码和评分 schema，不提供 DirectorPlan、scene contract、
+deterministic findings、owner、arm 或 Harness version。Codex 本地视觉审查是
+无 external endpoint 的显式诊断路径；像素统计不能改名冒充视觉评审，也不能
+解锁正式训练。
+
 这是 contract-first 的 Text-to-Blender Harness 操作规范。保持 Codex Host、MetaHarnessOptimizer、DesignHarness、Dataset、Evaluator 边界清晰。
 
 当前参考实现：`t2blendercodeharness-v5-executable-director`（本分支工作树，尚未提交）。历史训练基线仍保留为 `h-t2-hard-v4-pretraining-baseline`，commit `7fe017a`，仅用于历史对照。
@@ -108,6 +114,13 @@ realism 不加入 task。几何 100 只表示结构 gate 通过，不等于真�
 case 生成并冻结 `blender_job.py`；`generate-once-freeze` 使用
 `plan_hash + harness_version` 复用同一份源码。`CodexExecProvider` 只是结构化
 Codex Host 传输边界，不把 endpoint/token 写入 skill。
+
+在 Codex app 的单 case 诊断中可以使用 `assistant_diagnostic`：由当前 Codex
+会话直接生成该 case 的 Director/code 响应，标记为
+`provider_kind=assistant_generated`，不调用 `codex exec`，不使用模板或 fallback，
+但仍必须经过同样的 source/coverage gate、真实 Blender、trusted observer 和
+evaluator。它只能验证当前会话的真实链路，不能被 standalone runner 当成
+`provider_mode=model`，也不能解锁正式训练准入；正式训练的 provider 规则保持如下。
 
 `template_baseline` 只能作为显式历史对照臂，绝不是 agent 或 L4 的 fallback。
 Director/codegen/schema/coverage 失败必须 fail-closed，不产生 agent 视频；Blender
@@ -213,14 +226,46 @@ Skill 自进化优先沉淀可执行的 `function_library`、`owner_mapping` 和
 `memory_entry`，纯 `prose_guidance` 修改不算训练收益，除非另有 runtime
 证据。orbit 的弧线、`continuity_group`/遮挡、handoff 约束和穿模检查都必须
 在执行层产生可审计 finding，不能只写在说明里。
-## 11. 当前本地 Codex 执行政策
+## 11. 当前正式模型与可信观测政策
 
-正式训练统一使用进程内 `codex-local`：DirectorAgent 生成 DirectorPlan，
-BlenderCodeAgent 按当前 case 生成 `blender_job.py`，无 external endpoint。
-`CodexExecProvider` 仅保留为显式诊断适配器，不是训练路径。
+正式训练必须显式使用 `provider_mode=model`：Director 由外部结构化 provider
+调用，Blender code 由本地 `CodexExecProvider` 调用，并在每个 case 保存
+`provider_manifest.json`。外部阶段读取环境变量 `OPENAI_API_KEY` 和
+`OPENAI_BASE_URL`，按 OpenAI-compatible `/v1/chat/completions` 请求；本地
+阶段调用 `codex exec`。两阶段 provider、模型身份和 call 记录必须分开，任一
+阶段失败都 fail-closed。`codex-local` / `CodexLocalProvider` 现在只作为
+`rule_template_baseline` 诊断对照，不能通过 formal readiness，也绝不是模型路径。
+
+正式 evaluator 配置固定在 `config/formal-evaluator-v1.json`：其中分别冻结
+Director model/provider 与 Blender-code model/provider，primary judge 使用小写
+`gpt-5.6-luna`，audit judge 使用小写 `gpt-5.6-terra`。主 judge 使用
+`primary-blind-v1`，只能看到原始 prompt、真实 MP4 的时间序列帧/时间码和评分
+schema，不能看到 DirectorPlan、scene contract、deterministic findings、owner、arm
+或 Harness version。
+正式训练还必须通过带 hash 的 G0--G3 release report；单独写
+`training_allowed=true` 不算通过。
+
+生成代码只负责保存 `candidate.blend`。随后由固定的 **trusted observer** 在新 Blender 进程中打开 candidate，重新读取实际 transforms、world bounds、pose bones、camera 和逐帧状态并重新渲染；生成器自写 telemetry 必须 quarantine 为 untrusted，不能冒充证据。artifact、observer、MP4、schema 或 judge 证据缺失时返回 `unavailable`/`needs_human_review`，不填 0、不从 plan 推分。
 
 每个 case 的内循环最多三次（`max_inner_attempts=3`）。plan 不合规、代码
 coverage 失败、真实 Blender 渲染失败或 artifact 不完整时，重新生成完整
 plan/code/candidate；不在场景内打补丁、不偷偷切换模板。三次都失败就写入
 `NOT_RENDERED`，并保留全部失败证据。外循环仍最多五次，每次只修改一个
 Harness owner；内循环是执行恢复，不是 Harness 自进化。
+
+## 12. 改进方案新增的完整门禁
+
+当前还必须使用：`source-fingerprint-v1` 进行语义级代码复用审计，
+`paired-statistics-v1` 进行固定 seed 的 paired bootstrap 与安全指标门禁，
+`physics-oracle-v2-obb-bvh-contact-ownership` 只从 trusted observer 的原始
+observations 推导穿模、接触、ownership、瞬移和连续性，
+`experiment-fingerprint-v1` 绑定 prompt、两次 provider 调用、source、blend、
+observer、telemetry、MP4、evaluator、Blender 和环境，`active-sampling-v2-replay`
+只允许从 train/dev 选择高信息失败样本，并可用历史回放审计渲染节省率和决策一致率。
+frozen/OOD 评测集为
+`dataset/frozen-eval-v2`，不可参与 patch 选择或阈值调节。
+
+T17 顺序固定为：G0 身份与可信边界 → G1 evaluator 冻结及人工校准 → G2
+10 train + 10 dev paired pilot → G3 不改 Harness 的 60 train + 60 dev shadow
+→ G4 六轮正式训练。任一报告缺失、未封存、哈希不匹配或仍有人工校准待办，
+正式训练保持 blocked。

@@ -72,16 +72,13 @@ class OpenAICompatibleVLMAdapter:
         scene_contract: Any,
         deterministic_findings: list[Any],
     ) -> dict[str, Any]:
-        if hasattr(scene_contract, "model_dump"):
-            scene_contract = scene_contract.model_dump(mode="json")
-        findings = [
-            item.model_dump(mode="json") if hasattr(item, "model_dump") else item
-            for item in deterministic_findings
-        ]
+        # Keep the primary visual judge blind to all generator-side artifacts.
+        # The arguments remain in the public API for compatibility, but are
+        # intentionally not serialized into the request.
+        del scene_contract, deterministic_findings
         context = {
+            "blind_review_version": "primary-blind-v1",
             "prompt": prompt,
-            "scene_contract": scene_contract,
-            "deterministic_findings": findings,
             "required_dimensions": list(REVIEW_FIELDS),
         }
         content: list[dict[str, Any]] = [
@@ -91,7 +88,9 @@ class OpenAICompatibleVLMAdapter:
                     "Review the chronological Blender-rendered proxy frames against the exact prompt. "
                     "Do not infer an event from the plan unless visible in a frame. Return only the "
                     "strict JSON schema. Score each requested dimension as an integer from 0 to 100, "
-                    "include visible_evidence and weaknesses, and set confidence from 0 to 1. "
+                    "include visible_evidence, weaknesses, and an event_scores object keyed by each "
+                    "distinct required event that can be identified from the exact prompt; use null when "
+                    "the event is not independently visible. Set confidence from 0 to 1. "
                     "Distinguish low-poly proxy appearance limitations from absent action, contact, "
                     "timing, trajectory, camera, or physical evidence.\n"
                     + json.dumps(context, ensure_ascii=False, sort_keys=True)

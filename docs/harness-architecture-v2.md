@@ -22,7 +22,7 @@ uv run python scripts/validate_golden_review_set.py --root dataset/golden-review
 ```mermaid
 flowchart TD
     P[原始 exact prompt + case metadata] --> D[DirectorAgent]
-    D -->|CodexExecProvider / 结构化 JSON| DP[DirectorPlan]
+    D -->|外部 structured provider / JSON| DP[DirectorPlan]
     DP --> DG[Director evidence / order / trajectory / camera gate]
     DG -->|hard uncertainty / missing coverage| FC1[fail-closed\nNOT_RENDERED]
     DG -->|pass| C[BlenderCodeAgent]
@@ -78,20 +78,28 @@ exact prompt
 - 把“可见事件”和“必须调用的行为”写入 coverage obligations；
 - 保留 prompt evidence、assumption、uncertainty、provider/policy fingerprint，并计算 `director_plan_hash`。
 
-动态生产模式通过 `CodexExecProvider` 请求结构化结果，再由本地 contracts/critic 复核。provider 会把 Pydantic schema 转成 Codex strict structured-output 可接受的形式：所有 object properties 都进入 `required`（可选值用 nullable 表达）、固定 tuple 转成带长度约束的 `items` 数组、自由字典关闭额外字段，并使用 UTF-8 读取 Windows 子进程输出。provider 超时、schema/JSON 错误或会话不可用都保留为 hard failure。以下情况在 Blender 编译前直接 `fail-closed`：空 prompt、无法落到实体或可执行事件、证据越界、未知 ID、循环依赖、时间/所有权矛盾、缺少 reveal/handoff 生命周期、未覆盖 camera cue，或 unresolved hard uncertainty。
+动态生产模式先通过外部 OpenAI-compatible structured provider 请求 Director interpretation，再由本地 contracts/critic 复核；通过后，BlenderCodeAgent 再通过本地 `CodexExecProvider` 请求 Blender source。两个 provider 都把 Pydantic schema 转成严格 structured-output 可接受的形式：所有 object properties 都进入 `required`（可选值用 nullable 表达）、固定 tuple 转成带长度约束的 `items` 数组、自由字典关闭额外字段。外部 provider 的 endpoint、schema/JSON/网络错误和本地 Codex 的 CLI/JSON 错误都保留为 hard failure。以下情况在 Blender 编译前直接 `fail-closed`：空 prompt、无法落到实体或可执行事件、证据越界、未知 ID、循环依赖、时间/所有权矛盾、缺少 reveal/handoff 生命周期、未覆盖 camera cue，或 unresolved hard uncertainty。正式 model path 必须有一个外部 Director call 和一个本地 Blender-code call；`codex-local`/`rule_template_baseline` 只作为显式诊断对照，不能冒充正式模型路径。
 
 历史兼容路径可显式调用 `plan_explicit_baseline`，但它只能服务于 template baseline/fake-MCP/历史对比，不能被 agent 失败路径偷偷调用。
 
+在 Codex app 中可以进行一次显式 `assistant_diagnostic`：当前会话直接提供
+经过 Director contract 校验的 interpretation 和本案独立 Blender source，
+不启动 `codex exec`，也不使用 `compile_real_proxy_job` 或任何模板 fallback。
+它复用相同的 AST/coverage gate、真实 Blender CLI、trusted observer 和 evaluator，
+并把两个阶段记为 `provider_kind=assistant_generated`。该模式只能作为当前会话的
+链路诊断，不能伪装成 `provider_mode=model`，不能解锁 G0/G4，也不能替换正式
+model provider 的 provenance 要求。
+
 ### 2.2 BlenderCodeAgent 与 L2 library
 
-`BlenderCodeAgent` 的输入是当前 case 的 `DirectorPlan`、`blender/lib/signatures.json`、Harness 版本和约束；它通过 `CodexExecProvider` 按 case 生成一次 `blender_job.py`。代码 agent 不能直接接受一个固定场景模板，也不能调用 `compile_real_proxy_job`、`direct_prompt_code` 或其他模板救援路径。
+`BlenderCodeAgent` 的输入是当前 case 的 `DirectorPlan`、`blender/lib/signatures.json`、Harness 版本和约束；它通过独立的 `CodexExecProvider` codegen call 按 case 生成一次 `blender_job.py`。代码 agent 不能直接接受一个固定场景模板，也不能调用 `compile_real_proxy_job`、`direct_prompt_code` 或其他模板救援路径。
 
 代码在冻结前必须通过：
 
 1. JSON/schema 与 provider 状态检查；
 2. Python AST 检查：禁止 `os`/`subprocess`/`sys`、`eval`/`exec` 等越权路径；
 3. L2 library-call 检查：只能使用 `signatures.json` 中的 verified 函数；
-4. runtime contract 检查：能写 `director_plan.json`、`telemetry.json`、`frames/index.json`，保存 `.blend` 并执行 animation render；
+4. runtime contract 检查：能保存可观测的 `candidate.blend` 并执行 animation render；正式 telemetry 由独立 trusted observer 读取，不接受生成代码自报的语义结论；
 5. `case coverage gate`：当前 case 的实体、事件、轨迹和 camera cue 必须在源代码调用或明确 hard uncertainty 中可追溯；
 6. duplicate/source hash 检查：不同语义 case 不能复用相同的冻结源代码。
 
@@ -158,7 +166,7 @@ frames/index.json
 
 ### 3.2 共享一次视觉审查，分离两个分数
 
-artifact gate 通过后，对按事件中点、端点和均匀时间抽取的真实视频帧执行一次共享 review。review 输入同时包含 exact prompt、DirectorPlan 摘要、时序 frames/视频证据和评分 schema。允许的 provenance 是：
+artifact gate 通过后，对按事件中点、端点和均匀时间抽取的真实视频帧执行一次共享 review。主 judge 的 blind 输入只包含 exact prompt、时序 frames/timecodes 和评分 schema；DirectorPlan 摘要、deterministic findings、owner、arm 和 Harness version 都排除在主 payload 外。允许的 provenance 是：
 
 - 外部 compliant endpoint，模型名只能记录为小写 `gpt-5.6-luna` 或 `gpt-5.6-terra`；
 - `human_review` 或 `codex_local_visual_review` 的可审计 payload。
@@ -168,19 +176,22 @@ artifact gate 通过后，对按事件中点、端点和均匀时间抽取的真
 任务通道：
 
 ```text
-semantic = GM(prompt_compliance,
-               physical_plausibility,
-               object_trajectory,
-               event_timing)
+semantic_core = GM(applicable required dimensions:
+                    prompt_compliance,
+                    physical_plausibility,
+                    object_trajectory,
+                    event_timing,
+                    character_trajectory only when an actor is applicable)
 
 choreography = GM(camera_coverage,
-                  camera_innovation,
-                  character_trajectory,
+                  camera_innovation only when camera motion is required,
+                  character_trajectory only when an actor is applicable,
                   temporal_smoothness)
 
-task_score = 0.45 * semantic
-           + 0.45 * choreography
-           + 0.10 * visual_clarity
+observability = GM(camera_coverage, visual_clarity)
+
+task_score = 0.75 * semantic_core
+           + 0.25 * observability
 task_final_score = task_score
 ```
 
@@ -199,6 +210,12 @@ reviewed_realism = 0.15 * geometry_score
 ```
 
 `task_score` 与 `reviewed_realism` 不相加；真实性不能用轨迹任务高分掩盖，轨迹也不能被外观分数掩盖。没有独立视觉 review 时，仅保留带 `not_established` 标记的 `artifact_only_proxy`，不进入训练 patch 的语义决策。
+
+实现中将 `camera_innovation` 的结果以 `camera_effectiveness` 记录；它只在
+prompt/plan 明确要求运动时进入适用维度。required event 的 evidence-bound
+score 小于 25 会把 `semantic_status` 置为 `failed_required_event` 并把 task
+上限设为 49；缺失证据是 `uncertain`，不当作 0。每个适用维度分别保留
+score、confidence、evidence completeness、evidence refs 和 interval。
 
 ## 4. 外循环 Harness 自进化
 
@@ -243,7 +260,7 @@ paired gate 分开记录；只有八个 gate 全部为 `pass` 才能启动六轮
 训练前仍不能伪称已完成的项目：
 
 - 没有真实的双人 golden-review 标注，故 evaluator 的人工校准闸门仍为待完成；
-- CodexExecProvider 的真实 Director + BlenderCodeAgent 成对调用尚未作为训练前 gate 跑通；
+- 外部 structured Director + 本地 Codex BlenderCodeAgent 的真实成对调用尚未作为训练前 gate 跑通；
 - 尚未开始六轮 Harness 训练，因此目前没有“训练后提升”结论。
 
 当前 `dataset/codegen-examples-v1` 没有真实 reviewed bundle，因此 few-shot
@@ -252,8 +269,11 @@ context 状态为 `none`，不会阻塞普通 L3 请求，但不能被描述为 
 这三个状态必须在训练报告中明确显示为 `pending`，不能用 baseline 模板分数、artifact-only 分数或 VLM unavailable 代替通过。
 ## 10.1 2026-08-28 本地 Codex 与内循环修订
 
-正式训练的 provider 统一为进程内 `CodexLocalProvider`，无 external endpoint；
-`CodexExecProvider` 只用于显式诊断。每个 case 的 plan/code/真实渲染候选最多
+正式训练的 provider 必须显式使用 `provider_mode=model`，由
+外部 structured provider 完成 Director 调用，本地 `CodexExecProvider` 完成
+Blender-code 调用；
+`CodexLocalProvider`/`codex-local` 仅作为无 external endpoint 的
+`rule_template_baseline` 诊断对照。每个 case 的 plan/code/真实渲染候选最多
 重新生成三次（`max_inner_attempts=3`），同一 source 的隐式 render retry 为
 零；三次失败写 `NOT_RENDERED` 并保留全部失败证据。该内循环只负责执行恢复，
 不修改 evaluator、dataset 或 Harness owner。`1320` 仍是六轮协议的 case-slot
@@ -273,3 +293,28 @@ run 的 `prompt_hash`，与显示给评审者的原始 prompt 做 SHA-256 比对
 `awaiting_harness_patch`，最多五次，不能隐式重复同一个 Harness。人工
 校准完成前，真实视频虽已生成，视觉分数仍保持 unavailable/pending，不能
 启动正式六轮自进化。
+
+## 2026-08-29 improvement-plan implementation boundary
+
+本分支已经把 T09--T16 的机器边界接入 Harness：
+
+- `source-fingerprint-v1` 对 normalized AST、import/call、control-flow、
+  scene graph 和 animation signature 做语义复用审计，并保留 100 对有标签
+  回归报告；
+- `paired-statistics-v1` 用固定 seed 的 bootstrap CI 处理 evaluator noise，
+  同时硬性检查 artifact、execution、required-event 和 hard-failure 安全指标；
+- `cross-owner-ablation-v1` 只有在 dependency manifest、A-only、B-only、A+B
+  三臂证据齐全时才允许联合 owner；
+- `physics-oracle-v2-obb-bvh-contact-ownership` 只读取 trusted observer 的原始
+  observations，生成代码写入的 success/ownership 标记不具备证明力；
+- `experiment-fingerprint-v1` 覆盖两次 provider call 到 MP4/evaluator/环境的
+  全链哈希；`dataset/frozen-eval-v2` 通过 exact、normalized、near-duplicate
+  和 source-family 四层隔离；`active-sampling-v2-replay` 明确禁止读取 test，
+  并用历史回放审计预算节省与决策一致率；
+- `release-gates-v1` 将 G0、G1、G2 paired pilot、G3 shadow 和 G4 formal run
+  连接起来。没有 sealed G0--G3 报告，`train_real_harness.py` 的 formal mode
+  在准备 case 前即拒绝。
+
+当前仍然是训练前状态：golden review 尚无两名独立标注者的完整 14 维记录，
+真实 model-driven Director/codegen 双调用 smoke 也尚未在本工作树重新跑通；
+因此不能把现有 baseline 或旧 smoke 报告写成 G1/G2 通过。

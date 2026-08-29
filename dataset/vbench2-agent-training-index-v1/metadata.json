@@ -15,10 +15,10 @@
   "generator_version": "benchmark-prompt-index-builder-v1",
   "prompt_policy": "prompt equals source prompt_en exactly; no generated or augmented prompt text",
   "reference_roots": [
-    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\frozen-eval-v1",
-    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\vbench-derived-100-v1",
-    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\trajectory-v4-multi",
-    "C:\\Users\\sy\\Desktop\\T2BlenderCode\\.worktrees\\director-multi-entity-harness\\dataset\\trajectory-v5-agent-codegen"
+    "dataset/frozen-eval-v2",
+    "dataset/vbench-derived-100-v1",
+    "dataset/trajectory-v4-multi",
+    "dataset/trajectory-v5-agent-codegen"
   ],
   "round_count": 6,
   "schema_version": "benchmark-prompt-index-v1",
@@ -727,7 +727,7 @@
   "selection_policy": "six benchmark dimensions provide ten train and ten dev prompts; two dimensions provide ten frozen test prompts",
   "source_dataset": "VBench-2.0",
   "source_file": "VBench2_full_info.json",
-  "source_path": "data\\vbench-source\\VBench2_full_info.json",
+  "source_path": "data/vbench-source/VBench2_full_info.json",
   "source_sha256": "115e54e02ffbeee118ffe598fb497e9a4e40232a4ac4e0a3fd4e33867590a272",
   "source_url": "https://raw.githubusercontent.com/Vchitect/VBench/master/VBench-2.0/vbench2/VBench2_full_info.json",
   "splits": {

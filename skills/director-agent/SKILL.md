@@ -58,13 +58,15 @@ dynamic Director failure.
 
 ## Deterministic and provider-assisted modes
 
-The production interpreter is provider-assisted through `CodexExecProvider`;
-it may fill implicit details, but it must return the same contracts, evidence
-fields, and fingerprints. The provider boundary uses strict structured output
-and fail-closes on timeout, schema, JSON, or session errors. The deterministic
-interpreter remains network-free and reproducible for explicit historical
-baseline comparisons only. Provider output is never allowed to write Blender
-code directly.
+The production interpreter is provider-assisted through the external
+OpenAI-compatible structured provider. It reads `OPENAI_API_KEY` and
+`OPENAI_BASE_URL`, calls `/v1/chat/completions`, and may fill implicit details,
+but it must return the same contracts, evidence fields, and fingerprints. The
+provider boundary uses strict structured output and fail-closes on timeout,
+schema, JSON, or network errors. The deterministic interpreter remains
+network-free and reproducible for explicit historical baseline comparisons
+only. Provider output is never allowed to write Blender code directly; the
+separate Blender code stage uses the local `CodexExecProvider`.
 
 Provider-assisted decisions must cite prompt spans or provider evidence. An
 assumption with no supporting evidence is invalid. A `hard` unresolved

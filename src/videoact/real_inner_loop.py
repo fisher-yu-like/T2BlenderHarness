@@ -10,6 +10,7 @@ existing boundaries.
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -32,6 +33,25 @@ def _archive_case(split_root: Path, case_id: str, attempt: int) -> str | None:
     return str(destination.resolve())
 
 
+def _tree_hashes(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    hashes: dict[str, str] = {}
+    for item in sorted(path.rglob("*")):
+        if not item.is_file():
+            continue
+        digest = hashlib.sha256(item.read_bytes()).hexdigest()
+        hashes[str(item.relative_to(path)).replace("\\", "/")] = digest
+    return hashes
+
+
+def _tree_digest(hashes: dict[str, str]) -> str | None:
+    if not hashes:
+        return None
+    payload = json.dumps(sorted(hashes.items()), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _write_progress(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -46,6 +66,10 @@ def _failure_entry(
     reason: str,
     archive_path: str | None,
     detail: dict[str, Any] | None = None,
+    retry_stage: str,
+    input_hashes: dict[str, Any] | None = None,
+    output_hashes: dict[str, Any] | None = None,
+    parent_attempt_id: str | None = None,
 ) -> dict[str, Any]:
     entry = {
         "attempt": attempt,
@@ -53,6 +77,10 @@ def _failure_entry(
         "status": status,
         "reason": reason,
         "archive_path": archive_path,
+        "retry_stage": retry_stage,
+        "input_hashes": input_hashes or {},
+        "output_hashes": output_hashes or {},
+        "parent_attempt_id": parent_attempt_id or f"{case_id}:attempt-{max(0, attempt - 1):02d}",
     }
     if detail:
         entry["detail"] = detail
@@ -73,8 +101,9 @@ def run_real_inner_loop(
     ``prepare`` must generate a fresh DirectorPlan and Blender source for the
     supplied case IDs.  ``render`` must return per-case results with
     ``status=success`` only when real Blender artifacts are complete.  The
-    evaluator is called only for successful renders; any non-pass evaluation
-    is treated as a candidate failure and regenerated on the next attempt.
+    evaluator is called only for successful renders.  A valid video with a
+    semantic failure is terminal evidence for the outer loop; only execution
+    or evaluation-recovery failures are regenerated on the next attempt.
     """
 
     if not 1 <= max_attempts <= 3:
@@ -112,13 +141,18 @@ def run_real_inner_loop(
             prepared_payload = prepare(current, attempt) or {}
         except Exception as exc:
             for case_id in current:
+                input_hashes = _tree_hashes(root / case_id)
                 archive_path = _archive_case(root, case_id, attempt)
+                archive_hashes = _tree_hashes(Path(archive_path)) if archive_path else {}
                 entry = _failure_entry(
                     case_id=case_id,
                     attempt=attempt,
                     status="prepare_failed",
                     reason=f"{type(exc).__name__}: {exc}",
                     archive_path=archive_path,
+                    retry_stage="director",
+                    input_hashes={"case": _tree_digest(input_hashes), "files": input_hashes},
+                    output_hashes={"archive": _tree_digest(archive_hashes), "files": archive_hashes},
                 )
                 cases[case_id]["attempts"].append(entry)
                 attempt_entries.append(entry)
@@ -147,7 +181,9 @@ def run_real_inner_loop(
             if not isinstance(raw_failure, dict):
                 raw_failure = {"reason": str(raw_failure)}
             reason = str(raw_failure.get("reason") or raw_failure.get("status") or "plan_not_prepared")
+            input_hashes = _tree_hashes(root / case_id)
             archive_path = _archive_case(root, case_id, attempt)
+            output_hashes = _tree_hashes(Path(archive_path)) if archive_path else {}
             entry = _failure_entry(
                 case_id=case_id,
                 attempt=attempt,
@@ -155,6 +191,9 @@ def run_real_inner_loop(
                 reason=reason,
                 archive_path=archive_path,
                 detail=raw_failure,
+                retry_stage="director" if "director" in reason.lower() or "plan" in reason.lower() or "coverage" in reason.lower() else "codegen",
+                input_hashes={"case": _tree_digest(input_hashes), "files": input_hashes},
+                output_hashes={"archive": _tree_digest(output_hashes), "files": output_hashes},
             )
             cases[case_id]["attempts"].append(entry)
             attempt_entries.append(entry)
@@ -167,13 +206,18 @@ def run_real_inner_loop(
                 raise ValueError("render results must be a mapping")
         except Exception as exc:
             for case_id in prepared_ids:
+                input_hashes = _tree_hashes(root / case_id)
                 archive_path = _archive_case(root, case_id, attempt)
+                output_hashes = _tree_hashes(Path(archive_path)) if archive_path else {}
                 entry = _failure_entry(
                     case_id=case_id,
                     attempt=attempt,
                     status="render_failed",
                     reason=f"{type(exc).__name__}: {exc}",
                     archive_path=archive_path,
+                    retry_stage="executor",
+                    input_hashes={"case": _tree_digest(input_hashes), "files": input_hashes},
+                    output_hashes={"archive": _tree_digest(output_hashes), "files": output_hashes},
                 )
                 cases[case_id]["attempts"].append(entry)
                 attempt_entries.append(entry)
@@ -189,7 +233,9 @@ def run_real_inner_loop(
             render_result = raw_render if isinstance(raw_render, dict) else {}
             if render_result.get("status") != "success":
                 reason = str(render_result.get("reason") or render_result.get("status") or "render_failed")
+                input_hashes = _tree_hashes(root / case_id)
                 archive_path = _archive_case(root, case_id, attempt)
+                output_hashes = _tree_hashes(Path(archive_path)) if archive_path else {}
                 entry = _failure_entry(
                     case_id=case_id,
                     attempt=attempt,
@@ -197,6 +243,9 @@ def run_real_inner_loop(
                     reason=reason,
                     archive_path=archive_path,
                     detail=render_result,
+                    retry_stage="collector" if "artifact" in reason.lower() else "executor",
+                    input_hashes={"case": _tree_digest(input_hashes), "files": input_hashes},
+                    output_hashes={"archive": _tree_digest(output_hashes), "files": output_hashes},
                 )
                 cases[case_id]["attempts"].append(entry)
                 attempt_entries.append(entry)
@@ -223,9 +272,31 @@ def run_real_inner_loop(
                 cases[case_id]["evaluation"] = evaluation
                 cases[case_id]["proxy_video"] = evaluation.get("proxy_video")
                 attempt_entries.append(entry)
+            elif (
+                evaluation.get("execution_status") == "valid"
+                and evaluation.get("semantic_status") in {"failed_required_event", "uncertain"}
+            ) or evaluation.get("retryable") is False:
+                terminal_status = "semantic_failed" if evaluation.get("semantic_status") == "failed_required_event" else "semantic_uncertain"
+                entry = {
+                    "attempt": attempt,
+                    "case_id": case_id,
+                    "status": terminal_status,
+                    "reason": str(evaluation.get("reason") or terminal_status),
+                    "retry_stage": "outer_loop",
+                    "parent_attempt_id": f"{case_id}:attempt-{max(0, attempt - 1):02d}",
+                    "evaluation": evaluation,
+                }
+                cases[case_id]["attempts"].append(entry)
+                cases[case_id]["status"] = terminal_status
+                cases[case_id]["selected_attempt"] = attempt
+                cases[case_id]["evaluation"] = evaluation
+                cases[case_id]["proxy_video"] = evaluation.get("proxy_video")
+                attempt_entries.append(entry)
             else:
                 reason = str(evaluation.get("reason") or "plan_or_runtime_evaluation_failed")
+                input_hashes = _tree_hashes(root / case_id)
                 archive_path = _archive_case(root, case_id, attempt)
+                output_hashes = _tree_hashes(Path(archive_path)) if archive_path else {}
                 entry = _failure_entry(
                     case_id=case_id,
                     attempt=attempt,
@@ -233,6 +304,9 @@ def run_real_inner_loop(
                     reason=reason,
                     archive_path=archive_path,
                     detail=evaluation,
+                    retry_stage="evaluator",
+                    input_hashes={"case": _tree_digest(input_hashes), "files": input_hashes},
+                    output_hashes={"archive": _tree_digest(output_hashes), "files": output_hashes},
                 )
                 cases[case_id]["attempts"].append(entry)
                 attempt_entries.append(entry)

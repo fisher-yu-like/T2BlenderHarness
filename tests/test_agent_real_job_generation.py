@@ -60,14 +60,18 @@ def test_agent_mode_freezes_valid_case_specific_source(tmp_path) -> None:
             "status": "success",
             "generated_code": (
                 "import bpy\n"
+                "from pathlib import Path\n"
                 "from blender.lib.geometry import box\n"
                 "from blender.lib.scaffolding import build_runtime_contract\n"
                 "DIRECTOR_PLAN = {" + ", ".join(repr(token) + ": " + repr(token) for token in tokens) + "}\n"
+                "OUTPUT_DIR = Path(__file__).resolve().parent\n"
                 "telemetry_path = 'telemetry.json'\n"
                 "sample_frames = ['index.json']\n"
                 "runtime_contract = build_runtime_contract('" + "a" * 64 + "', " + repr([token for token in tokens if token.startswith('actor_')]) + ", " + repr([token for token in tokens if token.startswith('carry_') or token.startswith('place_')]) + ", " + repr([token for token in tokens if token.startswith('carry_') or token.startswith('place_')]) + ")\n"
                 "mesh = box((0, 0, 0), (1, 1, 1))\n"
-                "bpy.ops.wm.save_as_mainfile(filepath='proxy.blend')\n"
+                "bpy.context.scene.render.image_settings.file_format = 'PNG'\n"
+                "bpy.context.scene.render.filepath = 'frames/animation/frame_'\n"
+                "bpy.ops.wm.save_as_mainfile(filepath='candidate.blend')\n"
                 "bpy.ops.render.render(animation=True)\n"
             ),
             "library_calls": ["box"],
@@ -214,3 +218,69 @@ def test_director_exception_is_recorded_without_aborting_batch(tmp_path) -> None
     assert index["jobs"][0]["status"] == "director_failed"
     failure = json.loads((tmp_path / "runs" / "agent-case-01" / "director_failure.json").read_text(encoding="utf-8"))
     assert "structured provider unavailable" in failure["reason"]
+
+
+def test_dynamic_director_provider_failure_preserves_exact_call_provenance(tmp_path) -> None:
+    from scripts.prepare_real_jobs import prepare_jobs
+    from videoact.provider_provenance import make_call_record
+
+    dataset = tmp_path / "dataset"
+    _dataset(dataset)
+
+    class FailingProvider:
+        provider_kind = "codex_exec_local"
+        model_id = "codex-cli"
+        model_version = "codex-exec-v1"
+        template_backed = False
+        llm_generated = True
+
+        def __init__(self):
+            self.call_records = []
+
+        def __call__(self, request):
+            self.call_records.append(
+                make_call_record(
+                    stage="director",
+                    provider_kind=self.provider_kind,
+                    model_id=self.model_id,
+                    model_version=self.model_version,
+                    call_id="codex-exec:director:failed-call",
+                    prompt=request.prompt,
+                    request_schema={"type": "object"},
+                    response_schema={"type": "object"},
+                    template_backed=False,
+                    llm_generated=True,
+                    error="TimeoutExpired: structured call exceeded timeout",
+                )
+            )
+            raise RuntimeError("structured provider unavailable")
+
+        def last_call(self, stage=None):
+            if stage is None:
+                return self.call_records[-1] if self.call_records else None
+            for record in reversed(self.call_records):
+                if record.get("stage") == stage:
+                    return record
+            return None
+
+    provider = FailingProvider()
+    from videoact.director import DirectorAgent
+
+    index = prepare_jobs(
+        "train",
+        tmp_path / "runs",
+        dataset_root=dataset,
+        harness_version="agent-codegen-v1",
+        director_agent=DirectorAgent.from_provider(provider, provider_name="codex-exec-local"),
+        code_agent=BlenderCodeAgent(provider=lambda _payload: {}),
+    )
+
+    assert index["jobs"][0]["status"] == "director_failed"
+    manifest = json.loads(
+        (tmp_path / "runs" / "agent-case-01" / "provider_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["status"] == "error"
+    assert manifest["stages"]["director"]["call_id"] == "codex-exec:director:failed-call"
+    assert manifest["stages"]["director"]["error"].startswith("TimeoutExpired:")
+    assert "preparation_gate" in manifest["stages"]
+    assert manifest["llm_generated"] is None

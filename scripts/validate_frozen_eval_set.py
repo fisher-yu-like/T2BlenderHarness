@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
 
+
+SUPPORTED_FROZEN_DATASET_IDS = {"frozen-eval-v1", "frozen-eval-v2"}
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [
@@ -28,6 +31,75 @@ def _fingerprint(records: list[dict[str, Any]]) -> str:
         for record in sorted(records, key=lambda item: str(item.get("case_id", "")))
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _coverage_matrix(
+    records: list[dict[str, Any]], metadata: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
+    """Materialize declared evaluation slices and enforce their minimum size."""
+
+    slices = metadata.get("evaluation_slices")
+    if not isinstance(slices, dict) or not slices:
+        return {}, []
+    matrix: dict[str, Any] = {}
+    errors: list[str] = []
+    for slice_name, raw_slice in sorted(slices.items()):
+        if not isinstance(raw_slice, dict):
+            errors.append(f"evaluation slice {slice_name} must be an object")
+            continue
+        dimensions = [str(value) for value in raw_slice.get("dimensions", []) or []]
+        try:
+            declared_case_count = int(raw_slice.get("case_count"))
+            minimum_case_count = int(raw_slice.get("min_case_count") or 1)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"evaluation slice {slice_name} has invalid case-count metadata")
+            continue
+        if declared_case_count < 1 or minimum_case_count < 1:
+            errors.append(f"evaluation slice {slice_name} must declare positive case counts")
+        case_ids = raw_slice.get("case_ids")
+        if case_ids is None:
+            scoped_records = records
+        elif isinstance(case_ids, list):
+            requested_ids = {str(value) for value in case_ids}
+            scoped_records = [record for record in records if str(record.get("case_id")) in requested_ids]
+            if len(scoped_records) != len(requested_ids):
+                errors.append(f"evaluation slice {slice_name} references unknown case IDs")
+        else:
+            errors.append(f"evaluation slice {slice_name} case_ids must be a list")
+            scoped_records = []
+        dimension_counts = Counter(
+            str(record.get("source_dimension") or record.get("category") or "uncategorized")
+            for record in scoped_records
+        )
+        missing_dimensions = sorted(set(dimensions) - set(dimension_counts))
+        below_minimum = {
+            dimension: int(dimension_counts.get(dimension, 0))
+            for dimension in dimensions
+            if dimension_counts.get(dimension, 0) < minimum_case_count
+        }
+        actual_case_count = len(scoped_records)
+        slice_status = "pass"
+        if actual_case_count != declared_case_count or missing_dimensions or below_minimum:
+            slice_status = "fail"
+            errors.append(
+                f"evaluation slice {slice_name} coverage mismatch: "
+                f"actual={actual_case_count}, declared={declared_case_count}, "
+                f"missing={missing_dimensions}, below_minimum={below_minimum}"
+            )
+        matrix[slice_name] = {
+            "status": slice_status,
+            "case_count": actual_case_count,
+            "declared_case_count": declared_case_count,
+            "min_case_count": minimum_case_count,
+            "dimensions": dimensions,
+            "dimension_counts": {
+                dimension: int(dimension_counts[dimension])
+                for dimension in sorted(dimension_counts)
+            },
+            "missing_dimensions": missing_dimensions,
+            "below_minimum": below_minimum,
+        }
+    return matrix, errors
 
 
 def _reference_identity_sets(
@@ -84,8 +156,8 @@ def validate_frozen_eval_set(
     metadata = json.loads((destination / "metadata.json").read_text(encoding="utf-8"))
     if not isinstance(metadata, dict):
         raise ValueError("frozen-eval metadata must be an object")
-    if metadata.get("dataset_id") != "frozen-eval-v1":
-        raise ValueError("metadata dataset_id must be frozen-eval-v1")
+    if metadata.get("dataset_id") not in SUPPORTED_FROZEN_DATASET_IDS:
+        raise ValueError(f"metadata dataset_id must be one of {sorted(SUPPORTED_FROZEN_DATASET_IDS)}")
     expected_count = int(metadata.get("case_count") or len(records))
     if len(records) != expected_count or len(records) < 10:
         raise ValueError(f"frozen-eval case count must be at least 10 and match metadata: {len(records)}")
@@ -146,6 +218,16 @@ def validate_frozen_eval_set(
         raise ValueError("frozen evaluation must declare split=frozen_eval")
     if metadata.get("fingerprint") != _fingerprint(records):
         raise ValueError("frozen metadata fingerprint does not match manifest")
+    slices = metadata.get("evaluation_slices")
+    if metadata.get("dataset_id") == "frozen-eval-v2":
+        ood = slices.get("ood_unseen_dimensions") if isinstance(slices, dict) else None
+        if not isinstance(ood, dict) or int(ood.get("case_count") or 0) != len(records):
+            raise ValueError("frozen-eval-v2 must declare a complete OOD unseen-dimensions slice")
+        if not isinstance(ood.get("dimensions"), list) or not ood["dimensions"]:
+            raise ValueError("frozen-eval-v2 OOD slice must declare source dimensions")
+        if int(ood.get("min_case_count") or 0) < 1:
+            raise ValueError("frozen-eval-v2 OOD slice must declare a positive minimum case count")
+    coverage_matrix, coverage_errors = _coverage_matrix(records, metadata)
     frozen_identity_sets = {
         "case_id": set(ids),
         "prompt_hash": set(prompt_hashes),
@@ -154,6 +236,7 @@ def validate_frozen_eval_set(
     }
     reference_checks: list[dict[str, Any]] = []
     reference_errors: list[str] = []
+    reference_records_by_name: dict[str, list[dict[str, Any]]] = {}
     for reference in reference_roots or ():
         reference_path = Path(reference)
         manifest_path = reference_path / "manifest.jsonl"
@@ -162,6 +245,7 @@ def validate_frozen_eval_set(
             reference_errors.append(f"reference manifest missing: {reference_path}")
             continue
         reference_records = _read_jsonl(manifest_path)
+        reference_records_by_name[str(reference_path.resolve())] = reference_records
         reference_metadata: dict[str, Any] = {}
         if metadata_path.is_file():
             loaded_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -189,6 +273,12 @@ def validate_frozen_eval_set(
             reference_errors.append(
                 f"{kind} overlap with reference {check['reference_dataset']}: {values}"
             )
+    from videoact.dataset_leakage import audit_leakage
+
+    leakage = audit_leakage(records, reference_records_by_name)
+    if leakage.get("status") != "pass":
+        reference_errors.append("four-layer leakage audit detected collisions")
+    reference_errors.extend(coverage_errors)
     status = "fail" if reference_errors else "pass"
     return {
         "status": status,
@@ -200,7 +290,9 @@ def validate_frozen_eval_set(
         "patch_selection_allowed": metadata.get("patch_selection_allowed"),
         "proposal_generation_allowed": metadata.get("proposal_generation_allowed"),
         "fingerprint": metadata["fingerprint"],
+        "coverage_matrix": coverage_matrix,
         "reference_checks": reference_checks,
+        "leakage_audit": leakage,
         "errors": reference_errors,
     }
 

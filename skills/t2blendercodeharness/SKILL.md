@@ -27,6 +27,13 @@ not the training dataset: training remains gated to
 `dataset/vbench2-agent-training-index-v1`, whose prompt/source/fingerprint
 validator must pass first.
 
+The primary blind payload is `primary-blind-v1`: it contains only the exact
+prompt, chronological real-video frames/timecodes and the response schema. It
+excludes the DirectorPlan, scene contract, deterministic findings, owner, arm
+and Harness version. A local Codex visual review is an explicit diagnostic
+path with no external endpoint; deterministic frame statistics can never be
+relabeled as that review.
+
 ## Current implementation snapshot
 
 Use the latest tested Harness contract as the reference implementation:
@@ -45,12 +52,15 @@ Use the latest tested Harness contract as the reference implementation:
 
 ### Current agent-codegen boundary
 
-The production path is now `DirectorAgent -> BlenderCodeAgent -> real Blender
-CLI`. `CodexLocalProvider` is the in-process structured provider bridge used
-by training; it receives the exact prompt/plan contract and returns
-schema-validated data with no external endpoint. `CodexExecProvider`
-is retained only as an explicit diagnostic adapter and is not part of official
-training. Both boundaries normalize Pydantic schemas for strict output (all
+The formal model path is `DirectorAgent -> BlenderCodeAgent -> real Blender
+CLI`, selected explicitly with `provider_mode=model`. Each case records an
+external structured Director call and a separate local `CodexExecProvider`
+Blender-code call in `provider_manifest.json`. `CodexLocalProvider`/`codex-local` is retained as the
+explicit `rule_template_baseline` diagnostic arm; it cannot satisfy readiness.
+The external Director boundary reads `OPENAI_API_KEY` and `OPENAI_BASE_URL`
+and calls the OpenAI-compatible `/v1/chat/completions` path. The Blender-code
+boundary invokes the local `codex exec` command. They are separate provider
+instances and their call records must never be merged. Both boundaries normalize Pydantic schemas for strict output (all
 object properties required, nullable optional values, tuple arrays expressed
 through `items`, and closed objects). Provider, schema, JSON, or session
 errors remain hard failures. The `BlenderCodeAgent` composes only the
@@ -66,8 +76,9 @@ eligible review provenance. A missing manifest is `context_status=none`; a
 present invalid manifest fails the case before the Blender code provider is
 called. Context IDs and status are retained in the job/cache manifests.
 
-`template_baseline` is an explicit historical comparison arm. It is never an
-agent fallback. A missing provider, invalid DirectorPlan, codegen/schema error,
+`rule_template_baseline`/`template_baseline` is an explicit historical
+comparison arm. It is never an agent fallback. A missing provider, invalid
+DirectorPlan, codegen/schema error,
 coverage failure, or source mutation during retry is fail-closed and produces
 no agent video. In the official local path, `max_inner_attempts=3` means that
 a plan/code/render/artifact failure creates a fresh case candidate; after
@@ -114,7 +125,11 @@ If a component skill is unavailable, use the project modules with the same respo
 
 For the active scoring contract, read `docs/evaluator-v5-calibration.md` and
 `docs/harness-architecture-v2.md`; older evaluator/calibration documents are
-historical snapshots only.
+historical snapshots only. Formal provider/judge identity is frozen in
+`config/formal-evaluator-v1.json`, and the primary blind payload is
+`primary-blind-v1`. Formal release additionally requires sealed G0--G3 reports
+from `scripts/check_formal_release_gates.py`; a bare `training_allowed=true`
+value without those report hashes is not sufficient.
 
 ## Run the pipeline
 
@@ -122,9 +137,9 @@ historical snapshots only.
 2. Run `DirectorAgent.plan` on the exact prompt. Reject empty prompts, unknown entity references, unsupported assumptions, unresolved hard uncertainty, invalid timing, broken relations, and contradictory event order.
 3. Validate the projected `SceneContract`, multi-entity `TrajectoryPlan`, interaction lifecycle, one-based frame bounds, state continuity, target visibility, shot coverage, and event observability before execution.
 4. Execute through the controlled adapter or Blender MCP. Persist prompt/plan/Harness/evaluator fingerprints, MCP response, state transitions, and immutable artifacts.
-5. Apply the real artifact gate. Require manifest, contract, trajectory, camera plan, job source, `.blend`, host-assembled `.mp4`, telemetry, index, and at least three readable sampled PNGs.
+5. Apply the real artifact gate. Require manifest, contract, trajectory, camera plan, frozen job source, `candidate.blend`, observer-bound `.blend`, host-assembled `.mp4`, trusted telemetry manifest, telemetry, index, and at least three readable sampled PNGs. Generated telemetry is quarantined and never trusted.
 6. Run deterministic evaluation first. Hard failures block VLM, training records, and patch selection. Inspect a sampled frame when a semantic or visibility failure is plausible.
-7. Run VLM evaluation only for artifact-complete deterministic-pass runs and only through a compliant endpoint. Record `unavailable` for network, policy, or schema failures; never convert it to zero or a synthetic preference.
+7. Run the blind primary VLM evaluation only for artifact-complete deterministic-pass runs and only through a compliant endpoint. Its payload contains the exact prompt and chronological frames/timecodes, not DirectorPlan, scene contract, deterministic findings, arm, or Harness version. Record `unavailable` for network, policy, or schema failures; never convert it to zero or a synthetic preference. Formal configuration uses `gpt-5.6-luna` for primary and `gpt-5.6-terra` for audit.
 8. Use only the bounded execution-recovery loop: a plan/non-compliance or
    Blender/artifact failure may regenerate the whole case candidate at most
    three times (`max_inner_attempts=3`). Do not repair a scene in place, retry
@@ -155,13 +170,21 @@ skills/t2blendercodeharness/scripts/build_self_evolution_records.py # historical
 ```
 
 For the active six-round protocol, use
-`dataset/vbench2-agent-training-index-v1`, `dataset/frozen-eval-v1`,
-`scripts/train_real_harness.py --mode six-rounds`, and the canonical memory at
+`dataset/vbench2-agent-training-index-v1`, `dataset/frozen-eval-v2`,
+`scripts/train_real_harness.py --mode six-rounds --provider-mode model`, and the canonical memory at
 `docs/t2blendercodeharness-agent-training-memory-v1.md`. The historical
 trajectory datasets and augmented VBench-derived set must never be passed to
 the training entry point; `train_real_harness.py` and readiness reject them.
 The real-training modes also refuse to prepare/render any case unless the
-specified readiness report contains `training_allowed=true`.
+specified readiness report contains `training_allowed=true` and the formal
+release report verifies G0--G3.
+
+The current integrity modules are `source-fingerprint-v1` (semantic code
+reuse), `paired-statistics-v1` (fixed-seed CI and safety invariants),
+`physics-oracle-v2-obb-bvh-contact-ownership` (trusted raw contact/ownership),
+`experiment-fingerprint-v1` (full provenance), and `active-sampling-v2-replay`
+(train/dev-only failure sampling). The frozen/OOD boundary is
+`dataset/frozen-eval-v2`.
 
 Run `python skills/t2blendercodeharness/scripts/capability_check.py --project-root .` before claiming the skill works in a new project. Read `references/real-pipeline.md` for state and artifact details.
 
@@ -204,7 +227,7 @@ uv run python skills/t2blendercodeharness/scripts/propose_skill_update.py `
 
 ## Realism evaluator boundary
 
-For realism probes, use the project training sub-skill and the independent-review boundary in `evaluator/realism.py`. The Blender geometry audit is an eligibility gate, not a realism oracle: it may reach 100 only for structural compliance. One shared visual-review call using lowercase `gpt-5.6-luna` or `gpt-5.6-terra` returns separate task and realism dimensions; the scores are never added. An `assistant_local_review` is valid only when a human has supplied an auditable payload with frame-grounded evidence. Realism uses `.15` geometry, `.15` rendered-frame evidence, and `.70` independent visual review. If no review is available, retain only the capped `artifact_only_proxy` evidence score and mark it `not_established`; never copy it into a VLM score.
+For realism probes, use the project training sub-skill and the independent-review boundary in `evaluator/realism.py`. The Blender geometry audit is an eligibility gate, not a realism oracle: it may reach 100 only for structural compliance. One shared visual-review call using lowercase `gpt-5.6-luna` or `gpt-5.6-terra` returns separate task and realism dimensions; the scores are never added. An `assistant_local_review` is valid only when a human has supplied an auditable payload with frame-grounded evidence. Realism uses `.15` geometry, `.15` rendered-frame evidence, and `.70` independent visual review. If no review is available, retain only the capped `artifact_only_proxy` evidence score and mark it `not_established`; never copy it into a VLM score. Trusted observer output is the only telemetry accepted by a formal run; `candidate.blend` is the generator/observer boundary.
 
 Use `python skills/t2blendercodeharness/scripts/propose_skill_update.py --records <records.jsonl> --out <proposal.json>` after a real evaluation batch. The script may group repeated failures and propose a single-owner section update, but it must not edit `SKILL.md`, source code, evaluator code, or dataset labels. Require human review, capability checks, project tests, and a forward-test before applying a proposal. Read `references/self-evolution.md`.
 
@@ -261,3 +284,23 @@ Prefer executable `function_library`, `owner_mapping`, and append-only
 not a training gain unless its runtime effect is separately demonstrated.
 Keep orbit/occlusion/continuity, handoff attachment, and penetration checks as
 runtime evidence, not as promises in documentation.
+
+## Improvement-plan release boundary
+
+The plan is implemented as five explicit gates. G0 covers model provenance,
+portable benchmark inputs, the independent trusted observer and the blind
+generator/judge boundary. G1 freezes result states, scoring-v7 applicability,
+evidence/confidence thresholds, paired-statistics policy, golden calibration
+and the complete experiment fingerprint. G2 is an exact 10-train + 10-dev
+paired pilot against `rule_template_baseline` and `model_driven_candidate`.
+G3 is a no-patch 60-train + 60-dev shadow run that verifies resume, cost,
+memory and fingerprint stability. G4 is the formal six-round Harness run.
+
+Use `scripts/check_formal_release_gates.py` to create the sealed
+`out/formal_release_gate_report.json`. Formal modes of
+`scripts/train_real_harness.py` require both that report and the ordinary
+readiness report; a manually edited boolean is rejected. The required
+versions are `source-fingerprint-v1`, `paired-statistics-v1`,
+`physics-oracle-v2-obb-bvh-contact-ownership`, `experiment-fingerprint-v1`, and
+`active-sampling-v2-replay`. Frozen evaluation is `dataset/frozen-eval-v2` and is
+never read for patch selection or threshold tuning.

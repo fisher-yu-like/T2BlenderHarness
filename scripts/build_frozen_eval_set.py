@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from videoact.dataset_leakage import cosine_similarity
+
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -161,6 +163,8 @@ def build_frozen_eval_set(
     training_root: str | Path = "dataset/trajectory-v5-agent-codegen",
     reference_roots: Sequence[str | Path] | None = None,
     output_root: str | Path = "dataset/frozen-eval-v1",
+    dataset_id: str = "frozen-eval-v1",
+    case_id_prefix: str | None = None,
     per_category: int = 4,
     category_count: int = 5,
 ) -> dict[str, Any]:
@@ -218,6 +222,7 @@ def build_frozen_eval_set(
     selected: list[tuple[int, dict[str, Any]]] = []
     selected_dimensions: list[str] = []
     selected_prompt_hashes: set[str] = set()
+    selected_prompts: list[str] = []
     for dimension in sorted(candidates_by_dimension):
         candidates = sorted(candidates_by_dimension[dimension], key=lambda item: item[0])
         unique_candidates: list[tuple[int, dict[str, Any]]] = []
@@ -230,7 +235,17 @@ def build_frozen_eval_set(
         if len(unique_candidates) < per_category:
             continue
         selected_dimensions.append(dimension)
-        chosen = unique_candidates[:per_category]
+        chosen: list[tuple[int, dict[str, Any]]] = []
+        for source_position, candidate in unique_candidates:
+            candidate_prompt = str(candidate.get("prompt") or candidate.get("source_prompt") or "").strip()
+            if any(cosine_similarity(candidate_prompt, previous) >= 0.92 for previous in selected_prompts):
+                continue
+            chosen.append((source_position, candidate))
+            selected_prompts.append(candidate_prompt)
+            if len(chosen) >= per_category:
+                break
+        if len(chosen) < per_category:
+            continue
         selected.extend(chosen)
         selected_prompt_hashes.update(
             hashlib.sha256(
@@ -248,6 +263,7 @@ def build_frozen_eval_set(
         raise ValueError("independent frozen source is too small")
 
     records: list[dict[str, Any]] = []
+    effective_case_id_prefix = case_id_prefix or ("frozen-vbench" if dataset_id == "frozen-eval-v1" else dataset_id)
     for ordinal, (source_position, source_record) in enumerate(selected, 1):
         prompt = str(source_record.get("prompt") or source_record.get("source_prompt") or "").strip()
         source_prompt = str(source_record.get("source_prompt") or prompt)
@@ -255,7 +271,7 @@ def build_frozen_eval_set(
         source_dimension = _source_dimension(source_record)
         records.append(
             {
-                "case_id": f"frozen-vbench-{ordinal:03d}",
+                "case_id": f"{effective_case_id_prefix}-{ordinal:03d}",
                 "split": "frozen_eval",
                 "prompt": prompt,
                 "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
@@ -285,7 +301,7 @@ def build_frozen_eval_set(
         for dataset, index in sorted(training_exclusions["source_identity"])
     ]
     metadata = {
-        "dataset_id": "frozen-eval-v1",
+        "dataset_id": dataset_id,
         "schema_version": "frozen-eval-manifest-v1",
         "split": "frozen_eval",
         "case_count": len(records),
@@ -294,6 +310,14 @@ def build_frozen_eval_set(
         "source_root": str(source.resolve()),
         "source_kind": source_kind,
         "selected_dimensions": selected_dimensions,
+        "evaluation_slices": {
+            "ood_unseen_dimensions": {
+                "dimensions": selected_dimensions,
+                "case_count": len(records),
+                "min_case_count": per_category,
+                "selection_rule": "source dimensions absent from active train/dev and prior frozen references",
+            }
+        },
         "excluded_reference_datasets": excluded_datasets,
         "excluded_reference_count": excluded_reference_count,
         "train_dev_prompt_hashes": training_hashes,
@@ -323,6 +347,8 @@ def main() -> int:
     parser.add_argument("--training-root", default="dataset/trajectory-v5-agent-codegen")
     parser.add_argument("--reference-root", action="append", default=[])
     parser.add_argument("--out", default="dataset/frozen-eval-v1")
+    parser.add_argument("--dataset-id", default="frozen-eval-v1")
+    parser.add_argument("--case-id-prefix")
     parser.add_argument("--per-category", type=int, default=4)
     parser.add_argument("--category-count", type=int, default=5)
     args = parser.parse_args()
@@ -333,6 +359,8 @@ def main() -> int:
                 training_root=args.training_root,
                 reference_roots=args.reference_root or None,
                 output_root=args.out,
+                dataset_id=args.dataset_id,
+                case_id_prefix=args.case_id_prefix,
                 per_category=args.per_category,
                 category_count=args.category_count,
             ),

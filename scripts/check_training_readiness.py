@@ -84,6 +84,22 @@ def _normalise_gate(name: str, evidence: Any) -> tuple[dict[str, Any], list[str]
         if details.get("director") != "pass" or details.get("blender_code") != "pass":
             details["status"] = "blocked"
             details["reason"] = "director_and_blender_code_pair_are_both_required"
+        elif details.get("provider_mode") == "rule_template_baseline":
+            details["status"] = "blocked"
+            details["reason"] = "rule_template_baseline_is_diagnostic_only"
+        elif details.get("provider_mode") in {"model", "glm"}:
+            required_identity = (
+                "generator_model_id",
+                "primary_judge_model_id",
+                "audit_judge_model_id",
+            )
+            missing_identity = [field for field in required_identity if not str(details.get(field) or "").strip()]
+            if missing_identity:
+                details["status"] = "blocked"
+                details["reason"] = f"formal_model_identity_missing:{','.join(missing_identity)}"
+            elif len({details[field] for field in required_identity}) != len(required_identity):
+                details["status"] = "blocked"
+                details["reason"] = "generator_and_judge_model_snapshots_must_be_distinct"
     if name == "golden_review" and details["status"] == "pass":
         annotators = details.get("annotators_per_sample")
         if annotators is not None and (not isinstance(annotators, int) or annotators < 2):
@@ -99,6 +115,7 @@ def build_training_readiness(
     golden_review: Any,
     dynamic_agent_provider: Any,
     paired_gate: Any,
+    formal_release_report: Any | None = None,
 ) -> dict[str, Any]:
     """Combine independent evidence without converting any value to a score."""
 
@@ -109,15 +126,31 @@ def build_training_readiness(
         "dynamic_agent_provider": dynamic_agent_provider,
         "paired_gate": paired_gate,
     }
+    gate_names = list(REQUIRED_GATE_NAMES)
+    formal_release_verification: dict[str, Any] | None = None
+    if formal_release_report is not None:
+        from videoact.release_gates import validate_formal_release_report
+
+        formal_release_verification = validate_formal_release_report(formal_release_report)
+        formal_release_evidence = dict(formal_release_report) if isinstance(formal_release_report, Mapping) else {}
+        formal_release_evidence.update(
+            {
+                "status": formal_release_verification.get("status", "blocked"),
+                "training_allowed": formal_release_verification.get("training_allowed") is True,
+                "verification": formal_release_verification,
+            }
+        )
+        evidence_by_name["formal_release"] = formal_release_evidence
+        gate_names.append("formal_release")
     gates: dict[str, dict[str, Any]] = {}
     numeric_substitutions: list[str] = []
-    for name in REQUIRED_GATE_NAMES:
+    for name in gate_names:
         gate, numeric = _normalise_gate(name, evidence_by_name.get(name))
         gates[name] = gate
         numeric_substitutions.extend(numeric)
     blocking = [name for name, gate in gates.items() if gate["status"] != "pass"]
     training_allowed = not blocking
-    return {
+    result = {
         "status": "pass" if training_allowed else "blocked",
         "training_allowed": training_allowed,
         "gates": gates,
@@ -136,9 +169,13 @@ def build_training_readiness(
         "summary": [
             f"{name}: {gates[name]['status']}"
             + (f" ({gates[name]['reason']})" if gates[name].get("reason") else "")
-            for name in REQUIRED_GATE_NAMES
+            for name in gate_names
         ],
     }
+    if formal_release_verification is not None:
+        result["formal_release"] = formal_release_verification
+        result["gate_report_hashes"] = formal_release_verification.get("gate_report_hashes", {})
+    return result
 
 
 def _read_report(path: str | Path | None) -> dict[str, Any] | None:
@@ -171,7 +208,10 @@ def _read_report(path: str | Path | None) -> dict[str, Any] | None:
         return {"status": "fail", "reason": "report_unreadable", "path": str(source.resolve())}
     if not isinstance(value, dict):
         return {"status": "fail", "reason": "report_not_an_object", "path": str(source.resolve())}
-    value.setdefault("path", str(source.resolve()))
+    # A sealed release report is content-addressed.  Adding a convenience
+    # path field would invalidate its hash and make a valid report unusable.
+    if "report_hash" not in value:
+        value.setdefault("path", str(source.resolve()))
     return value
 
 
@@ -273,7 +313,11 @@ def _smoke_evidence(root: str | Path | None, project_root: Path) -> dict[str, An
     }
 
 
-def _provider_evidence(root: str | Path | None) -> dict[str, Any]:
+def _provider_evidence(
+    root: str | Path | None,
+    *,
+    formal_evaluator_config: str | Path | None = None,
+) -> dict[str, Any]:
     if root is None:
         return {"status": "pending", "reason": "dynamic_provider_report_not_supplied"}
     provider_root = Path(root)
@@ -290,13 +334,149 @@ def _provider_evidence(root: str | Path | None) -> dict[str, Any]:
             return {"status": "fail", "reason": "dynamic_provider_job_index_invalid"}
         jobs = index.get("jobs") or []
         prepared = bool(jobs) and all(job.get("status") == "prepared" for job in jobs)
-        return {
+        evidence: dict[str, Any] = {
             "status": "pass" if prepared and index.get("generation_mode") == "agent" else "fail",
             "director": "pass" if prepared else "fail",
             "blender_code": "pass" if prepared else "fail",
+            "generation_mode": index.get("generation_mode"),
+            "provider_mode": index.get("provider_mode"),
             "case_count": len(jobs),
             "path": str(provider_root.resolve()),
         }
+        if index.get("provider_mode") not in {"model", "glm"}:
+            return evidence
+
+        try:
+            from scripts.train_real_harness import audit_dynamic_agent_index
+
+            audit = audit_dynamic_agent_index(
+                index,
+                run_root=provider_root,
+                expected_case_ids=[str(job.get("case_id")) for job in jobs],
+            )
+        except Exception as exc:
+            evidence.update({"status": "fail", "reason": f"provider_audit_error:{type(exc).__name__}"})
+            return evidence
+        evidence["provider_audit"] = audit
+        if audit.get("status") != "pass":
+            evidence.update({"status": "fail", "reason": "provider_manifest_audit_failed"})
+            return evidence
+
+        generation_identities: set[tuple[str, str, str, str]] = set()
+        manifest_errors: list[str] = []
+        for job in jobs:
+            manifest_path = Path(
+                str(job.get("provider_manifest_path") or provider_root / str(job.get("case_id")) / "provider_manifest.json")
+            )
+            if not manifest_path.is_absolute():
+                manifest_path = provider_root / manifest_path
+            try:
+                payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+                director_stage = payload["stages"]["director"]
+                codegen_stage = payload["stages"]["blender_code"]
+                generation_identities.add(
+                    (
+                        str(director_stage["provider_kind"]),
+                        str(director_stage["model_id"]),
+                        str(codegen_stage["provider_kind"]),
+                        str(codegen_stage["model_id"]),
+                    )
+                )
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                manifest_errors.append(f"{job.get('case_id')}:model_identity_unreadable:{type(exc).__name__}")
+        if manifest_errors:
+            evidence.update(
+                {
+                    "status": "fail",
+                    "reason": "provider_model_identity_unreadable",
+                    "failures": manifest_errors,
+                }
+            )
+            return evidence
+        if len(generation_identities) != 1:
+            evidence.update(
+                {
+                    "status": "fail",
+                    "reason": "generator_boundary_identity_not_constant",
+                    "generation_identities": [list(item) for item in sorted(generation_identities)],
+                }
+            )
+            return evidence
+        observed_director_provider, observed_director_id, observed_codegen_provider, observed_codegen_id = next(
+            iter(generation_identities)
+        )
+        observed_generator_id = (
+            f"{observed_director_provider}:{observed_director_id}|"
+            f"{observed_codegen_provider}:{observed_codegen_id}"
+        )
+        evidence.update(
+            {
+                "observed_generator_model_id": observed_generator_id,
+                "observed_director_provider_kind": observed_director_provider,
+                "observed_director_model_id": observed_director_id,
+                "observed_codegen_provider_kind": observed_codegen_provider,
+                "observed_codegen_model_id": observed_codegen_id,
+            }
+        )
+
+        config_path = Path(formal_evaluator_config) if formal_evaluator_config is not None else provider_root / "formal-evaluator-v1.json"
+        if not config_path.is_absolute():
+            config_path = provider_root / config_path
+        if not config_path.is_file():
+            evidence.update(
+                {
+                    "status": "fail",
+                    "reason": "formal_evaluator_config_missing",
+                    "formal_evaluator_config": str(config_path.resolve()),
+                }
+            )
+            return evidence
+        try:
+            from evaluator.formal_config import FormalEvaluatorConfig
+
+            formal = FormalEvaluatorConfig.from_path(config_path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            evidence.update(
+                {
+                    "status": "fail",
+                    "reason": f"formal_evaluator_config_invalid:{type(exc).__name__}",
+                    "formal_evaluator_config": str(config_path.resolve()),
+                }
+            )
+            return evidence
+        evidence.update(
+            {
+                "generator_model_id": formal.generator_model_id,
+                "director_model_id": formal.director_model_id,
+                "codegen_model_id": formal.codegen_model_id,
+                "director_provider_kind": formal.director_provider_kind,
+                "codegen_provider_kind": formal.codegen_provider_kind,
+                "primary_judge_model_id": formal.primary_judge_model_id,
+                "audit_judge_model_id": formal.audit_judge_model_id,
+                "formal_evaluator_config": str(config_path.resolve()),
+                "formal_evaluator_config_fingerprint": formal.fingerprint(),
+            }
+        )
+        mismatches = []
+        if formal.generator_model_id != observed_generator_id:
+            mismatches.append("generator_model_id")
+        if formal.director_model_id != observed_director_id:
+            mismatches.append("director_model_id")
+        if formal.codegen_model_id != observed_codegen_id:
+            mismatches.append("codegen_model_id")
+        if formal.director_provider_kind != observed_director_provider:
+            mismatches.append("director_provider_kind")
+        if formal.codegen_provider_kind != observed_codegen_provider:
+            mismatches.append("codegen_provider_kind")
+        if mismatches:
+            evidence.update(
+                {
+                    "status": "fail",
+                    "reason": "formal_generation_identity_mismatch",
+                    "mismatched_fields": mismatches,
+                }
+            )
+        return evidence
     failure_files = list(provider_root.rglob("director_failure.json")) + list(provider_root.rglob("codegen_failure.json"))
     if failure_files:
         return {"status": "fail", "reason": "dynamic_provider_failure_artifact", "path": str(failure_files[0].resolve())}
@@ -309,12 +489,14 @@ def build_training_readiness_from_project(
     full_test_report: str | Path | None = None,
     capability_report: str | Path | None = None,
     dataset_root: str | Path = "dataset/vbench2-agent-training-index-v1",
-    frozen_root: str | Path = "dataset/frozen-eval-v1",
+    frozen_root: str | Path = "dataset/frozen-eval-v2",
     frozen_reference_roots: list[str | Path] | None = None,
     blender_smoke_root: str | Path | None = None,
     golden_root: str | Path | None = "dataset/golden-review-exact-v2",
     dynamic_provider_root: str | Path | None = None,
+    formal_evaluator_config: str | Path | None = "config/formal-evaluator-v1.json",
     paired_gate_report: str | Path | None = None,
+    formal_release_report: str | Path | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root).resolve()
     def resolve_input(value: str | Path | None) -> Path | None:
@@ -329,7 +511,9 @@ def build_training_readiness_from_project(
     resolved_frozen = resolve_input(frozen_root)
     golden_path = resolve_input(golden_root)
     resolved_provider = resolve_input(dynamic_provider_root)
+    resolved_formal_config = resolve_input(formal_evaluator_config)
     resolved_paired = resolve_input(paired_gate_report)
+    resolved_release = resolve_input(formal_release_report)
     resolved_references = [path for value in (frozen_reference_roots or []) if (path := resolve_input(value)) is not None]
     golden = (
         _report_or_pending(golden_path, "golden_review_bundle_missing")
@@ -367,6 +551,7 @@ def build_training_readiness_from_project(
         except Exception as exc:
             golden = {"status": "fail", "reason": f"{type(exc).__name__}: {exc}"}
     frozen_refs = frozen_reference_roots or []
+    release_evidence = _report_or_pending(resolved_release, "formal_release_report_missing")
     report = build_training_readiness(
         automated_checks={
             "full_test": _report_or_pending(resolved_full_test, "full_test_report_missing"),
@@ -375,12 +560,16 @@ def build_training_readiness_from_project(
                 resolved_dataset or root / "dataset" / "vbench2-agent-training-index-v1",
                 resolved_references,
             ),
-            "frozen_eval": _frozen_evidence(resolved_frozen or root / "dataset" / "frozen-eval-v1", resolved_references),
+            "frozen_eval": _frozen_evidence(resolved_frozen or root / "dataset" / "frozen-eval-v2", resolved_references),
         },
         real_blender_smoke=_smoke_evidence(resolve_input(blender_smoke_root), root),
         golden_review=golden,
-        dynamic_agent_provider=_provider_evidence(resolved_provider),
+        dynamic_agent_provider=_provider_evidence(
+            resolved_provider,
+            formal_evaluator_config=resolved_formal_config,
+        ),
         paired_gate=_report_or_pending(resolved_paired, "paired_gate_report_missing"),
+        formal_release_report=release_evidence,
     )
     report["project_root"] = str(root)
     return report
@@ -392,12 +581,14 @@ def main() -> int:
     parser.add_argument("--full-test-report")
     parser.add_argument("--capability-report")
     parser.add_argument("--dataset-root", default="dataset/vbench2-agent-training-index-v1")
-    parser.add_argument("--frozen-root", default="dataset/frozen-eval-v1")
+    parser.add_argument("--frozen-root", default="dataset/frozen-eval-v2")
     parser.add_argument("--frozen-reference-root", action="append", default=[])
     parser.add_argument("--blender-smoke-root")
     parser.add_argument("--golden-root", default="dataset/golden-review-exact-v2")
     parser.add_argument("--dynamic-provider-root")
+    parser.add_argument("--formal-evaluator-config", default="config/formal-evaluator-v1.json")
     parser.add_argument("--paired-gate-report")
+    parser.add_argument("--formal-release-report")
     parser.add_argument("--out")
     args = parser.parse_args()
     project_root = Path(args.project_root).resolve()
@@ -411,7 +602,9 @@ def main() -> int:
         blender_smoke_root=project_root / args.blender_smoke_root if args.blender_smoke_root else None,
         golden_root=project_root / args.golden_root if args.golden_root else None,
         dynamic_provider_root=project_root / args.dynamic_provider_root if args.dynamic_provider_root else None,
+        formal_evaluator_config=project_root / args.formal_evaluator_config if args.formal_evaluator_config else None,
         paired_gate_report=project_root / args.paired_gate_report if args.paired_gate_report else None,
+        formal_release_report=project_root / args.formal_release_report if args.formal_release_report else None,
     )
     destination = Path(args.out) if args.out else project_root / "out" / "training_readiness_report.json"
     destination.parent.mkdir(parents=True, exist_ok=True)

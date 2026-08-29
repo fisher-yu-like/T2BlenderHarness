@@ -12,7 +12,8 @@ def test_training_provider_wiring_uses_codex_local_agents_without_template_fallb
     )
 
     assert director.mode == "dynamic"
-    assert director.provider == "codex-local"
+    assert director.provider == "external-director"
+    assert director.interpreter.provider.provider_kind == "external_openai_compatible"
     assert code_agent.provider.command == "codex-test"
     assert code_agent.provider.timeout_s == 31
 
@@ -23,9 +24,9 @@ def test_training_defaults_to_the_current_codex_environment_without_external_exe
     director, code_agent = build_dynamic_codex_agents()
 
     assert director.mode == "dynamic"
-    assert director.provider == "codex-local"
-    assert director.policy == "director-v3-codex-local"
-    assert code_agent.model == "codex-local"
+    assert director.provider == "rule_template_baseline"
+    assert director.policy == "director-v4-rule-template-baseline"
+    assert code_agent.model == "rule_template_baseline"
     assert code_agent.provider.__self__.__class__.__name__ == "CodexLocalProvider"
 
 

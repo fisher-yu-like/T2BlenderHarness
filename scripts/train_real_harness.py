@@ -33,7 +33,12 @@ from evaluator.visual_primary import VISUAL_PRIMARY_VERSION  # noqa: E402
 from videoact.blender_code_agent import BlenderCodeAgent  # noqa: E402
 from videoact.codex_exec_provider import CodexExecProvider  # noqa: E402
 from videoact.director import DirectorAgent  # noqa: E402
+from videoact.provider_provenance import provider_identity  # noqa: E402
 from videoact.real_inner_loop import run_real_inner_loop  # noqa: E402
+from videoact.source_fingerprints import audit_source_reuse  # noqa: E402
+from videoact.paired_statistics import evaluate_paired_acceptance  # noqa: E402
+from videoact.cross_owner import validate_cross_owner_proposal  # noqa: E402
+from videoact.release_gates import validate_formal_release_report  # noqa: E402
 
 _MISSING = object()
 
@@ -66,6 +71,46 @@ def require_training_readiness(report_path: str | Path) -> dict[str, Any]:
             f"report={path.resolve()}"
         )
     return report
+
+
+def require_formal_training_release(
+    readiness_report_path: str | Path,
+    release_report_path: str | Path,
+) -> dict[str, Any]:
+    """Require both the prerequisite matrix and sealed G0--G3 release."""
+
+    readiness = require_training_readiness(readiness_report_path)
+    path = Path(release_report_path)
+    try:
+        release = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"formal release report is missing or unreadable: {path}: {exc}") from exc
+    verification = validate_formal_release_report(release)
+    if verification.get("training_allowed") is not True:
+        raise ValueError(
+            "formal release is blocked until sealed G0-G3 reports pass: "
+            f"verification={json.dumps(verification, ensure_ascii=False, sort_keys=True)}, "
+            f"report={path.resolve()}"
+        )
+    return {
+        "status": "pass",
+        "training_allowed": True,
+        "readiness": readiness,
+        "release": release,
+        "release_verification": verification,
+    }
+
+
+def require_model_provider_mode(provider_mode: str) -> str:
+    """Reject the rule/template baseline for formal Harness evolution."""
+
+    normalized = str(provider_mode or "").strip().lower()
+    if normalized not in {"model", "glm"}:
+        raise ValueError(
+            "formal Harness training requires --provider-mode model or --provider-mode glm; "
+            "rule_template_baseline is diagnostic-only and cannot produce a training claim"
+        )
+    return normalized
 
 
 DIAGNOSTIC_DEFERRED_GATES = frozenset({"golden_review", "paired_gate"})
@@ -158,7 +203,16 @@ def audit_dynamic_agent_index(
     if missing:
         return {"status": "fail", "reason": "agent_job_index_missing_cases", "missing_case_ids": missing}
     failures: list[str] = []
+    provider_mode = str(index.get("provider_mode") or "").strip()
+    expected_kind_by_mode = {
+        "glm": "zhipu_glm_openai_compatible",
+        "model": "external_openai_compatible",
+        "assistant": "agent_session_structured",
+    }
+    require_manifest = provider_mode in {"model", "glm", "assistant"}
+    expected_provider_kind = expected_kind_by_mode.get(provider_mode, "external_openai_compatible")
     source_hashes: dict[str, str] = {}
+    source_texts: dict[str, str] = {}
     root = Path(run_root)
     for case_id in expected:
         job = by_id[case_id]
@@ -166,6 +220,64 @@ def audit_dynamic_agent_index(
             failures.append(f"{case_id}:job_status={job.get('status')}")
         if not str(job.get("codegen_call_id") or "").strip():
             failures.append(f"{case_id}:missing_codegen_call_id")
+        if require_manifest:
+            manifest_path = Path(str(job.get("provider_manifest_path") or root / case_id / "provider_manifest.json"))
+            if not manifest_path.is_absolute():
+                manifest_path = root / manifest_path
+            if not manifest_path.is_file():
+                failures.append(f"{case_id}:missing_provider_manifest")
+            else:
+                try:
+                    provider_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                    failures.append(f"{case_id}:provider_manifest_unreadable:{type(exc).__name__}")
+                else:
+                    if provider_manifest.get("provider_mode") != provider_mode:
+                        failures.append(f"{case_id}:provider_manifest_mode_mismatch")
+                    if provider_manifest.get("template_backed") is not False:
+                        failures.append(f"{case_id}:provider_manifest_template_backed")
+                    if provider_manifest.get("llm_generated") is not True:
+                        failures.append(f"{case_id}:provider_manifest_not_llm_generated")
+                    stages = provider_manifest.get("stages")
+                    if not isinstance(stages, dict):
+                        failures.append(f"{case_id}:provider_manifest_missing_stages")
+                    else:
+                        stage_call_ids: dict[str, str] = {}
+                        for stage in ("director", "blender_code"):
+                            call = stages.get(stage)
+                            if not isinstance(call, dict) or not str(call.get("call_id") or "").strip():
+                                failures.append(f"{case_id}:missing_{stage}_provider_call_id")
+                            elif call.get("template_backed") is not False or call.get("llm_generated") is not True:
+                                failures.append(f"{case_id}:{stage}_provider_identity_invalid")
+                            else:
+                                stage_call_ids[stage] = str(call["call_id"])
+                                for field in (
+                                    "provider_kind",
+                                    "model_id",
+                                    "model_version",
+                                    "request_schema_hash",
+                                    "response_schema_hash",
+                                    "prompt_hash",
+                                    "request_hash",
+                                    "response_hash",
+                                    "started_at",
+                                    "ended_at",
+                                ):
+                                    if not str(call.get(field) or "").strip():
+                                        failures.append(f"{case_id}:{stage}_missing_{field}")
+                                if provider_mode in {"glm", "assistant"} and call.get("provider_kind") != expected_provider_kind:
+                                    failures.append(f"{case_id}:{stage}_provider_is_not_{provider_mode}")
+                                elif provider_mode == "assistant" and call.get("model_id") != "glm-5.3-flash":
+                                    failures.append(f"{case_id}:{stage}_assistant_model_id_invalid")
+                                elif provider_mode == "model":
+                                    if stage == "director" and call.get("provider_kind") != "external_openai_compatible":
+                                        failures.append(f"{case_id}:director_provider_is_not_external_structured")
+                                    if stage == "blender_code" and call.get("provider_kind") != "codex_exec_local":
+                                        failures.append(f"{case_id}:blender_code_provider_is_not_local_codex")
+                        if len(stage_call_ids) == 2 and len(set(stage_call_ids.values())) != 2:
+                            failures.append(f"{case_id}:director_and_codegen_call_ids_collide")
+                    if provider_manifest.get("status") != "complete":
+                        failures.append(f"{case_id}:provider_manifest_not_complete")
         job_path = Path(str(job.get("job_path") or root / case_id / "blender_job.py"))
         if not job_path.is_absolute():
             candidates = (root / job_path, Path.cwd() / job_path)
@@ -174,12 +286,15 @@ def audit_dynamic_agent_index(
             failures.append(f"{case_id}:missing_generated_source")
             continue
         source_text = job_path.read_text(encoding="utf-8", errors="replace")
+        source_texts[case_id] = source_text
         # A unique hash alone is not sufficient: a shared scaffold can be
-        # copied and stamped with a case id.  The production local provider
-        # must leave an auditable case-specific profile in every generated
-        # Blender source.  This is deliberately a hard provenance gate, not a
-        # quality heuristic; sources without it must not reach Blender.
-        if (
+        # copied and stamped with a case id.  The diagnostic rule-template
+        # arm carries its explicit profile marker; the formal model arm must
+        # instead bind the source to a DirectorPlan and its hash.
+        if provider_mode in {"model", "glm", "assistant"}:
+            if "DIRECTOR_PLAN" not in source_text:
+                failures.append(f"{case_id}:missing_director_plan_binding")
+        elif (
             "CASE_SCENE_PROFILE" not in source_text
             or "codex-local-case-profile-v2" not in source_text
         ):
@@ -197,14 +312,19 @@ def audit_dynamic_agent_index(
     unique_hashes = sorted(set(source_hashes.values()))
     if len(expected) > 1 and len(unique_hashes) == 1 and len(source_hashes) == len(expected):
         failures.append("all_cases_reuse_one_generated_source")
+    source_reuse = audit_source_reuse(source_texts)
+    if provider_mode in {"model", "glm"} and source_reuse.get("probable_template_reuse"):
+        failures.append("probable_template_reuse")
     return {
         "status": "pass" if not failures else "fail",
         "reason": "dynamic_case_specific_source_verified" if not failures else "agent_source_provenance_failed",
         "generation_mode": "agent",
+        "provider_mode": provider_mode or None,
         "case_count": len(expected),
         "prepared_count": sum(by_id[case_id].get("status") == "prepared" for case_id in expected),
         "unique_source_count": len(unique_hashes),
         "source_hashes": source_hashes,
+        "source_reuse_audit": source_reuse,
         "failures": failures,
     }
 
@@ -502,6 +622,8 @@ def run_bounded_outer_attempts(
             proposal = decision.get("proposal")
             if not isinstance(proposal, dict) or not str(proposal.get("owner") or "").strip():
                 raise ValueError("a patch transition requires a proposal with one owner")
+            cross_owner_audit = validate_cross_owner_proposal(proposal)
+            decision["cross_owner_audit"] = cross_owner_audit
             raw_files = proposal.get("affected_files", proposal.get("files", []))
             if raw_files is not None:
                 if not isinstance(raw_files, list) or any(not isinstance(item, str) for item in raw_files):
@@ -530,16 +652,30 @@ def run_bounded_outer_attempts(
 
 
 def build_dynamic_codex_agents(
-    *, codex_command: str = "codex", timeout_s: int = 1800, provider_mode: str = "local"
+    *,
+    codex_command: str = "codex",
+    timeout_s: int = 1800,
+    provider_mode: str = "rule_template_baseline",
+    director_base_url: str | None = None,
+    director_api_key: str | None = None,
+    director_model: str | None = None,
+    glm_base_url: str | None = None,
+    glm_api_key: str | None = None,
+    glm_model: str | None = None,
 ):
-    """Build dynamic agents from the current Codex environment by default.
+    """Build a named provider arm with an auditable identity.
 
-    The local path is the production training path and does not call an
-    external endpoint or spawn ``codex exec``.  The external adapter remains an
-    explicit diagnostic option for provider integration tests only.
+    ``rule_template_baseline`` is retained for diagnostics and regression
+    comparisons only.  Formal training may select ``glm``; that arm calls two
+    separate Zhipu GLM structured providers, one for Director interpretation
+    and one for Blender codegen.  The two stages are intentionally separate
+    provider instances and are recorded independently.  ``model`` remains a
+    compatibility arm for the historical external-Director/local-Codex pair.
+    Legacy names remain accepted as compatibility aliases but are normalized
+    to the explicit baseline arm and never presented as an LLM call.
     """
 
-    if provider_mode in {"local", "codex-local"}:
+    if provider_mode in {"rule_template_baseline", "local", "codex-local"}:
         from videoact.codex_self_provider import build_codex_local_agents
 
         return build_codex_local_agents()
@@ -547,17 +683,88 @@ def build_dynamic_codex_agents(
         from videoact.codex_self_provider import build_codex_self_agents
 
         return build_codex_self_agents()
-    if provider_mode != "external":
-        raise ValueError("provider_mode must be local, codex-self, or external")
+    if provider_mode not in {"model", "external", "glm", "assistant"}:
+        raise ValueError(
+            "provider_mode must be rule_template_baseline, model, external, glm, or assistant"
+        )
 
-    director = DirectorAgent.from_provider(
-        CodexExecProvider.for_director(command=codex_command, timeout_s=timeout_s),
-        provider_name="codex-local",
-        policy="director-v2-codex-structured",
+    if provider_mode == "assistant":
+        # The driving coding-agent session is the LLM for both stages: each
+        # structured call is materialized as a request file under
+        # ASSISTANT_SESSION_ROOT and answered by an authored response file.
+        # No external endpoint and no template fallback; provenance, schema
+        # validation, and the static source gate are identical to the glm arm.
+        from videoact.assistant_session_provider import AssistantSessionProvider
+
+        session_root = os.getenv("ASSISTANT_SESSION_ROOT") or "out/assistant-session"
+        wait_timeout_s = float(os.getenv("ASSISTANT_WAIT_TIMEOUT_S") or max(7200.0, timeout_s))
+        director_provider = AssistantSessionProvider.for_director(
+            session_root=session_root,
+            wait_timeout_s=wait_timeout_s,
+        )
+        code_provider = AssistantSessionProvider.for_codegen(
+            session_root=session_root,
+            wait_timeout_s=wait_timeout_s,
+        )
+        director = DirectorAgent.from_provider(
+            director_provider,
+            provider_name="assistant-session-glm-flash",
+            policy="director-v5-glm-structured",
+        )
+        return director, BlenderCodeAgent(
+            provider=code_provider,
+            model=code_provider.model_id,
+            max_codegen_attempts=2,
+        )
+
+    if provider_mode == "glm":
+        from videoact.external_structured_provider import GLMStructuredProvider
+
+        director_provider = GLMStructuredProvider.for_director(
+            base_url=glm_base_url,
+            api_key=glm_api_key,
+            model=glm_model,
+            timeout_s=timeout_s,
+        )
+        code_provider = GLMStructuredProvider.for_codegen(
+            base_url=glm_base_url,
+            api_key=glm_api_key,
+            model=glm_model,
+            timeout_s=timeout_s,
+        )
+        director = DirectorAgent.from_provider(
+            director_provider,
+            provider_name="external-glm",
+            policy="director-v5-glm-structured",
+        )
+        return director, BlenderCodeAgent(
+            provider=code_provider,
+            model=code_provider.model_id,
+            # The first GLM code sample has repeatedly exhibited a bounded
+            # syntax/serialization corruption.  Permit one repair prompt
+            # carrying static-gate evidence; any second failure remains hard.
+            max_codegen_attempts=2,
+        )
+
+    from videoact.external_structured_provider import OpenAICompatibleStructuredProvider
+
+    director_provider = OpenAICompatibleStructuredProvider.for_director(
+        base_url=director_base_url,
+        api_key=director_api_key,
+        model=director_model,
+        timeout_s=timeout_s,
     )
+    compatibility_name = "external-director"
+    compatibility_policy = "director-v5-external-structured"
+    director = DirectorAgent.from_provider(
+        director_provider,
+        provider_name=compatibility_name,
+        policy=compatibility_policy,
+    )
+    code_provider = CodexExecProvider.for_codegen(command=codex_command, timeout_s=timeout_s)
     code_agent = BlenderCodeAgent(
-        provider=CodexExecProvider.for_codegen(command=codex_command, timeout_s=timeout_s),
-        model="codex-local",
+        provider=code_provider,
+        model="local-codex-exec",
     )
     return director, code_agent
 
@@ -569,17 +776,45 @@ def anti_overfit_gate(
     paired_dev_after: float,
     overall_dev_before: float,
     overall_dev_after: float,
+    *,
+    paired_train_deltas: list[float] | None = None,
+    paired_dev_deltas: list[float] | None = None,
+    safety_before: dict[str, Any] | None = None,
+    safety_after: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Apply strict local and cumulative holdout gates before accepting a patch."""
+    """Apply the T10 paired gate, retaining the scalar compatibility API.
+
+    Historical callers pass only aggregate means and continue to receive the
+    original strict scalar checks.  A real paired run passes case deltas and
+    safety metrics; its decision then comes from the reproducible bootstrap
+    report instead of an all-cases-positive rule.
+    """
+
+    paired = None
+    if paired_train_deltas is not None or paired_dev_deltas is not None:
+        paired = evaluate_paired_acceptance(
+            paired_train_deltas or [float(train_after) - float(train_before)],
+            paired_dev_deltas or [float(paired_dev_after) - float(paired_dev_before)],
+            safety_before=safety_before,
+            safety_after=safety_after,
+            require_safety_metrics=safety_before is not None or safety_after is not None,
+        )
     checks = {
-        "train_strict_gain": train_after > train_before,
-        "paired_dev_non_regression": paired_dev_after >= paired_dev_before,
+        "train_strict_gain": (
+            paired["checks"]["train_min_gain"] if paired is not None else train_after > train_before
+        ),
+        "paired_dev_non_regression": (
+            paired["checks"]["dev_noninferiority"] if paired is not None else paired_dev_after >= paired_dev_before
+        ),
         "overall_dev_non_regression": overall_dev_after >= overall_dev_before,
     }
+    if paired is not None:
+        checks["paired_statistics"] = paired["accepted"]
     return {
         "accepted": all(checks.values()),
         "checks": checks,
         "reason": "accepted" if all(checks.values()) else "rejected_anti_overfit_gate",
+        "paired_statistics": paired,
     }
 
 
@@ -756,7 +991,7 @@ def merge_real_scores(
         vlm = vlm_by_id.get(case_id, {})
         aggregate = vlm.get("aggregate") or {}
         realism = (vlm.get("realism") if vlm.get("status") == "scored" else None) or real.get("realism") or {}
-        local_evidence = vlm.get("local_video_evidence") or {}
+        local_evidence = vlm.get("local_video_evidence") or vlm.get("deterministic_video_proxy_metrics") or {}
         channels = local_evidence.get("channels") or {}
         video_path = Path(run_root) / case_id / "proxy.mp4"
         video_score = (
@@ -1004,6 +1239,7 @@ def run_real_batch_with_inner_loop(
     scoring_policy: str = VISUAL_PRIMARY_VERSION,
     director_agent: DirectorAgent,
     code_agent: BlenderCodeAgent,
+    provider_mode: str = "injected",
     code_cache_dir: str | Path | None = None,
     codegen_examples_root: str | Path | None = None,
     max_inner_attempts: int = 3,
@@ -1011,11 +1247,12 @@ def run_real_batch_with_inner_loop(
 ) -> dict[str, Any]:
     """Prepare, render, and evaluate a real batch with bounded regeneration.
 
-    ``vlm_model`` is retained as the requested model label, but this local
-    training path never calls an external endpoint.  When Blender emits the
-    required runtime observations, the in-process Codex visual reviewer scores
-    decoded MP4 frames and actual transforms; incomplete evidence stays
-    unavailable rather than becoming a zero or a plan-derived number.
+    ``vlm_model`` is retained as the requested visual-judge model label. In
+    the formal hybrid generation path, the external structured Director
+    provider and the local Codex Blender-code provider are separate calls.
+    The visual-review diagnostic may use the in-process Codex reviewer without
+    an external VLM endpoint; incomplete evidence stays unavailable rather
+    than becoming a zero or a plan-derived number.
     """
 
     if not case_ids:
@@ -1044,6 +1281,7 @@ def run_real_batch_with_inner_loop(
             case_ids=pending_ids,
             director_agent=director_agent,
             code_agent=code_agent,
+            provider_mode=provider_mode,
             code_cache_dir=attempt_cache,
             codegen_examples_root=codegen_examples_root,
         )
@@ -1239,6 +1477,7 @@ def prepare_full_split(
     evaluator_version: str,
     director_agent: DirectorAgent | None = None,
     code_agent: BlenderCodeAgent | None = None,
+    provider_mode: str = "injected",
 ) -> Path:
     split_root = Path(output_root) / split
     prepare_jobs(
@@ -1247,6 +1486,7 @@ def prepare_full_split(
         dataset_root=dataset_root,
         harness_version=harness_version,
         evaluator_version=evaluator_version,
+        provider_mode=provider_mode,
         director_agent=director_agent,
         code_agent=code_agent,
     )
@@ -1261,6 +1501,7 @@ def prepare_full_train(
     evaluator_version: str,
     director_agent: DirectorAgent | None = None,
     code_agent: BlenderCodeAgent | None = None,
+    provider_mode: str = "injected",
 ) -> Path:
     return prepare_full_split(
         output_root,
@@ -1270,6 +1511,7 @@ def prepare_full_train(
         evaluator_version=evaluator_version,
         director_agent=director_agent,
         code_agent=code_agent,
+        provider_mode=provider_mode,
     )
 
 
@@ -1515,6 +1757,7 @@ def run_outer_attempt(
     markdown_path: str | Path,
     director_agent: DirectorAgent | None = None,
     code_agent: BlenderCodeAgent | None = None,
+    provider_mode: str = "rule_template_baseline",
     codex_command: str = "codex",
     code_cache_dir: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -1522,7 +1765,11 @@ def run_outer_attempt(
         raise ValueError("attempt must be between 1 and 5; this is an outer-loop attempt, not an inner repair retry")
     batch = _protocol_round(dataset_root, round_number)
     if director_agent is None or code_agent is None:
-        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
+        director_agent, code_agent = build_dynamic_codex_agents(
+            codex_command=codex_command,
+            timeout_s=timeout_s,
+            provider_mode=provider_mode,
+        )
     attempt_root = Path(output_root) / f"round-{round_number:02d}" / f"attempt-{attempt_number:02d}" / "real"
     reports: dict[str, Any] = {}
     for split in ("train", "dev"):
@@ -1541,8 +1788,11 @@ def run_outer_attempt(
             markdown_path=markdown_path,
             director_agent=director_agent,
             code_agent=code_agent,
+            provider_mode=provider_mode,
             code_cache_dir=code_cache_dir or (Path(output_root) / "code_cache"),
-            max_inner_attempts=3,
+            # Bounded execution recovery: at most two fresh candidates per
+            # case (initial attempt + one regeneration).
+            max_inner_attempts=2,
         )
     result = {"round": round_number, "attempt": attempt_number, "batch": batch, "splits": reports}
     attempt_root.parent.parent.mkdir(parents=True, exist_ok=True)
@@ -1565,13 +1815,18 @@ def run_outer_overall(
     markdown_path: str | Path,
     director_agent: DirectorAgent | None = None,
     code_agent: BlenderCodeAgent | None = None,
+    provider_mode: str = "rule_template_baseline",
     codex_command: str = "codex",
     code_cache_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     overall_root = Path(output_root) / f"round-{round_number:02d}" / "overall" / "real"
     batch = _protocol_round(dataset_root, round_number)
     if director_agent is None or code_agent is None:
-        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
+        director_agent, code_agent = build_dynamic_codex_agents(
+            codex_command=codex_command,
+            timeout_s=timeout_s,
+            provider_mode=provider_mode,
+        )
     reports: dict[str, Any] = {}
     for split in ("train", "dev"):
         split_root = overall_root / split
@@ -1589,8 +1844,11 @@ def run_outer_overall(
             markdown_path=markdown_path,
             director_agent=director_agent,
             code_agent=code_agent,
+            provider_mode=provider_mode,
             code_cache_dir=code_cache_dir or (Path(output_root) / "code_cache"),
-            max_inner_attempts=3,
+            # Bounded execution recovery: at most two fresh candidates per
+            # case (initial attempt + one regeneration).
+            max_inner_attempts=2,
         )
     result = {
         "round": round_number,
@@ -1618,6 +1876,7 @@ def run_six_round_protocol(
     markdown_path: str | Path | None = None,
     director_agent: DirectorAgent | None = None,
     code_agent: BlenderCodeAgent | None = None,
+    provider_mode: str = "rule_template_baseline",
     outer_transition: Callable[[int, list[dict[str, Any]]], dict[str, Any]] | None = None,
     diagnostic_only: bool = False,
 ) -> dict[str, Any]:
@@ -1630,6 +1889,7 @@ def run_six_round_protocol(
         split_payload["test"],
         dataset_fingerprint=metadata["fingerprint"],
     )
+    protocol["provider_mode"] = provider_mode
     if diagnostic_only:
         protocol = {
             **protocol,
@@ -1641,7 +1901,11 @@ def run_six_round_protocol(
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
     if director_agent is None or code_agent is None:
-        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
+        director_agent, code_agent = build_dynamic_codex_agents(
+            codex_command=codex_command,
+            timeout_s=timeout_s,
+            provider_mode=provider_mode,
+        )
     memory_table = Path(markdown_path) if markdown_path is not None else root / "harness_training_memory.md"
     shared_cache = root / "code_cache"
     (root / "six_round_protocol.json").write_text(
@@ -1666,6 +1930,7 @@ def run_six_round_protocol(
                 markdown_path=memory_table,
                 director_agent=director_agent,
                 code_agent=code_agent,
+                provider_mode=provider_mode,
                 codex_command=codex_command,
                 code_cache_dir=shared_cache,
             )
@@ -1699,6 +1964,7 @@ def run_six_round_protocol(
             markdown_path=memory_table,
             director_agent=director_agent,
             code_agent=code_agent,
+            provider_mode=provider_mode,
             codex_command=codex_command,
             code_cache_dir=shared_cache,
         )
@@ -1727,6 +1993,7 @@ def run_six_round_protocol(
     write_harness_memory_jsonl(memory_path, memory_reports)
     result = {
         "protocol": protocol,
+        "provider_mode": provider_mode,
         "execution_mode": "diagnostic_precalibration" if diagnostic_only else "formal_training",
         "formal_training_allowed": False if diagnostic_only else None,
         "visual_scores_permitted": False if diagnostic_only else None,
@@ -1753,6 +2020,7 @@ def run_multi_five_round_protocol(
     markdown_path: str | Path,
     director_agent: DirectorAgent | None = None,
     code_agent: BlenderCodeAgent | None = None,
+    provider_mode: str = "rule_template_baseline",
     codex_command: str = "codex",
     outer_transition: Callable[[int, list[dict[str, Any]]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -1773,9 +2041,14 @@ def run_multi_five_round_protocol(
         split_payload["test"],
         dataset_fingerprint=metadata["fingerprint"],
     )
+    protocol["provider_mode"] = provider_mode
     root = Path(output_root)
     if director_agent is None or code_agent is None:
-        director_agent, code_agent = build_dynamic_codex_agents(codex_command=codex_command, timeout_s=timeout_s)
+        director_agent, code_agent = build_dynamic_codex_agents(
+            codex_command=codex_command,
+            timeout_s=timeout_s,
+            provider_mode=provider_mode,
+        )
     root.mkdir(parents=True, exist_ok=True)
     (root / "multi_five_protocol.json").write_text(json.dumps(protocol, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     round_reports = []
@@ -1797,6 +2070,7 @@ def run_multi_five_round_protocol(
                 markdown_path=markdown_path,
                 director_agent=director_agent,
                 code_agent=code_agent,
+                provider_mode=provider_mode,
                 codex_command=codex_command,
             )
 
@@ -1826,10 +2100,16 @@ def run_multi_five_round_protocol(
             markdown_path=markdown_path,
             director_agent=director_agent,
             code_agent=code_agent,
+            provider_mode=provider_mode,
             codex_command=codex_command,
         )
         round_reports.append({"round": round_number, "attempt": attempt, "outer_loop": outer_loop, "overall": overall})
-    result = {"protocol": protocol, "rounds": round_reports, "memory_table": str(Path(markdown_path).resolve())}
+    result = {
+        "protocol": protocol,
+        "provider_mode": provider_mode,
+        "rounds": round_reports,
+        "memory_table": str(Path(markdown_path).resolve()),
+    }
     (root / "multi_five_training_report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result
 
@@ -1855,6 +2135,11 @@ def main() -> int:
     )
     parser.add_argument("--dataset-root", default="dataset/vbench2-agent-training-index-v1")
     parser.add_argument("--readiness-report", default="out/training_readiness_report.json")
+    parser.add_argument(
+        "--formal-release-report",
+        default="out/formal_release_gate_report.json",
+        help="sealed G0-G3 pilot/shadow release report required by formal modes",
+    )
     parser.add_argument("--round-root", default="out/training/agent-six-rounds-v1")
     parser.add_argument("--full-train-root", default="out/training/full-evaluation-real-v7")
     parser.add_argument("--harness-version", default="t2blendercodeharness-v5-executable-director")
@@ -1864,6 +2149,12 @@ def main() -> int:
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--vlm-model", choices=["gpt-5.6-luna", "gpt-5.6-terra"], default="gpt-5.6-luna")
     parser.add_argument("--codex-command", default="codex")
+    parser.add_argument(
+        "--provider-mode",
+        choices=["rule_template_baseline", "model", "glm", "assistant"],
+        default="glm",
+        help="explicit baseline, legacy hybrid model, external Zhipu GLM, or driving-assistant-session plan+code provider",
+    )
     parser.add_argument("--markdown-path", default="docs/t2blendercodeharness-agent-training-memory-v1.md")
     parser.add_argument("--round", dest="round_number", type=int)
     parser.add_argument("--attempt", dest="attempt_number", type=int)
@@ -1875,7 +2166,11 @@ def main() -> int:
     diagnostic_modes = {"diagnostic-attempt", "diagnostic-overall", "diagnostic-six-rounds"}
     diagnostic_policy = None
     if args.mode in formal_modes:
+        require_model_provider_mode(args.provider_mode)
+        # Keep the prerequisite matrix as an explicit independent check; the
+        # sealed G0--G3 report is an additional formal-release boundary.
         require_training_readiness(args.readiness_report)
+        require_formal_training_release(args.readiness_report, args.formal_release_report)
     elif args.mode in diagnostic_modes:
         diagnostic_policy = require_diagnostic_training_readiness(args.readiness_report)
         diagnostic_manifest_path = Path(args.round_root) / "diagnostic_training_manifest.json"
@@ -1927,6 +2222,7 @@ def main() -> int:
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
                 markdown_path=args.markdown_path,
+                provider_mode=args.provider_mode,
                 codex_command=args.codex_command,
             )
         else:
@@ -1941,6 +2237,7 @@ def main() -> int:
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
                 markdown_path=args.markdown_path,
+                provider_mode=args.provider_mode,
                 codex_command=args.codex_command,
             )
         if args.mode in {"diagnostic-attempt", "diagnostic-overall"}:
@@ -1962,6 +2259,7 @@ def main() -> int:
                 vlm_model=args.vlm_model,
                 codex_command=args.codex_command,
                 markdown_path=args.markdown_path,
+                provider_mode=args.provider_mode,
                 diagnostic_only=True,
             )
             print(json.dumps(all_reports, indent=2, sort_keys=True))
@@ -1977,6 +2275,7 @@ def main() -> int:
                 timeout_s=args.timeout_s,
                 vlm_model=args.vlm_model,
                 markdown_path=args.markdown_path,
+                provider_mode=args.provider_mode,
                 codex_command=args.codex_command,
             )
         else:
@@ -1991,6 +2290,7 @@ def main() -> int:
                 vlm_model=args.vlm_model,
                 codex_command=args.codex_command,
                 markdown_path=args.markdown_path,
+                provider_mode=args.provider_mode,
             )
     if args.mode == "existing-rounds":
         round_root = Path(args.round_root)
@@ -2017,6 +2317,7 @@ def main() -> int:
         director_agent, code_agent = build_dynamic_codex_agents(
             codex_command=args.codex_command,
             timeout_s=args.timeout_s,
+            provider_mode=args.provider_mode,
         )
         train_root = prepare_full_train(
             args.full_train_root,
@@ -2025,6 +2326,7 @@ def main() -> int:
             evaluator_version=args.evaluator_version,
             director_agent=director_agent,
             code_agent=code_agent,
+            provider_mode=args.provider_mode,
         )
         all_reports["full_train"] = run_real_batch(
             train_root,
@@ -2044,6 +2346,7 @@ def main() -> int:
                 evaluator_version=args.evaluator_version,
                 director_agent=director_agent,
                 code_agent=code_agent,
+                provider_mode=args.provider_mode,
             )
             all_reports["full_dev"] = run_real_batch(
                 dev_root,

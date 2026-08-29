@@ -25,6 +25,8 @@ DIMENSIONS = (
     "motion_naturalness",
     "visual_presentation",
 )
+REQUIRED_EVENT_F1_THRESHOLD = 0.85
+MAX_DIMENSION_MAE_THRESHOLD = 10.0
 SEMANTIC_DIMENSIONS = (
     "prompt_compliance",
     "physical_plausibility",
@@ -85,12 +87,95 @@ def _bootstrap_ci(left: list[float], right: list[float], *, seed: int, iteration
 def _metric(actual: list[float], predicted: list[float], *, seed: int, iterations: int) -> dict[str, Any]:
     spearman = round(_spearman(actual, predicted), 4)
     pearson = round(_pearson(actual, predicted), 4)
+    mae = round(sum(abs(left - right) for left, right in zip(actual, predicted)) / len(actual), 4) if actual else None
     return {
         "n": len(actual),
         "spearman": spearman,
         "pearson": pearson,
+        "mae": mae,
         "spearman_bootstrap_95_ci": list(_bootstrap_ci(actual, predicted, seed=seed, iterations=iterations)),
         "status": "uninformative" if abs(spearman) < 0.3 else "informative",
+    }
+
+
+def _event_labels(section: Any) -> dict[str, bool] | None:
+    if not isinstance(section, dict):
+        return None
+    for key in ("required_event_labels", "required_event_success"):
+        value = section.get(key)
+        if isinstance(value, dict) and value:
+            if all(isinstance(item, bool) for item in value.values()):
+                return {str(event_id): bool(item) for event_id, item in value.items()}
+            return None
+    for key in ("required_event_scores", "event_scores"):
+        value = section.get(key)
+        if isinstance(value, dict) and value:
+            labels: dict[str, bool] = {}
+            for event_id, score in value.items():
+                if score is None or isinstance(score, bool):
+                    return None
+                try:
+                    labels[str(event_id)] = float(score) >= 25.0
+                except (TypeError, ValueError):
+                    return None
+            return labels
+    return None
+
+
+def _event_f1(records: list[dict[str, Any]]) -> tuple[float | None, str]:
+    actual: list[bool] = []
+    predicted: list[bool] = []
+    for record in records:
+        human = _event_labels(record.get("human"))
+        vlm = _event_labels(record.get("vlm"))
+        if not human or not vlm:
+            return None, "unavailable"
+        common = sorted(set(human) & set(vlm))
+        if not common or set(human) != set(vlm):
+            return None, "unavailable"
+        actual.extend(human[event_id] for event_id in common)
+        predicted.extend(vlm[event_id] for event_id in common)
+    if not actual:
+        return None, "unavailable"
+    true_positive = sum(left and right for left, right in zip(actual, predicted))
+    false_positive = sum((not left) and right for left, right in zip(actual, predicted))
+    false_negative = sum(left and (not right) for left, right in zip(actual, predicted))
+    denominator = 2 * true_positive + false_positive + false_negative
+    return (2 * true_positive / denominator if denominator else 0.0), "scored"
+
+
+def _confidence_reliability(records: list[dict[str, Any]]) -> dict[str, Any]:
+    buckets = ((0.0, 0.6), (0.6, 0.8), (0.8, 1.0))
+    values: dict[str, list[tuple[float, float]]] = {f"{low:.1f}-{high:.1f}": [] for low, high in buckets}
+    for record in records:
+        vlm = record.get("vlm") or {}
+        human = record.get("human") or {}
+        confidence = vlm.get("confidence")
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            continue
+        confidence = float(confidence)
+        if not 0.0 <= confidence <= 1.0:
+            continue
+        try:
+            task_error = abs(float(vlm["task_vlm"]) - float(human["task_vlm"]))
+            realism_error = abs(float(vlm["realism_final"]) - float(human["realism_final"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        for low, high in buckets:
+            if low <= confidence <= high and (confidence < high or high == 1.0):
+                values[f"{low:.1f}-{high:.1f}"].append((task_error, realism_error))
+                break
+    return {
+        "version": "confidence-reliability-v1",
+        "status": "scored" if any(values.values()) else "unavailable",
+        "buckets": {
+            name: {
+                "count": len(items),
+                "mean_absolute_task_error": round(sum(item[0] for item in items) / len(items), 4) if items else None,
+                "mean_absolute_realism_error": round(sum(item[1] for item in items) / len(items), 4) if items else None,
+            }
+            for name, items in values.items()
+        },
     }
 
 
@@ -127,17 +212,32 @@ def calibrate_records(
     vlm_task = _values(records, "vlm", "task_vlm")
     vlm_realism = _values(records, "vlm", "realism_final")
     semantic_status = all(dimensions[dimension]["frame_statistics"]["status"] == "uninformative" for dimension in SEMANTIC_DIMENSIONS)
+    event_f1, event_f1_status = _event_f1(records)
+    confidence_reliability = _confidence_reliability(records)
+    vlm_mae_values = [
+        dimensions[dimension]["vlm"]["mae"]
+        for dimension in DIMENSIONS
+        if dimensions[dimension]["vlm"]["mae"] is not None
+    ]
+    max_vlm_mae = max(vlm_mae_values) if vlm_mae_values else None
     overall = {
         "vlm_task_vlm_spearman": _spearman(human_task, vlm_task) >= 0.6,
         "vlm_task_vlm_spearman_value": round(_spearman(human_task, vlm_task), 4),
         "vlm_realism_spearman": _spearman(human_realism, vlm_realism) >= 0.6,
         "vlm_realism_spearman_value": round(_spearman(human_realism, vlm_realism), 4),
         "frame_statistics_semantics_uninformative": semantic_status,
+        "required_event_f1_status": event_f1_status,
+        "required_event_f1_value": None if event_f1 is None else round(event_f1, 4),
+        "required_event_f1": bool(event_f1 is not None and event_f1 >= REQUIRED_EVENT_F1_THRESHOLD),
+        "vlm_max_dimension_mae": None if max_vlm_mae is None else round(max_vlm_mae, 4),
+        "vlm_dimension_mae": bool(max_vlm_mae is not None and max_vlm_mae <= MAX_DIMENSION_MAE_THRESHOLD),
     }
     overall["phase3_admission"] = bool(
         overall["vlm_task_vlm_spearman"]
         and overall["vlm_realism_spearman"]
         and overall["frame_statistics_semantics_uninformative"]
+        and overall["required_event_f1"]
+        and overall["vlm_dimension_mae"]
     )
     return {
         "evaluator_version": "evaluator-v5-calibration",
@@ -147,6 +247,11 @@ def calibrate_records(
         "seed": seed,
         "bootstrap_iterations": bootstrap_iterations,
         "sources": list(sources),
+        "confidence_reliability": confidence_reliability,
+        "calibration_thresholds": {
+            "required_event_f1": REQUIRED_EVENT_F1_THRESHOLD,
+            "max_dimension_mae": MAX_DIMENSION_MAE_THRESHOLD,
+        },
     }
 
 

@@ -57,7 +57,7 @@ def test_real_evaluator_does_not_skip_oracle_when_director_plan_exists():
     assert any(item.failure_id == "oracle_event_order_mismatch" for item in findings)
 
 
-def test_independent_oracle_checks_declared_negative_constraints_from_runtime_evidence():
+def test_independent_oracle_ignores_generated_negative_constraint_claims_and_fails_closed():
     from evaluator.independent_oracle import evaluate_independent_oracle
     from videoact.scene_contract import SceneContractBuilder
     from videoact.trajectory import TrajectoryPlanner
@@ -83,7 +83,30 @@ def test_independent_oracle_checks_declared_negative_constraints_from_runtime_ev
         },
     )
 
-    assert any(item.failure_id == "oracle_negative_constraint_violated" for item in findings)
+    assert not any(item.failure_id == "oracle_negative_constraint_violated" for item in findings)
+    assert any(item.failure_id == "physics_evidence_missing" for item in findings)
+
+
+def test_independent_oracle_plan_only_mode_does_not_require_runtime_evidence():
+    from evaluator.independent_oracle import evaluate_independent_oracle
+    from videoact.scene_contract import SceneContractBuilder
+    from videoact.trajectory import TrajectoryPlanner
+
+    contract = SceneContractBuilder().build("A character walks to the table and picks up the red cup.")
+    plan = TrajectoryPlanner().plan(contract)
+    record = {
+        "case_id": "oracle-plan-only",
+        "oracle_expectations": {
+            "event_order": [event.id for event in contract.events],
+            "required_camera_constraints": ["support_before_grasp"],
+        },
+    }
+
+    # A plan-only caller has no runtime claim to verify.  The real-video path
+    # passes telemetry (or an explicit physics report) and remains fail-closed.
+    findings = evaluate_independent_oracle(record, contract, plan)
+
+    assert not any(item.failure_id == "physics_evidence_missing" for item in findings)
 
 
 def test_independent_oracle_detects_unplanned_actor_lane_crossing_from_trajectory():

@@ -21,6 +21,7 @@ import textwrap
 from typing import Any
 
 from .director_contracts import DirectorDecisionEvidence, DirectorEntity, DirectorRequest
+from .provider_provenance import make_call_record, now_utc
 
 
 _CAMERA_PATTERNS: tuple[tuple[str, str, str | None], ...] = (
@@ -1102,10 +1103,10 @@ def main():
     FRAMES_DIR.mkdir(parents=True, exist_ok=True)
     (FRAMES_DIR / "animation").mkdir(parents=True, exist_ok=True)
     scene.render.filepath = str(FRAMES_DIR / "animation" / "frame_")
-    bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "proxy.blend"))
+    bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "candidate.blend"))
     bpy.ops.render.render(animation=True)
     write_sample_frames(scene)
-    bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "proxy.blend"))
+    bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "candidate.blend"))
 
 
 main()
@@ -1160,6 +1161,12 @@ def _build_codex_local_codegen_response(
         "generation_provenance": {
             "provider": provider_name,
             "method": "case_specific_scene_profile_v2",
+            "provider_kind": "rule_template_baseline",
+            "model_id": None,
+            "model_version": "rule-template-v1",
+            "template_backed": True,
+            "llm_generated": False,
+            "call_id": None,
             "profile_hash": hashlib.sha256(
                 json.dumps(profile, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
             ).hexdigest(),
@@ -1173,19 +1180,102 @@ def build_codex_self_codegen_response(payload: dict[str, Any]) -> dict[str, Any]
     return _build_codex_local_codegen_response(payload, provider_name="codex-self")
 
 
-class CodexSelfProvider:
+class _RuleTemplateProviderMixin:
+    """Explicit non-LLM baseline provider used only for diagnostics."""
+
+    provider_kind = "rule_template_baseline"
+    model_id = None
+    model_version = "rule-template-v1"
+    template_backed = True
+    llm_generated = False
+
+    def __init__(self) -> None:
+        self.call_records: list[dict[str, Any]] = []
+
+    def _record(
+        self,
+        *,
+        stage: str,
+        prompt: str,
+        request: Any,
+        response: Any = None,
+        error: str | None = None,
+    ) -> None:
+        self.call_records.append(
+            make_call_record(
+                stage=stage,
+                provider_kind=self.provider_kind,
+                model_id=self.model_id,
+                model_version=self.model_version,
+                call_id=None,
+                prompt=prompt,
+                request=request,
+                response=response,
+                template_backed=self.template_backed,
+                llm_generated=self.llm_generated,
+                started_at=now_utc(),
+                ended_at=now_utc(),
+                error=error,
+            )
+        )
+
+    def last_call(self, stage: str | None = None) -> dict[str, Any] | None:
+        if stage is None:
+            return self.call_records[-1] if self.call_records else None
+        for record in reversed(self.call_records):
+            if record.get("stage") == stage:
+                return record
+        return None
+
+
+class CodexSelfProvider(_RuleTemplateProviderMixin):
     """Structured provider implemented by the current Codex desktop agent."""
 
     name = "codex-self"
 
+    def __init__(self) -> None:
+        super().__init__()
+
     def director(self, request: DirectorRequest) -> dict[str, Any]:
-        return build_codex_self_director_payload(request)
+        try:
+            result = build_codex_self_director_payload(request)
+        except Exception as exc:
+            self._record(
+                stage="director",
+                prompt=request.prompt,
+                request=request.model_dump(mode="json"),
+                error=f"{type(exc).__name__}:{exc}",
+            )
+            raise
+        self._record(
+            stage="director",
+            prompt=request.prompt,
+            request=request.model_dump(mode="json"),
+            response=result,
+        )
+        return result
 
     def codegen(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_codex_self_codegen_response(payload)
+        try:
+            result = build_codex_self_codegen_response(payload)
+        except Exception as exc:
+            self._record(
+                stage="blender_code",
+                prompt=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                request=payload,
+                error=f"{type(exc).__name__}:{exc}",
+            )
+            raise
+        self._record(
+            stage="blender_code",
+            prompt=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            request=payload,
+            response=result,
+        )
+        return result
 
 
-class CodexLocalProvider:
+class CodexLocalProvider(_RuleTemplateProviderMixin):
     """The current Codex environment as the in-process dynamic provider.
 
     This is the production local path.  It does not call an endpoint or spawn
@@ -1195,11 +1285,46 @@ class CodexLocalProvider:
 
     name = "codex-local"
 
+    def __init__(self) -> None:
+        super().__init__()
+
     def director(self, request: DirectorRequest) -> dict[str, Any]:
-        return build_codex_self_director_payload(request)
+        try:
+            result = build_codex_self_director_payload(request)
+        except Exception as exc:
+            self._record(
+                stage="director",
+                prompt=request.prompt,
+                request=request.model_dump(mode="json"),
+                error=f"{type(exc).__name__}:{exc}",
+            )
+            raise
+        self._record(
+            stage="director",
+            prompt=request.prompt,
+            request=request.model_dump(mode="json"),
+            response=result,
+        )
+        return result
 
     def codegen(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return _build_codex_local_codegen_response(payload, provider_name=self.name)
+        try:
+            result = _build_codex_local_codegen_response(payload, provider_name=self.name)
+        except Exception as exc:
+            self._record(
+                stage="blender_code",
+                prompt=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                request=payload,
+                error=f"{type(exc).__name__}:{exc}",
+            )
+            raise
+        self._record(
+            stage="blender_code",
+            prompt=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            request=payload,
+            response=result,
+        )
+        return result
 
 
 def build_codex_self_agents():
@@ -1211,10 +1336,10 @@ def build_codex_self_agents():
     provider = CodexSelfProvider()
     director = DirectorAgent.from_provider(
         provider.director,
-        provider_name="codex-self",
-        policy="director-v3-codex-self",
+        provider_name="rule_template_baseline",
+        policy="director-v4-rule-template-baseline",
     )
-    code_agent = BlenderCodeAgent(provider=provider.codegen, model="codex-self")
+    code_agent = BlenderCodeAgent(provider=provider.codegen, model="rule_template_baseline")
     return director, code_agent
 
 
@@ -1227,10 +1352,10 @@ def build_codex_local_agents():
     provider = CodexLocalProvider()
     director = DirectorAgent.from_provider(
         provider.director,
-        provider_name=provider.name,
-        policy="director-v3-codex-local",
+        provider_name="rule_template_baseline",
+        policy="director-v4-rule-template-baseline",
     )
-    code_agent = BlenderCodeAgent(provider=provider.codegen, model=provider.name)
+    code_agent = BlenderCodeAgent(provider=provider.codegen, model="rule_template_baseline")
     return director, code_agent
 
 

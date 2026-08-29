@@ -18,7 +18,7 @@ from PIL import Image
 
 
 REAL_VIDEO_METRICS_VERSION = "real-video-metrics-v1-mp4-runtime-evidence"
-LOCAL_REVIEW_SOURCE = "codex_local_visual_review"
+LOCAL_REVIEW_SOURCE = "deterministic_video_proxy_metrics"
 _TARGET_SIZE = (64, 64)
 _CHANNEL_NAMES = ("visual_score", "physical_score", "trajectory_score", "camera_score")
 _HUMAN_WORDS = {
@@ -615,7 +615,7 @@ def evaluate_real_video(
         "status": "scored",
         "source": "actual_proxy_mp4_and_runtime_observations",
         "review_source": LOCAL_REVIEW_SOURCE,
-        "review_method": "codex-local-frame-decode-runtime-fusion-v1",
+        "review_method": "decoded-mp4-runtime-measurements-v2",
         "confidence": 0.78,
         "prompt": prompt,
         "decoded_video": decoded,
@@ -638,6 +638,7 @@ def evaluate_real_video(
             "plan_is_not_a_visual_score": True,
             "mp4_must_decode": True,
             "runtime_observations_must_exist": True,
+            "deterministic_metrics_are_not_vlm": True,
             "local_score_cap": 95.0,
             "semantic_uncertainty_cap": 90.0,
         },

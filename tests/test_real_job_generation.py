@@ -47,6 +47,8 @@ def test_real_job_contains_render_telemetry_and_proxy_artifact_steps(tmp_path):
     assert "BLENDER_EEVEE_NEXT" in script
     assert "animation" in script
     assert "telemetry.json" in script
+    assert "candidate.blend" in script
+    assert "save_candidate_and_proxy" in script
     assert "bpy.ops.wm.save_as_mainfile" in script
     assert "bpy.ops.render.render(animation=True)" in script
     assert "ProxyWhiteMaterial" in script

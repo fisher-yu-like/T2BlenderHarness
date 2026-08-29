@@ -5,7 +5,9 @@
       "cost_estimate": "low",
       "docstring": "Move the camera linearly between two locations while tracking a target.",
       "example_usage": "dolly_camera((0, -8, 3), (0, -4, 2), (0, 0, 1), (1, 24))",
+      "module": "blender.lib.camera",
       "name": "dolly_camera",
+      "return_contract": "camera_keyframes",
       "signature": "dolly_camera(start: 'Vec3', end: 'Vec3', look_at: 'Vec3', frames: 'tuple[int, int]') -> 'list[CameraKeyframe]'",
       "tags": [
         "dolly",
@@ -18,7 +20,9 @@
       "cost_estimate": "low",
       "docstring": "Follow a target trajectory with a constant camera offset.",
       "example_usage": "follow_camera([(1, (0, 0, 1))], (0, -5, 2))",
+      "module": "blender.lib.camera",
       "name": "follow_camera",
+      "return_contract": "camera_keyframes",
       "signature": "follow_camera(target_trajectory: 'list[tuple[int, Vec3]]', offset: 'Vec3', *, use_track_to: 'bool' = True) -> 'list[CameraKeyframe]'",
       "tags": [
         "follow",
@@ -31,7 +35,9 @@
       "cost_estimate": "low",
       "docstring": "Generate a circular arc with at least eight keyframes and a fixed target.",
       "example_usage": "orbit_camera((0, 0, 1), 5, 0, 180, 2, (1, 24))",
+      "module": "blender.lib.camera",
       "name": "orbit_camera",
+      "return_contract": "camera_keyframes",
       "signature": "orbit_camera(center: 'Vec3', radius: 'float', start_angle_deg: 'float', end_angle_deg: 'float', height: 'float', frames: 'tuple[int, int]', *, num_keyframes: 'int' = 8) -> 'list[CameraKeyframe]'",
       "tags": [
         "orbit",
@@ -45,7 +51,9 @@
       "cost_estimate": "low",
       "docstring": "Start behind an occluder and move toward the target-facing side.",
       "example_usage": "reveal_from_occluder(bounds, (3, 0, 1), (1, 24))",
+      "module": "blender.lib.camera",
       "name": "reveal_from_occluder",
+      "return_contract": "camera_keyframes",
       "signature": "reveal_from_occluder(occluder_bounds: 'tuple[Vec3, Vec3]', target: 'Vec3', frames: 'tuple[int, int]', *, approach_direction: 'Vec3' = (1.0, 0.0, 0.0)) -> 'list[CameraKeyframe]'",
       "tags": [
         "reveal",
@@ -60,7 +68,9 @@
       "cost_estimate": "low",
       "docstring": "Attach ``obj`` to ``target.subtarget`` with animated influence.",
       "example_usage": "child_of_constraint('cup', 'rig', 'hand.R', [(1, 0), (10, 1)])",
+      "module": "blender.lib.constraints",
       "name": "child_of_constraint",
+      "return_contract": "constraint_spec",
       "signature": "child_of_constraint(obj: 'str', target: 'str', subtarget: 'str', influence_keyframes: 'list[tuple[int, float]] | tuple[tuple[int, float], ...]') -> 'ConstraintSpec'",
       "tags": [
         "attachment",
@@ -73,7 +83,9 @@
       "cost_estimate": "low",
       "docstring": "Attach ``obj`` to ``target.subtarget`` with animated influence.",
       "example_usage": "child_of_constraint('cup', 'rig', 'hand.R', [(1, 0), (10, 1)])",
+      "module": "blender.lib.constraints",
       "name": "child_of_constraint",
+      "return_contract": "constraint_spec",
       "signature": "child_of_constraint(obj: 'str', target: 'str', subtarget: 'str', influence_keyframes: 'list[tuple[int, float]] | tuple[tuple[int, float], ...]') -> 'ConstraintSpec'",
       "tags": [
         "attachment",
@@ -86,7 +98,9 @@
       "cost_estimate": "low",
       "docstring": "Orient ``obj`` toward ``target`` using Track To-compatible axes.",
       "example_usage": "track_to_constraint('camera', 'target')",
+      "module": "blender.lib.constraints",
       "name": "track_to_constraint",
+      "return_contract": "constraint_spec",
       "signature": "track_to_constraint(obj: 'str', target: 'str', track_axis: 'str' = '-Z', up_axis: 'str' = 'Y') -> 'ConstraintSpec'",
       "tags": [
         "camera",
@@ -101,7 +115,9 @@
       "cost_estimate": "low",
       "docstring": "Axis-aligned box centered at ``center``; every size component must be > 0.",
       "example_usage": "box((0, 0, 0), (1, 1, 1))",
+      "module": "blender.lib.geometry",
       "name": "box",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "box(center: 'Vec3', size: 'Vec3') -> 'Mesh'",
       "tags": [
         "primitive",
@@ -114,7 +130,9 @@
       "cost_estimate": "medium",
       "docstring": "Capsule-like tube between two points with spherical end rings.",
       "example_usage": "capsule((0, 0, 0), (0, 0, 2), 0.2)",
+      "module": "blender.lib.geometry",
       "name": "capsule",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "capsule(start: 'Vec3', end: 'Vec3', radius: 'float', rings: 'int' = 8, segments: 'int' = 12) -> 'Mesh'",
       "tags": [
         "organic",
@@ -127,7 +145,9 @@
       "cost_estimate": "low",
       "docstring": "Open-sided conical frustum around the Z axis.",
       "example_usage": "cone((0, 0, 0), 0.5, 0.1, 1.0)",
+      "module": "blender.lib.geometry",
       "name": "cone",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "cone(center: 'Vec3', radius1: 'float', radius2: 'float', depth: 'float', segments: 'int' = 16) -> 'Mesh'",
       "tags": [
         "rigid",
@@ -140,7 +160,9 @@
       "cost_estimate": "low",
       "docstring": "Open-sided cylindrical surface around the Z axis.",
       "example_usage": "cylinder((0, 0, 0), 0.5, 1.0)",
+      "module": "blender.lib.geometry",
       "name": "cylinder",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "cylinder(center: 'Vec3', radius: 'float', depth: 'float', segments: 'int' = 16) -> 'Mesh'",
       "tags": [
         "rigid",
@@ -153,7 +175,9 @@
       "cost_estimate": "medium",
       "docstring": "UV ellipsoid with positive radii and at least three angular segments.",
       "example_usage": "ellipsoid((0, 0, 1), (1, 0.5, 1.2))",
+      "module": "blender.lib.geometry",
       "name": "ellipsoid",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "ellipsoid(center: 'Vec3', radii: 'Vec3', segments: 'int' = 16, rings: 'int' = 8) -> 'Mesh'",
       "tags": [
         "organic",
@@ -166,7 +190,9 @@
       "cost_estimate": "low",
       "docstring": "Extrude a simple XY polygon symmetrically along Z.",
       "example_usage": "extruded_polygon([(0, 0), (1, 0), (1, 1)], 0.2)",
+      "module": "blender.lib.geometry",
       "name": "extruded_polygon",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "extruded_polygon(polygon: 'list[tuple[float, float]]', depth: 'float') -> 'Mesh'",
       "tags": [
         "architectural",
@@ -179,7 +205,9 @@
       "cost_estimate": "medium",
       "docstring": "Box proxy with a validated bevel radius; compiler may apply a bevel modifier.",
       "example_usage": "rounded_box((0, 0, 0), (1, 2, 1), 0.1)",
+      "module": "blender.lib.geometry",
       "name": "rounded_box",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "rounded_box(center: 'Vec3', size: 'Vec3', radius: 'float' = 0.08) -> 'Mesh'",
       "tags": [
         "rigid",
@@ -192,7 +220,9 @@
       "cost_estimate": "medium",
       "docstring": "Torus centered on the Z axis with two validated angular resolutions.",
       "example_usage": "torus((0, 0, 0), 1.0, 0.2)",
+      "module": "blender.lib.geometry",
       "name": "torus",
+      "return_contract": "mesh_data_vertices_faces",
       "signature": "torus(center: 'Vec3', major_radius: 'float', minor_radius: 'float', segments: 'int' = 24, rings: 'int' = 12) -> 'Mesh'",
       "tags": [
         "organic",
@@ -207,7 +237,9 @@
       "cost_estimate": "medium",
       "docstring": "Move points that enter an obstacle to its positive-Y safe side.",
       "example_usage": "avoid_penetration('actor', ['wall'], trajectory, obstacle_bounds=bounds)",
+      "module": "blender.lib.layout",
       "name": "avoid_penetration",
+      "return_contract": "trajectory",
       "signature": "avoid_penetration(moving_obj: 'str', static_obstacles: 'list[str]', trajectory: 'list[tuple[int, Vec3]]', safety_margin: 'float' = 0.2, *, obstacle_bounds: 'Mapping[str, tuple[Vec3, Vec3]] | None' = None) -> 'list[tuple[int, Vec3]]'",
       "tags": [
         "collision",
@@ -220,7 +252,9 @@
       "cost_estimate": "low",
       "docstring": "Generate synchronized giver/receiver Child Of influence curves.",
       "example_usage": "handoff_constraint_sequence('cup', 'giver.hand.R', 'receiver.hand.L', 20)",
+      "module": "blender.lib.layout",
       "name": "handoff_constraint_sequence",
+      "return_contract": "constraint_specs",
       "signature": "handoff_constraint_sequence(prop_id: 'str', giver_bone: 'str', receiver_bone: 'str', handoff_frame: 'int', *, transition_frames: 'int' = 3) -> 'list[ConstraintSpec]'",
       "tags": [
         "handoff",
@@ -233,7 +267,9 @@
       "cost_estimate": "low",
       "docstring": "Adjust only Y so same-frame paths have at least ``min_distance`` separation.",
       "example_usage": "lane_separated_paths(paths, 1.5)",
+      "module": "blender.lib.layout",
       "name": "lane_separated_paths",
+      "return_contract": "trajectories_by_entity",
       "signature": "lane_separated_paths(trajectories: 'Mapping[str, list[tuple[int, Vec3]]]', min_distance: 'float' = 1.5) -> 'dict[str, list[tuple[int, Vec3]]]'",
       "tags": [
         "lanes",
@@ -246,7 +282,9 @@
       "cost_estimate": "low",
       "docstring": "Return a translation that places the object's lower bound on a surface.",
       "example_usage": "place_on_surface(((-1, -1, -0.5), (1, 1, 0.5)), 0)",
+      "module": "blender.lib.layout",
       "name": "place_on_surface",
+      "return_contract": "translation_vector",
       "signature": "place_on_surface(obj_bounds: 'tuple[Vec3, Vec3]', surface_z: 'float', margin: 'float' = 0.0) -> 'Vec3'",
       "tags": [
         "surface",
@@ -261,7 +299,9 @@
       "cost_estimate": "low",
       "docstring": "Return an IK constraint specification for a hand or foot chain.",
       "example_usage": "add_ik_constraint('hand.R', 'Alice_hand_target')",
+      "module": "blender.lib.rigging",
       "name": "add_ik_constraint",
+      "return_contract": "constraint_spec",
       "signature": "add_ik_constraint(bone: 'str', target: 'str', chain_length: 'int' = 2) -> 'ConstraintSpec'",
       "tags": [
         "ik",
@@ -274,7 +314,9 @@
       "cost_estimate": "medium",
       "docstring": "Assign each vertex to its nearest bone with a normalized weight of 1.",
       "example_usage": "bind_mesh_to_armature(vertices, rig)",
+      "module": "blender.lib.rigging",
       "name": "bind_mesh_to_armature",
+      "return_contract": "vertex_weight_map",
       "signature": "bind_mesh_to_armature(mesh_verts: 'list[tuple[float, float, float]]', armature: 'ArmatureSpec') -> 'dict[str, list[tuple[int, float]]]'",
       "tags": [
         "skinning",
@@ -287,7 +329,9 @@
       "cost_estimate": "medium",
       "docstring": "Return a minimal humanoid rig sufficient for walking, reach, and handoff.",
       "example_usage": "minimal_humanoid_armature('Alice', (0, 0, 0))",
+      "module": "blender.lib.rigging",
       "name": "minimal_humanoid_armature",
+      "return_contract": "armature_spec",
       "signature": "minimal_humanoid_armature(name: 'str', location: 'tuple[float, float, float]') -> 'ArmatureSpec'",
       "tags": [
         "character",
@@ -302,7 +346,9 @@
       "cost_estimate": "low",
       "docstring": "Build the immutable traceability payload expected by a generated job.",
       "example_usage": "build_runtime_contract('a' * 64, ['actor_a'], ['carry_01'], ['carry_01'])",
+      "module": "blender.lib.scaffolding",
       "name": "build_runtime_contract",
+      "return_contract": "runtime_contract",
       "signature": "build_runtime_contract(director_plan_hash: 'str', required_entities: 'list[str]', required_events: 'list[str]', required_camera_events: 'list[str]') -> 'dict[str, Any]'",
       "tags": [
         "runtime",
@@ -316,7 +362,9 @@
       "cost_estimate": "low",
       "docstring": "Return deterministic failures for an incomplete runtime contract.",
       "example_usage": "validate_runtime_contract(runtime_contract)",
+      "module": "blender.lib.scaffolding",
       "name": "validate_runtime_contract",
+      "return_contract": "validation_failures",
       "signature": "validate_runtime_contract(contract: 'Mapping[str, Any]') -> 'list[str]'",
       "tags": [
         "runtime",

@@ -109,3 +109,94 @@ def test_codex_local_visual_review_preserves_local_review_provenance(tmp_path, m
     assert result["status"] == "scored"
     assert result["review_source"] == "codex_local_visual_review"
     assert result["realism_score_kind"] == "independent_review_fused"
+
+
+def test_formal_visual_result_includes_three_layer_status_from_real_artifacts(tmp_path, monkeypatch):
+    from scripts.evaluate_real_videos import evaluate_vlm_run
+
+    root = _run(tmp_path)
+    monkeypatch.setattr(
+        "scripts.evaluate_real_videos.probe_mp4",
+        lambda *_args, **_kwargs: {"playable": True, "frame_count": 3, "fps": 24.0, "duration_s": 0.125},
+    )
+    (root / "artifact_report.json").write_text(json.dumps({"artifact_status": "complete"}), encoding="utf-8")
+    (root / "telemetry.json").write_text(
+        json.dumps({"observations": [{"frame": 1}, {"frame": 2}, {"frame": 3}]}), encoding="utf-8"
+    )
+
+    class Provider:
+        model_alias = "gpt-5.6-luna"
+
+        def evaluate(self, **_kwargs):
+            return _response_with_event_score(), {"id": "review-event-gate"}
+
+    result = evaluate_vlm_run(
+        root,
+        prompt="Alice hands the red cup to Bob.",
+        scene_contract={
+            "events": [{"id": "handoff_01", "start": 0, "end": 1}],
+            "must_show": ["handoff_01"],
+            "fps": 24,
+            "entities": [
+                {"id": "actor_a", "kind": "character"},
+                {"id": "actor_b", "kind": "character"},
+                {"id": "red_cup", "kind": "prop"},
+            ],
+        },
+        provider=Provider(),
+        scoring_policy="scoring-v7-independent-channels",
+    )
+
+    assert result["status"] == "scored"
+    assert result["evaluation_result"]["execution_status"] == "valid"
+    assert result["evaluation_result"]["semantic_status"] == "failed_required_event"
+    assert result["evaluation_result"]["task_score"] == 49
+
+
+def _response_with_event_score():
+    from evaluator.schemas import VLMJudgeResponse
+
+    evidence = {
+        name: {
+            "confidence": 0.9,
+            "evidence_completeness": 1.0,
+            "evidence_refs": ["frame:1", "frame:2"],
+        }
+        for name in (
+            "prompt_compliance",
+            "physical_plausibility",
+            "camera_coverage",
+            "camera_innovation",
+            "character_trajectory",
+            "object_trajectory",
+            "event_timing",
+            "temporal_smoothness",
+            "visual_clarity",
+            "appearance_detail",
+            "physical_realism",
+            "spatial_consistency",
+            "motion_naturalness",
+            "visual_presentation",
+        )
+    }
+    return VLMJudgeResponse(
+        prompt_compliance=80,
+        physical_plausibility=80,
+        camera_coverage=80,
+        camera_innovation=80,
+        character_trajectory=80,
+        object_trajectory=80,
+        event_timing=80,
+        temporal_smoothness=80,
+        visual_clarity=80,
+        appearance_detail=80,
+        physical_realism=80,
+        spatial_consistency=80,
+        motion_naturalness=80,
+        visual_presentation=80,
+        event_scores={"handoff_01": 10},
+        dimension_evidence=evidence,
+        visible_evidence=["frame 1"],
+        weaknesses=["handoff is not visible"],
+        confidence=0.9,
+    )

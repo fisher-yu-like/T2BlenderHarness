@@ -1,8 +1,10 @@
 """Blender job runtime contract helpers.
 
 These helpers are Blender-free.  Generated jobs use the contract values to
-write telemetry and artifact manifests, while the host validates the actual
-files with ``RealArtifactGate``.
+save a candidate scene, while the fixed host-side observer validates the
+actual Blender state and owns telemetry/render collection.  Any telemetry
+written by generated code is explicitly untrusted and is not part of this
+generated-source contract.
 """
 
 from __future__ import annotations
@@ -14,16 +16,13 @@ from . import register_primitive
 
 
 RUNTIME_CONTRACT_VERSION = "runtime-contract-v1"
-REQUIRED_REAL_ARTIFACTS = (
+REQUIRED_GENERATED_ARTIFACTS = (
     "run_manifest.json",
     "scene_contract.json",
     "trajectory.json",
     "camera_plan.json",
     "blender_job.py",
-    "proxy.blend",
-    "proxy.mp4",
-    "telemetry.json",
-    "frames/index.json",
+    "candidate.blend",
 )
 
 
@@ -47,7 +46,7 @@ def build_runtime_contract(
         "required_entities": list(dict.fromkeys(str(item) for item in required_entities)),
         "required_events": list(dict.fromkeys(str(item) for item in required_events)),
         "required_camera_events": list(dict.fromkeys(str(item) for item in required_camera_events)),
-        "required_artifacts": list(REQUIRED_REAL_ARTIFACTS),
+        "required_artifacts": list(REQUIRED_GENERATED_ARTIFACTS),
     }
 
 
@@ -65,7 +64,7 @@ def validate_runtime_contract(contract: Mapping[str, Any]) -> list[str]:
     if not re.fullmatch(r"[0-9a-fA-F]{64}", plan_hash):
         failures.append("missing_director_plan_hash")
     artifacts = {str(item) for item in contract.get("required_artifacts", []) or []}
-    for artifact in REQUIRED_REAL_ARTIFACTS:
+    for artifact in REQUIRED_GENERATED_ARTIFACTS:
         if artifact not in artifacts:
             failures.append(f"missing_required_artifact:{artifact}")
     for field in ("required_entities", "required_events", "required_camera_events"):
@@ -76,7 +75,7 @@ def validate_runtime_contract(contract: Mapping[str, Any]) -> list[str]:
 
 
 __all__ = [
-    "REQUIRED_REAL_ARTIFACTS",
+    "REQUIRED_GENERATED_ARTIFACTS",
     "RUNTIME_CONTRACT_VERSION",
     "build_runtime_contract",
     "validate_runtime_contract",

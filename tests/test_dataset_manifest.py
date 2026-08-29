@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 
 
 def test_dataset_has_forty_unique_cases_and_disjoint_splits():
@@ -33,7 +34,7 @@ def test_dataset_records_have_required_contract_fields_and_unique_prompt_hashes(
 def test_dataset_validator_accepts_checked_in_files():
     result = subprocess.run(
         [
-            "C:\\Users\\sy\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            sys.executable,
             "scripts/validate_dataset.py",
         ],
         capture_output=True,

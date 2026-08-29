@@ -1059,6 +1059,15 @@ def update_manifest(manifest):
     (OUTPUT_DIR / "run_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def save_candidate_and_proxy():
+    """Save one canonical blend and mirror its exact bytes for the observer."""
+
+    candidate_path = OUTPUT_DIR / "candidate.blend"
+    proxy_path = OUTPUT_DIR / "proxy.blend"
+    bpy.ops.wm.save_as_mainfile(filepath=str(candidate_path))
+    proxy_path.write_bytes(candidate_path.read_bytes())
+
+
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 (FRAMES_DIR / "animation").mkdir(parents=True, exist_ok=True)
@@ -1107,7 +1116,7 @@ camera_payload = (DIRECTOR_CAMERA or PLAN["camera"]).get("shots", [])
 audit_camera_visibility(scene, camera, objects, camera_payload)
 audit_camera_continuity(camera_payload)
 write_telemetry(objects, camera, INITIAL_MANIFEST)
-bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "proxy.blend"))
+save_candidate_and_proxy()
 scene.render.image_settings.file_format = "PNG"
 scene.render.filepath = str(FRAMES_DIR / "animation" / "frame_")
 bpy.ops.render.render(animation=True)
@@ -1115,5 +1124,5 @@ write_sample_frames(scene)
 update_manifest(INITIAL_MANIFEST)
 scene.render.image_settings.file_format = "PNG"
 scene.render.filepath = str(FRAMES_DIR / "animation" / "frame_")
-bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "proxy.blend"))
+save_candidate_and_proxy()
 '''

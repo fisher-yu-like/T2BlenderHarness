@@ -32,8 +32,9 @@ deterministic evaluator 是 eligibility gate 和诊断通道，不是视觉质�
 support-before-grasp、attachment/handoff、速度连续性、camera active、
 telemetry identity/kind、相机可见性，以及真实运行产生的 runtime findings。
 
-Independent oracle 再将生成的 contract/plan/telemetry 与数据集预先写入的
-`oracle_expectations` 对照，检查：
+Independent oracle 将数据集/Director contract 的 obligations 与 trusted
+observer 的原始 observations 分开检查；physics oracle 绝不把生成 job 写入
+的 semantic flags 当作观测。它检查：
 
 - 事件顺序与必须存在的实体；
 - required camera event、camera type/constraint；
@@ -42,15 +43,19 @@ Independent oracle 再将生成的 contract/plan/telemetry 与数据集预先写
   `handoff_requires_same_window_detach_attach`；
 - `all_required_targets_visible_in_event_shot`；
 - `no_unplanned_actor_crossing`：不依赖 `character` 这个旧名字，而是按
-  actor 稳定 ID 检查轨迹 lane-order 是否在非 handoff/非显式 crossing 窗口内反转。
+  actor 稳定 ID 检查轨迹 lane-order 是否在非 handoff/非显式 crossing 窗口内反转；
+  OBB/contact/ownership/teleport 则来自
+  `physics-oracle-v2-obb-bvh-contact-ownership` 的 raw observations。
 
 缺少验证所需的 runtime evidence 时，oracle 产生
 `oracle_negative_evidence_missing`，而不是默认通过。
 
 ## 2. 视觉审查维度
 
-只有 artifact gate 通过后，才把原始 prompt、DirectorPlan 摘要、按事件中点
-对齐的 chronological frames 和统一 schema 交给一次视觉审查。支持的模型
+只有 artifact gate 通过后，才把原始 prompt、按事件中点对齐的 chronological
+frames/timecodes 和统一 schema 交给一次 blind 视觉审查。主 payload 不携带
+DirectorPlan、scene contract、deterministic findings、owner、arm 或 Harness
+version。支持的模型
 ID 是小写 `gpt-5.6-luna` 与 `gpt-5.6-terra`；也支持带证据的
 `human_review`/`codex_local_visual_review`。transport、schema 或置信度低于
 0.6 时记录 `unavailable`/`needs_human_review`，不转换为 0、100 或 plan-derived
@@ -61,27 +66,31 @@ score。
 四个语义维度用几何平均（GM）汇总，以防单个关键维度为 0 时被其它高分掩盖：
 
 ```text
-semantic = GM(prompt_compliance,
-               physical_plausibility,
-               object_trajectory,
-               event_timing)
+semantic_core = GM(applicable required dimensions:
+                    prompt_compliance,
+                    physical_plausibility,
+                    object_trajectory,
+                    event_timing,
+                    character_trajectory only when an actor is applicable)
 
 choreography = GM(camera_coverage,
                   camera_innovation,
                   character_trajectory,
                   temporal_smoothness)
 
-task_score = 0.45 * semantic
-           + 0.45 * choreography
-           + 0.10 * visual_clarity
+observability = GM(camera_coverage, visual_clarity)
+
+task_score = 0.75 * semantic_core
+           + 0.25 * observability
 
 task_final_score = task_score
 ```
 
-因此 camera choreography、character trajectory 和 object trajectory 是任务
-主分的核心；`visual_clarity` 只占 0.10，避免清晰但不执行 prompt 的视频得高分。
-`physical_plausibility` 与 `event_timing` 约束动作是否符合物理和顺序，不能
-只凭“画面里出现了对象”给高分。
+`semantic_core` 与 `choreography` 都保留为可审计通道；task 主分使用
+`semantic_core`（0.75）和 `observability`（0.25）。`camera_innovation` 只在
+prompt/plan 明确要求相机运动时适用，结果以 `camera_effectiveness` 记录；
+静态镜头不因没有运动被扣 task。`physical_plausibility` 与 `event_timing`
+约束动作是否符合物理和顺序，不能只凭“画面里出现了对象”给高分。
 
 ### Realism channel
 
@@ -138,7 +147,7 @@ spatial_consistency, motion_naturalness, visual_presentation
 bootstrap CI 和 inter-rater agreement；若 task/realism 相关性不足，优先
 修订维度定义、证据提示和标注协议，不在训练过程中反复调权重刷分。
 
-当前仓库尚未有完整双人标注 bundle，因此 Gate 0 仍为 pending。运行：
+当前仓库尚未有完整双人标注 bundle，因此 G1 仍为 pending。运行：
 
 ```powershell
 uv run python scripts/validate_golden_review_set.py --root dataset/golden-review-exact-v2
@@ -156,8 +165,9 @@ artifact-only 或 VLM unavailable 结果替代。
 - active dataset 已切换为 `dataset/vbench2-agent-training-index-v1`，验证为
   60 train / 60 dev / 20 frozen test、140 条 VBench-2.0 原始 prompt；每条
   `prompt` 与 raw `prompt_en` 完全一致，不含本地编写的事件/实体/oracle 标签。
-- `dataset/frozen-eval-v1` 已对 VBench-derived、trajectory-v4 和 active training
-  三个参考集完成 case/prompt/source/semantic 四类零泄漏；
+- `dataset/frozen-eval-v2` 已按 5 个 OOD dimension 选择 60 个 case，并对
+  VBench-derived、trajectory-v4、active training 和 frozen-v1 完成
+  case/prompt/source/semantic 四类零泄漏；
 - 旧 template baseline 的真实 MP4/artifact smoke 只作为执行层证据，不能作为
   agent 视觉或训练准入证据；
 - `out/training_readiness_report.json` 的 `training_allowed` 当前为 `false`，原因是
@@ -165,3 +175,19 @@ artifact-only 或 VLM unavailable 结果替代。
 
 因此 evaluator 代码和自动化边界已收口，但“与人工判断一致的校准完成”仍是
 `pending_exact_prompt_rerender_and_human_golden_review`，不会用 baseline 或 unavailable review 代替。
+
+## 6. 2026-08-29 计划实现补充
+
+`source-fingerprint-v1` 已有 100 对带标签审计入口
+`scripts/audit_source_fingerprints.py`；`paired-statistics-v1` 的固定 seed、
+bootstrap iterations、alpha、train gain 和 dev non-inferiority margin 已写入
+`config/formal-evaluator-v1.json`。`experiment-fingerprint-v1` 将这些 evaluator
+协议值连同 provider、observer、Blender 和 artifact 哈希绑定，任何不兼容的
+before/after 不能进入 patch acceptance。
+
+正式发布不是把八个旧 readiness bool 拼在一起：
+`scripts/check_formal_release_gates.py` 必须收到封存的 G0、G1、G2 paired pilot
+和 G3 shadow report。G2 必须是精确 10 train + 10 dev 且所有 artifact、trusted
+observer、blind review 和 disagreement audit 完成；G3 必须是无 patch 的 60
+train + 60 dev，并证明 resume、memory、成本和 fingerprint 稳定。缺任一项，
+formal `training_allowed` 保持 false。

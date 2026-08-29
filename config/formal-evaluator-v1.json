@@ -1,0 +1,22 @@
+{
+  "config_version": "formal-evaluator-config-v1",
+  "generator_model_id": "zhipu_glm_openai_compatible:glm-5.3-flash|zhipu_glm_openai_compatible:glm-5.3-flash",
+  "director_model_id": "glm-5.3-flash",
+  "codegen_model_id": "glm-5.3-flash",
+  "director_provider_kind": "zhipu_glm_openai_compatible",
+  "codegen_provider_kind": "zhipu_glm_openai_compatible",
+  "primary_judge_model_id": "gpt-5.6-luna",
+  "audit_judge_model_id": "gpt-5.6-terra",
+  "primary_blind_payload_version": "primary-blind-v1",
+  "score_policy_version": "scoring-v7-pending-calibration",
+  "sampling_policy_version": "event-aligned-uniform-v1",
+  "paired_statistics_version": "paired-statistics-v1",
+  "bootstrap_seed": 20260829,
+  "bootstrap_iterations": 2000,
+  "alpha": 0.05,
+  "train_min_gain": 1.0,
+  "dev_noninferiority_margin": -1.0,
+  "secondary_noninferiority_margin": -1.0,
+  "confidence_threshold": 0.6,
+  "evidence_completeness_threshold": 1.0
+}

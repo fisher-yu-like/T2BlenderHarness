@@ -121,3 +121,31 @@ def test_frozen_builder_selects_raw_source_outside_reference_and_training_sets(t
     assert len({row["prompt_hash"] for row in rows}) == len(rows)
     assert all(row["source_index"] not in {0, 1} for row in rows)
     assert report["excluded_reference_count"] == 1
+
+
+def test_active_frozen_v2_has_at_least_sixty_cases_and_declared_ood_slice() -> None:
+    from scripts.validate_frozen_eval_set import validate_frozen_eval_set
+
+    root = Path(__file__).resolve().parents[1] / "dataset" / "frozen-eval-v2"
+    report = validate_frozen_eval_set(
+        root,
+        reference_roots=[
+            Path(__file__).resolve().parents[1] / "dataset" / "vbench2-agent-training-index-v1",
+            Path(__file__).resolve().parents[1] / "dataset" / "vbench-derived-100-v1",
+            Path(__file__).resolve().parents[1] / "dataset" / "trajectory-v4-multi",
+            Path(__file__).resolve().parents[1] / "dataset" / "frozen-eval-v1",
+        ],
+    )
+
+    assert report["status"] == "pass"
+    assert report["case_count"] >= 60
+    metadata = __import__("json").loads((root / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["evaluation_slices"]["ood_unseen_dimensions"]["case_count"] == report["case_count"]
+    assert report["coverage_matrix"]["ood_unseen_dimensions"]["case_count"] == report["case_count"]
+    assert report["coverage_matrix"]["ood_unseen_dimensions"]["dimension_counts"] == {
+        "Human_Identity": 12,
+        "Instance_Preservation": 12,
+        "Material": 12,
+        "Multi-View_Consistency": 12,
+        "Thermotics": 12,
+    }

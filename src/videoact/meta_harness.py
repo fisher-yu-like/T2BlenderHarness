@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .evolution import PatchBrief, aggregate_failures, build_patch_brief
 from .outer_loop import evaluate_candidate, write_optimization_record
+from .cross_owner import validate_cross_owner_proposal
 
 
 class PatchProposal(BaseModel):
@@ -21,6 +22,10 @@ class PatchProposal(BaseModel):
     desired_behavior: str
     rerun_command: str
     patch_scope: str = "one-harness-owner"
+    owners: list[str] = Field(default_factory=list)
+    cross_owner_exception: bool = False
+    dependency_manifest: dict[str, Any] | None = None
+    ablation_report: dict[str, Any] | None = None
     predicted_fixes: list[str] = Field(default_factory=list)
     predicted_regressions: list[str] = Field(default_factory=list)
     prediction_rationale: str = ""
@@ -80,6 +85,7 @@ class MetaHarnessOptimizer:
         dev: dict[str, Any],
         patch_diff: str,
     ) -> dict[str, Any]:
+        cross_owner = validate_cross_owner_proposal(proposal.model_dump(mode="json"))
         decision = evaluate_candidate(before, after, train, dev, owner=proposal.owner)
         record = {
             "owner": proposal.owner,
@@ -93,6 +99,7 @@ class MetaHarnessOptimizer:
             "train_before": before,
             "train_after": after,
             "dev_gate": dev,
+            "cross_owner_audit": cross_owner,
         }
         write_optimization_record(self.output_dir / "optimization_record.jsonl", record)
         return record

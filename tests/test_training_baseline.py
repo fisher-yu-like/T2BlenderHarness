@@ -7,9 +7,7 @@ from pathlib import Path
 import pytest
 
 
-RETAINED_RUN_ROOT = Path(
-    r"C:\Users\sy\Desktop\T2BlenderCode\out\training\single-five-rounds-v1"
-)
+RETAINED_RUN_ROOT = Path(__file__).resolve().parents[1] / "out" / "training" / "single-five-rounds-v1"
 RETAINED_REPORT = RETAINED_RUN_ROOT / "round-01" / "attempt_report.json"
 
 
@@ -18,11 +16,14 @@ def test_index_retained_single_entity_baseline_truthfully_records_unavailable_re
 ):
     from scripts.index_training_baseline import index_baseline
 
+    if not RETAINED_REPORT.is_file():
+        pytest.skip("retained historical baseline is an optional local artifact and is not part of a clean clone")
+
     output = tmp_path / "single-v1-round01-attempt03.json"
     original_report = RETAINED_REPORT.read_bytes()
     summary = index_baseline(RETAINED_RUN_ROOT, output)
 
-    assert summary["run_root"].endswith("out\\training\\single-five-rounds-v1")
+    assert Path(summary["run_root"]).as_posix().endswith("out/training/single-five-rounds-v1")
     assert summary["round"] == 1
     assert summary["attempt"] == 3
     assert summary["splits"]["train"]["case_count"] == 10
@@ -49,6 +50,9 @@ def test_indexer_fails_closed_for_missing_source_evidence(tmp_path: Path):
 def test_indexer_fails_closed_for_identity_or_count_mismatch(tmp_path: Path):
     from scripts.index_training_baseline import BaselineEvidenceError, index_baseline
 
+    if not RETAINED_REPORT.is_file():
+        pytest.skip("retained historical baseline is an optional local artifact and is not part of a clean clone")
+
     run_root = tmp_path / "single-five-rounds-v1"
     report_path = run_root / "round-01" / "attempt_report.json"
     report_path.parent.mkdir(parents=True)
@@ -68,6 +72,9 @@ def test_indexer_fails_closed_for_identity_or_count_mismatch(tmp_path: Path):
 
 def test_indexer_rejects_completed_visual_scores(tmp_path: Path):
     from scripts.index_training_baseline import BaselineEvidenceError, index_baseline
+
+    if not RETAINED_REPORT.is_file():
+        pytest.skip("retained historical baseline is an optional local artifact and is not part of a clean clone")
 
     run_root = tmp_path / "single-five-rounds-v1"
     report_path = run_root / "round-01" / "attempt_report.json"

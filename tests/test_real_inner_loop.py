@@ -139,3 +139,81 @@ def test_real_inner_loop_turns_prepare_and_render_exceptions_into_retryable_fail
     assert calls == ["prepare-1", "prepare-2", "render-2", "prepare-3", "render-3", "evaluate-3"]
     assert result["cases"]["case-c"]["attempts"][0]["status"] == "prepare_failed"
     assert result["cases"]["case-c"]["attempts"][1]["status"] == "render_failed"
+
+
+def test_valid_video_with_semantic_failure_is_terminal_and_not_regenerated(tmp_path):
+    from videoact.real_inner_loop import run_real_inner_loop
+
+    split_root = tmp_path / "real"
+    calls: list[str] = []
+
+    def prepare(case_ids, attempt):
+        calls.append(f"prepare-{attempt}")
+        case_dir = split_root / case_ids[0]
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "candidate.txt").write_text("candidate", encoding="utf-8")
+        return {"prepared_ids": case_ids, "failures": {}}
+
+    def render(case_ids, attempt):
+        calls.append(f"render-{attempt}")
+        return {"results": {case_id: {"status": "success"} for case_id in case_ids}}
+
+    def evaluate(case_id, attempt):
+        calls.append(f"evaluate-{attempt}")
+        return {
+            "status": "fail",
+            "execution_status": "valid",
+            "semantic_status": "failed_required_event",
+            "quality_status": "scored",
+            "reason": "required_event_evidence_below_threshold",
+        }
+
+    result = run_real_inner_loop(
+        ["case-semantic"],
+        split_root,
+        prepare=prepare,
+        render=render,
+        evaluate=evaluate,
+        max_attempts=3,
+    )
+
+    assert result["status"] == "completed"
+    assert result["cases"]["case-semantic"]["status"] == "semantic_failed"
+    assert result["cases"]["case-semantic"]["selected_attempt"] == 1
+    assert calls == ["prepare-1", "render-1", "evaluate-1"]
+
+
+def test_inner_retry_records_stage_parent_and_hash_lineage(tmp_path):
+    from videoact.real_inner_loop import run_real_inner_loop
+
+    split_root = tmp_path / "real"
+
+    def prepare(case_ids, attempt):
+        case_dir = split_root / case_ids[0]
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "plan.json").write_text(json.dumps({"attempt": attempt}), encoding="utf-8")
+        if attempt == 1:
+            return {"prepared_ids": [], "failures": {case_ids[0]: {"status": "coverage_failed", "reason": "plan-gap"}}}
+        return {"prepared_ids": case_ids, "failures": {}}
+
+    def render(case_ids, attempt):
+        return {"results": {case_id: {"status": "success"} for case_id in case_ids}}
+
+    def evaluate(case_id, attempt):
+        return {"status": "pass", "proxy_video": "proxy.mp4"}
+
+    result = run_real_inner_loop(
+        ["case-lineage"],
+        split_root,
+        prepare=prepare,
+        render=render,
+        evaluate=evaluate,
+        max_attempts=2,
+    )
+
+    failure = result["cases"]["case-lineage"]["attempts"][0]
+    assert failure["retry_stage"] == "director"
+    assert failure["parent_attempt_id"] == "case-lineage:attempt-00"
+    assert failure["input_hashes"]
+    assert failure["output_hashes"]
+    assert failure["output_hashes"]["archive"]

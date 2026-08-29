@@ -15,6 +15,11 @@ class FunctionSignature(ContractModel):
 
     name: str = Field(min_length=1)
     category: str = Field(min_length=1)
+    # These two fields are optional for backwards-compatible hand-authored
+    # test/context records, but production exports always populate them.  The
+    # codegen prompt must use them instead of guessing a module from category.
+    module: str = ""
+    return_contract: str = ""
     signature: str = Field(min_length=1)
     docstring: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
@@ -56,10 +61,23 @@ class CodegenRequest(ContractModel):
     def validate_response(self, response: "CodegenResponse") -> "CodegenResponse":
         """Validate that a response only calls primitives visible in this request."""
 
-        unknown = sorted(set(response.library_calls) - self.available_library_calls)
+        available = self.available_library_calls
+        canonical_calls: list[str] = []
+        unknown: list[str] = []
+        for call in response.library_calls:
+            name = str(call).rsplit(".", 1)[-1]
+            if call in available:
+                canonical_calls.append(call)
+            elif str(call).startswith("blender.lib.") and name in available:
+                # The provider may report the import-qualified function name;
+                # keep the manifest canonical while still requiring that the
+                # module path belongs to the verified library namespace.
+                canonical_calls.append(name)
+            else:
+                unknown.append(str(call))
         if unknown:
             raise ValueError(f"unknown library calls: {unknown}")
-        return response
+        return response.model_copy(update={"library_calls": list(dict.fromkeys(canonical_calls))})
 
 
 class CodegenResponse(ContractModel):

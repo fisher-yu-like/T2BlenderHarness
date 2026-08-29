@@ -481,6 +481,11 @@ test = [
     { name = "pytest" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "imageio", specifier = ">=2.34" },
@@ -491,6 +496,9 @@ requires-dist = [
     { name = "typing-extensions", specifier = ">=4.12" },
 ]
 provides-extras = ["test"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "typing-extensions"

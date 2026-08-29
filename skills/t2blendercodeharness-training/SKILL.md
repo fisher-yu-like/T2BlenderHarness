@@ -8,9 +8,11 @@ description: Use when running real Blender outer-loop Harness training with fixe
 ## Human visual-calibration handoff
 
 The review UI and calibration bundle are part of the training gate, but they
-are not a substitute for real agent/provider evidence. The current official
-training path uses the in-process `codex-local` provider; there is no external
-endpoint in the official path. Use
+are not a substitute for real agent/provider evidence. Formal runs must use
+the explicit `provider_mode=model` path. It records an external structured
+Director call and a separate local-Codex Blender-code call. `rule_template_baseline` (including
+the legacy `codex-local`/`CodexLocalProvider` diagnostic path) is comparison
+only and cannot satisfy formal readiness. Use
 `dataset/golden-review-exact-v2` as the active blind comparison/calibration bundle:
 30 cases, 90 real MP4 files, and 180 required score rows from two independent
 annotators. Launch the Chinese UI with:
@@ -52,27 +54,40 @@ Do not start the six-round run until all are recorded as passing:
    unique source identities; every prompt equals raw VBench-2.0 `prompt_en`;
    no locally authored prompt, event, entity, proxy, or oracle fields; and no
    overlap with the frozen/reference datasets.
-3. `scripts/validate_frozen_eval_set.py --root dataset/frozen-eval-v1` passes.
+3. `scripts/validate_frozen_eval_set.py --root dataset/frozen-eval-v2` passes,
+   including its independent OOD slices and four-layer leakage audit.
 4. A real `D:\blender\blender.exe` smoke produces a playable MP4, sampled PNGs,
    `proxy.blend`, telemetry, complete manifest, and inspectable camera/hand
    evidence.
-5. The visual-review source is an auditable human review payload or the
-   in-process local Codex visual reviewer. The report metadata may retain the
-   canonical lowercase labels `gpt-5.6-luna` and `gpt-5.6-terra`, but the
-   current run has no external endpoint. Unavailable review stays
-   `unavailable`; it is never a numeric zero or a plan-derived score. Human
-   golden calibration must be complete before accepting a patch from visual
-   quality evidence.
+5. The primary visual judge is an auditable blind call using lowercase
+   `gpt-5.6-luna`; the independent audit judge is `gpt-5.6-terra`. Their
+   snapshots must be distinct from the generator identity label and each
+   other, as declared in `config/formal-evaluator-v1.json`. The generation
+   identity is split there into the external Director model/provider and the
+   local Codex codegen model/provider. A missing endpoint, malformed schema,
+   or low-evidence response stays `unavailable`/`needs_human_review`; it is
+   never converted to zero or a plan-derived score. Human golden calibration
+   must be complete before accepting a patch from visual evidence.
 6. `scripts/check_training_readiness.py` must report
    `training_allowed=true`. It keeps full tests, capability, dataset,
    frozen-eval, agent Blender smoke, golden review, dynamic provider, and
    paired agent/template evidence as independent gates. The dynamic-provider
-   gate is satisfied by a provenance-bearing `codex-local` Director + code
-   pair, not by the historical external `codex exec` diagnostic. A
-   template-only smoke, numeric placeholder, or unavailable provider cannot
-   satisfy a gate.
+   gate is satisfied only by a provenance-bearing model Director + code pair
+   with per-case `provider_manifest.json`, distinct call IDs, request/response
+   hashes, and the formal judge configuration. A `rule_template_baseline`
+   smoke, numeric placeholder, or unavailable provider cannot satisfy a gate.
    The real-training modes of `scripts/train_real_harness.py` enforce this
-   report again before preparing or rendering a case.
+   report again before preparing or rendering a case. Formal modes additionally
+   require a sealed G0--G3 report from
+   `scripts/check_formal_release_gates.py`; a readiness boolean by itself is
+   not a release decision.
+
+The formal primary payload is `primary-blind-v1`: it contains only the exact
+prompt, chronological real-video frames/timecodes and the response schema. It
+does not contain the DirectorPlan, scene contract, deterministic findings,
+owner, arm or Harness version. A local Codex visual review is an explicit
+auditable diagnostic path with no external endpoint; it is never silently
+converted from deterministic metrics and cannot unlock formal training.
 
 ## Explicit pre-calibration diagnostic run
 
@@ -101,16 +116,20 @@ or claim that the formal six-round experiment passed. Human annotation starts
 after the Harness upgrade and uses the exact-prompt bundle separately.
 
 Before any case is rendered, `audit_dynamic_agent_index` must verify
-`generation_mode=agent`, a per-case codegen call ID, a real generated source,
-an embedded `CASE_SCENE_PROFILE` marked
-`codex-local-case-profile-v2`, and case-specific source hashes. A unique hash
-alone is insufficient: a generic scaffold stamped with a case id is rejected
-as `missing_case_specific_generation_profile`; the profile signature must also
-bind to the DirectorPlan hash prefix and the recorded code hash must match the
-source bytes. If all cases reuse one source,
-`all_cases_reuse_one_generated_source` is a hard diagnostic failure. The
-explicit `template_baseline` arm is never accepted by this audit and never
-enters training evidence.
+`generation_mode=agent`, `provider_mode=model`, per-case Director/codegen call
+IDs, complete provider hashes, a real generated source bound to the
+DirectorPlan, and case-specific source hashes. A unique hash alone is
+insufficient: a generic scaffold stamped with a case id is rejected. If all
+cases reuse one source, `all_cases_reuse_one_generated_source` is a hard
+diagnostic failure. The explicit `rule_template_baseline` arm is never
+accepted by this audit and never enters formal training evidence.
+
+For the formal generation boundary, the Director provider reads the standard
+environment variables `OPENAI_API_KEY` and `OPENAI_BASE_URL` and sends an
+OpenAI-compatible Chat Completions request to `{base_url}/chat/completions`
+(`OPENAI_BASE_URL` may contain `/v1`). The local Blender code stage invokes
+the configured `codex exec` binary through `CodexExecProvider`; it does not
+reuse the external Director response and does not call a template compiler.
 
 ## Fixed six-round protocol
 
@@ -157,13 +176,13 @@ when no new actionable failure exists.
 
 ```text
 exact prompt
-  -> dynamic DirectorAgent via codex-local (entities, evidence, event graph, trajectories, camera cues)
+  -> dynamic DirectorAgent via external structured provider (entities, evidence, event graph, trajectories, camera cues)
   -> DirectorPlan obligations/evidence/ordering gate
-  -> BlenderCodeAgent per-case source generation from blender.lib signatures
+  -> BlenderCodeAgent via local CodexExecProvider, per-case source generation from blender.lib signatures
   -> static source + case coverage gate
   -> frozen job source and hash chain
   -> D:\blender\blender.exe, isolated case directory
-  -> proxy.mp4 + proxy.blend + frames + telemetry
+  -> candidate.blend -> trusted observer -> proxy.mp4 + proxy.blend + frames + raw telemetry
   -> artifact/deterministic/independent-oracle checks
   -> decode proxy.mp4 + read Blender runtime_observations
   -> one shared local-Codex or explicitly configured VLM review on chronological frames
@@ -191,13 +210,14 @@ is a semantic Harness failure and must be fixed before human visual review.
 
 ### Real-video visual/physics/trajectory review is active
 
-The local path no longer stops at `frame_statistics`. After a real Blender
+The formal path no longer stops at `frame_statistics`. After a real Blender
 render, `evaluate_real_video` decodes the actual `proxy.mp4` (not just source
-PNGs) and requires `telemetry.runtime_observations` for every rendered frame.
-The Blender job records actual entity transforms, world-space bounds,
-screen-space bounds, camera transforms, actor pose points, and connected-rig
-evidence. The in-process Codex visual reviewer consumes those observations and
-the decoded MP4 frames through the shared VLM response schema:
+PNGs) and requires raw telemetry from the fixed trusted observer for every
+rendered frame. Generated telemetry is quarantined as untrusted. The observer
+records actual entity transforms, world-space bounds, screen-space bounds,
+camera transforms, actor pose points, and connected-rig evidence. The blind
+primary judge consumes only the exact prompt, chronological MP4 frames and
+timecodes, and the shared VLM response schema:
 
 ```text
 visual_score     = mean(visual_clarity, appearance_detail, visual_presentation)
@@ -220,13 +240,12 @@ overall_vlm = .70 * task_vlm + .30 * realism_vlm
 ```
 
 The deterministic score remains a gate/diagnostic channel and is not added to
-the task or realism result. The local evidence scorer caps observed scores at
-95, caps semantic compliance at 90, and returns `unavailable` when the MP4 or
-runtime observations are missing. A valid plan or complete file list therefore
-cannot create a visual/physics/trajectory score. `codex_local_visual_review`
-is the actual in-process review source here; it does not call an external key.
-External labels remain lowercase `gpt-5.6-luna` and `gpt-5.6-terra` only when
-an external provider is explicitly enabled.
+the task or realism result. The local evidence scorer is named
+`deterministic_video_proxy_metrics`; it cannot create a VLM response or formal
+task score. A valid plan or complete file list therefore cannot create a
+visual/physics/trajectory score. The historical `codex_local_visual_review`
+path is diagnostic compatibility only. Formal judge labels remain lowercase
+`gpt-5.6-luna` and `gpt-5.6-terra`.
 
 The deterministic result is a gate and diagnostic channel, not the main visual
 score. For an eligible review:
@@ -310,11 +329,15 @@ uv run --extra test python -m pytest -q -p no:cacheprovider --basetemp .pytest-t
 uv run python scripts/validate_benchmark_prompt_index.py `
   --root dataset/vbench2-agent-training-index-v1 `
   --source data/vbench-source/VBench2_full_info.json `
-  --reference-root dataset/frozen-eval-v1 `
+  --reference-root dataset/frozen-eval-v2 `
   --reference-root dataset/vbench-derived-100-v1 `
   --reference-root dataset/trajectory-v4-multi `
   --reference-root dataset/trajectory-v5-agent-codegen
-uv run python scripts/validate_frozen_eval_set.py --root dataset/frozen-eval-v1
+uv run python scripts/validate_frozen_eval_set.py --root dataset/frozen-eval-v2 `
+  --reference-root dataset/vbench2-agent-training-index-v1 `
+  --reference-root dataset/vbench-derived-100-v1 `
+  --reference-root dataset/trajectory-v4-multi `
+  --reference-root dataset/frozen-eval-v1
 uv run python scripts/check_training_readiness.py --project-root . `
   --dataset-root dataset/vbench2-agent-training-index-v1 `
   --frozen-reference-root dataset/vbench2-agent-training-index-v1 `
@@ -323,6 +346,13 @@ uv run python scripts/check_training_readiness.py --project-root . `
   --blender-smoke-root out/preflight/<agent-smoke> `
   --dynamic-provider-root out/preflight/<dynamic-provider> `
   --full-test-report out/two-plan-convergence/full-test.xml
+uv run python scripts/audit_source_fingerprints.py --builtin-fixture `
+  --out out/preflight/source-fingerprint-100-pairs.json
+uv run python scripts/check_formal_release_gates.py `
+  --g0 out/preflight/g0.json --g1 out/preflight/g1.json `
+  --pilot out/preflight/paired-pilot.json `
+  --shadow out/preflight/shadow-round.json `
+  --out out/formal_release_gate_report.json
 uv run python skills/t2blendercodeharness/scripts/capability_check.py --project-root .
 uv run python scripts/render_evaluate_groups.py `
   --run-root out/preflight/<prepared-train> `
@@ -332,7 +362,7 @@ uv run python scripts/render_evaluate_groups.py `
   --group-size 12 --workers 4 --timeout-s 900 --max-render-retries 2 `
   --output out/preflight/grouped-pipeline-report.json
 uv run python scripts/train_real_harness.py --mode protocol --dataset-root dataset/vbench2-agent-training-index-v1 --round-root out/training/agent-six-rounds-v1
-uv run python scripts/train_real_harness.py --mode six-rounds --dataset-root dataset/vbench2-agent-training-index-v1 --readiness-report out/training_readiness_report.json --round-root out/training/agent-six-rounds-v1 --blender-bin D:\blender\blender.exe --workers 4 --vlm-model gpt-5.6-luna --markdown-path docs/t2blendercodeharness-agent-training-memory-v1.md
+uv run python scripts/train_real_harness.py --mode six-rounds --dataset-root dataset/vbench2-agent-training-index-v1 --readiness-report out/training_readiness_report.json --formal-release-report out/formal_release_gate_report.json --round-root out/training/agent-six-rounds-v1 --blender-bin D:\blender\blender.exe --workers 4 --vlm-model gpt-5.6-luna --markdown-path docs/t2blendercodeharness-agent-training-memory-v1.md
 ```
 
 Before claiming training complete, rerun full tests, capability check, both
@@ -397,3 +427,32 @@ non-overlapping extension from unused raw VBench prompts and retrain with the
 same rules; if they are satisfactory, use unused raw VBench prompts only for
 an evaluation set. No self-authored replacement dataset is permitted in
 either branch.
+
+## Immutable preflight extensions from the improvement plan
+
+The current contract also records the following machine-checkable boundaries:
+
+- `source-fingerprint-v1` compares normalized AST, imports/calls,
+  control-flow, scene-graph and animation signatures. The 100-pair labeled
+  audit must pass before treating per-case source diversity as evidence.
+- `paired-statistics-v1` uses a fixed-seed bootstrap CI, a train minimum gain
+  of `+1.0`, a dev non-inferiority margin of `-1.0`, and non-regressing artifact,
+  execution, required-event and hard-failure safety metrics.
+- `physics-oracle-v2-obb-bvh-contact-ownership` reads only trusted raw observer
+  observations. Generated semantic flags cannot prove contact, ownership,
+  non-penetration, or continuity; missing raw evidence is unavailable.
+- `experiment-fingerprint-v1` binds prompt/dataset, both provider calls,
+  source/blend/observer/telemetry/MP4, evaluator policy/model/schema, Blender,
+  environment and sampling hashes. Incompatible fingerprints reject paired
+  acceptance.
+- `active-sampling-v2-replay` can select only train/dev records using uncertainty,
+  disagreement, repeated root cause, novel owner and severity. It never reads
+  frozen-test IDs, prompts or scores. The historical replay audit is run with
+  `scripts/audit_active_sampling.py`; its gate requires at least 30% render-cost
+  reduction and 95% full-vs-sampled decision agreement.
+
+The release sequence is G0 (identity/trusted boundary), G1 (frozen evaluator
+and golden calibration), G2 (10-train + 10-dev paired pilot), G3 (no-patch
+60-train + 60-dev shadow), and only then G4 (formal six rounds). A missing
+human calibration report, real model double-call smoke, pilot or shadow hash
+keeps formal training blocked.
