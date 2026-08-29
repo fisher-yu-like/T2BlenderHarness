@@ -53,6 +53,7 @@ def main() -> int:
         code_agent=code_agent,
         provider_mode="assistant",
         code_cache_dir=Path(args.run_root) / "code_cache",
+        max_inner_attempts=2,
     )
     print(json.dumps({"status": report.get("status"), "run_root": args.run_root}, indent=2))
     return 0

@@ -85,8 +85,9 @@ def test_provider_identity_and_preauth_exchange(tmp_path):
     _write_preauth(session_root, request, INTERPRETATION)
     result = provider(request)
 
-    assert result["llm_call_id"].startswith("assistant:director:")
-    assert result["generation_provenance"]["transport"] == "assistant_session_file_exchange"
+    # The Director interpretation contract is extra-forbidden: transport
+    # provenance lives in the recorded call record, not on the result.
+    assert "llm_call_id" not in result
     assert result["evidence"][0]["id"] == "ev_action_01"
     call = provider.last_call("director")
     assert call is not None

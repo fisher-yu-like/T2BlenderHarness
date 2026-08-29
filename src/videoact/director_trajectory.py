@@ -126,6 +126,21 @@ class MultiEntityTrajectoryComposer:
                             subtarget="hand.R",
                         )
                     )
+                    # A handoff releases the prop from the giver at the same
+                    # boundary; without this detach the attach/transfer/detach
+                    # lifecycle required by the interaction evaluator is
+                    # incomplete for every handoff-only prompt.
+                    giver_id = event.participant_ids[0]
+                    attachments.append(
+                        AttachmentEvent(
+                            frame=frame(event.start),
+                            subject_id=prop_id,
+                            object_id=giver_id,
+                            action="detach",
+                            constraint_type="child_of",
+                            subtarget="hand.R",
+                        )
+                    )
                 elif event.action == "return":
                     owner = event.participant_ids[-1] if len(event.participant_ids) > 1 else event.participant_ids[0]
                 elif event.action == "place":

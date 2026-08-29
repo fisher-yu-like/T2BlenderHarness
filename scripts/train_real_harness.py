@@ -1331,11 +1331,20 @@ def run_real_batch_with_inner_loop(
         render_reports.append(payload)
         return payload
 
+    dataset_fingerprint = None
+    try:
+        dataset_fingerprint = (
+            json.loads((Path(dataset_root) / "metadata.json").read_text(encoding="utf-8")).get("fingerprint")
+        )
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        dataset_fingerprint = None
+
     def evaluate_callback(case_id: str, attempt: int) -> dict[str, Any]:
         result = evaluate_real_run(
             root / case_id,
             record=records[case_id],
             blender_bin=blender_bin,
+            dataset_fingerprint=dataset_fingerprint,
         )
         result["proxy_video"] = str((root / case_id / "proxy.mp4").resolve())
         result["inner_attempt"] = attempt
