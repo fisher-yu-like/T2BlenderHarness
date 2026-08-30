@@ -21,8 +21,8 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from director_prompt import PromptInterpretation  # noqa: E402
-from director_contracts import DirectorRequest  # noqa: E402
+from videoact.director_prompt import PromptInterpretation  # noqa: E402
+from videoact.director_contracts import DirectorRequest  # noqa: E402
 
 UNC_STYLE = {
     "id": "unc_visual_style",

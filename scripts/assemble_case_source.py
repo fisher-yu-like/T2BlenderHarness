@@ -273,6 +273,17 @@ def main():
     reset_scene()
     scene = bpy.context.scene
     objects, skin_summaries = build_entities()
+    # Common-cause guard: the trusted observer keys entities by the
+    # entity_id custom property, so every planned entity must exist as an
+    # object carrying its tag.  Fail here, not at evaluation time.
+    for entity_id in REQUIRED_ENTITY_IDS:
+        if entity_id not in objects:
+            raise RuntimeError("authored scene did not build planned entity: " + entity_id)
+        entity_obj = objects[entity_id]
+        if not entity_obj.get("entity_id"):
+            entity_obj["entity_id"] = entity_id
+        if not entity_obj.get("entity_kind"):
+            entity_obj["entity_kind"] = "entity"
     camera = add_camera(objects)
     apply_animation(objects)
     bpy.ops.object.light_add(type="AREA", location=(2.5, -6.0, 7.0))

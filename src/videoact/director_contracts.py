@@ -143,7 +143,11 @@ class DirectorPlan(ContractModel):
 
     def content_hash(self) -> str:
         payload = self.model_dump(mode="json")
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        # ensure_ascii=False matches the codegen payload hash and the
+        # provenance canonical hash; with the default escaping, any
+        # non-ASCII prompt (curly quotes and similar) produced a different
+        # hash on the codegen boundary and failed the plan-binding audit.
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
     @model_validator(mode="after")
