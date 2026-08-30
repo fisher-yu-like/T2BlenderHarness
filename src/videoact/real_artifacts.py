@@ -286,8 +286,12 @@ class RealArtifactGate:
             if manifest is not None and manifest.director_plan_hash:
                 try:
                     director_payload = json.loads(director_plan_path.read_text(encoding="utf-8"))
+                    # Canonicalize exactly like DirectorPlan.content_hash()
+                    # (ensure_ascii=False); the default escaping diverged on
+                    # non-ASCII prompts and broke the hash chain.
                     encoded = json.dumps(
                         director_payload,
+                        ensure_ascii=False,
                         sort_keys=True,
                         separators=(",", ":"),
                     ).encode("utf-8")
