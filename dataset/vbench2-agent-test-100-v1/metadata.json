@@ -1,0 +1,39 @@
+{
+  "annotation_policy": "no authored event/entity/oracle labels; DirectorAgent creates the executable plan",
+  "cases": 100,
+  "dataset_id": "vbench2-agent-test-100-v1",
+  "dataset_kind": "benchmark_prompt_index",
+  "dimension_plan": [
+    "Camera_Motion",
+    "Human_Interaction",
+    "Motion_Order_Understanding",
+    "Complex_Plot",
+    "Dynamic_Spatial_Relationship",
+    "Mechanics",
+    "Dynamic_Attribute",
+    "Human_Anatomy",
+    "Motion_Rationality",
+    "Human_Clothes"
+  ],
+  "fingerprint": "cba1e10197518d98272e244b9d4d3b45fa9b7bd4dd4b2a9829fea90fe8da5e7a",
+  "generator_version": "benchmark-prompt-index-builder-v1",
+  "prompt_policy": "prompt equals source prompt_en exactly; no generated or augmented prompt text",
+  "purpose": "per-round generalization scoring for the glm-5.3-flash assistant-session training",
+  "schema_version": "benchmark-prompt-index-v1",
+  "source_dataset": "VBench-2.0",
+  "source_file": "VBench2_full_info.json",
+  "source_sha256": "115e54e02ffbeee118ffe598fb497e9a4e40232a4ac4e0a3fd4e33867590a272",
+  "split_policy": "single frozen test split; prompts disjoint from vbench2-agent-training-index-v1",
+  "test_families": [
+    "vbench2-test100-01",
+    "vbench2-test100-02",
+    "vbench2-test100-03",
+    "vbench2-test100-04",
+    "vbench2-test100-05",
+    "vbench2-test100-06",
+    "vbench2-test100-07",
+    "vbench2-test100-08",
+    "vbench2-test100-09",
+    "vbench2-test100-10"
+  ]
+}
