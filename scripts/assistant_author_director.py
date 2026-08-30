@@ -96,8 +96,8 @@ def main() -> int:
 
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     payload = request.get("payload") or {}
-    request_obj = payload.get("request") or {}
-    prompt = str(request_obj.get("prompt") or "")
+    # DirectorRequest payloads are flat (prompt/scene_id/duration/fps/...).
+    prompt = str(payload.get("prompt") or "")
     if not prompt:
         raise SystemExit("request payload carries no prompt")
     spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
@@ -106,12 +106,12 @@ def main() -> int:
     # Validate against the exact contract the DirectorAgent will apply.
     director_request = DirectorRequest(
         prompt=prompt,
-        scene_id=str(request_obj.get("scene_id") or request.get("scene_id") or "unknown"),
-        duration_s=float(request_obj.get("duration_s") or 10.0),
-        fps=int(request_obj.get("fps") or 12),
-        provider=str(request_obj.get("provider") or "assistant-session-glm-flash"),
-        policy=str(request_obj.get("policy") or "director-v5-glm-structured"),
-        obligations=request_obj.get("obligations") or {},
+        scene_id=str(payload.get("scene_id") or request.get("scene_id") or "unknown"),
+        duration_s=float(payload.get("duration_s") or 10.0),
+        fps=int(payload.get("fps") or 12),
+        provider=str(payload.get("provider") or "assistant-session-glm-flash"),
+        policy=str(payload.get("policy") or "director-v5-glm-structured"),
+        obligations=payload.get("obligations") or {},
     )
     PromptInterpretation.model_validate({"request": director_request.model_dump(mode="json"), **interpretation})
 
@@ -123,7 +123,7 @@ def main() -> int:
     )
     print(json.dumps({
         "responded": str(response_path),
-        "scene_id": request_obj.get("scene_id"),
+        "scene_id": payload.get("scene_id"),
         "prompt": prompt[:80],
     }, ensure_ascii=False))
     return 0
