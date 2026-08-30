@@ -35,7 +35,7 @@ while idle < IDLE_ROUNDS:
         req_path = f"out/assistant-session/requests/blender_code/assistant-blender_code-{token}.json"
         scene = item["scene_id"] or "unknown"
         result = subprocess.run(
-            [sys.executable, "scripts/author_camera_case_source.py", "--request", req_path, "--source-out", f"out/assistant-session/authoring/{scene}.py"],
+            [sys.executable, "scripts/author_general_scene_source.py", "--request", req_path, "--source-out", f"out/assistant-session/authoring/{scene}.py"],
             capture_output=True,
             text=True,
         )
