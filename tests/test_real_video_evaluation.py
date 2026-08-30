@@ -152,7 +152,18 @@ def test_vlm_still_runs_for_playable_video_when_deterministic_has_a_finding(tmp_
                 "terminal_status": "fail",
                 "hard_gate_failed": False,
                 "score": 70,
-                "findings": ["telemetry_missing_entity"],
+                "findings": [
+                    {
+                        "failure_id": "telemetry_missing_entity",
+                        "owner": "trusted_observer",
+                        "category": "runtime",
+                        "severity": "hard",
+                        "message": "telemetry is missing a planned entity",
+                        "root_cause_id": "telemetry_entity_missing",
+                        "evidence": ["entity"],
+                        "repair_route": "runtime_repair",
+                    }
+                ],
             }
         ),
         encoding="utf-8",
