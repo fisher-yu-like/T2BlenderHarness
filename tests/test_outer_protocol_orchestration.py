@@ -41,7 +41,11 @@ def test_bounded_outer_attempts_never_exceeds_five_and_records_each_patch():
             return {
                 "action": "patch",
                 "status": "patch_applied",
-                "proposal": {"owner": "camera_planner", "attempt": attempt_number},
+                "proposal": {
+                    "owner": "camera_planner",
+                    "attempt": attempt_number,
+                    "source_split": "train",
+                },
             }
         return {"action": "stop", "status": "max_attempts_exhausted", "reason": "five attempts reached"}
 

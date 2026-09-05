@@ -44,8 +44,7 @@ def test_two_local_model_adapters_build_multiframe_schema_payloads(tmp_path: Pat
         payload = adapter.build_payload(
             prompt="Priya hands the ceramic mug to Wei.",
             frame_paths=frames,
-            scene_contract={"entities": ["Priya", "Wei", "ceramic mug"]},
-            deterministic_findings=[{"failure_id": "none"}],
+            frame_metadata=[{"frame": index + 1, "timecode": f"00:00:0{index}.000"} for index in range(3)],
         )
         assert payload["model"] == model_name
         assert payload["messages"][0]["role"] == "system"
@@ -71,8 +70,7 @@ def test_provider_dispatch_is_fail_closed_on_transport_error(tmp_path: Path):
         model="gpt-5.6-luna",
         prompt="A person walks past a table.",
         frame_paths=[frame],
-        scene_contract={},
-        deterministic_findings=[],
+        frame_metadata=[{"frame": 1, "timecode": "00:00:00.000"}],
         transport=failing_transport,
     )
 

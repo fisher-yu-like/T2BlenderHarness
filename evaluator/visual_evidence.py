@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover - exercised only in minimal installs
 
 
 VISUAL_EVIDENCE_VERSION = "render-visual-evidence-v1"
+RENDER_FRAME_HEALTH_VERSION = "render-frame-health-v1"
 _TARGET_SIZE = (64, 64)
 FRAME_STATISTICS_MEASURABLE_DIMENSIONS = (
     "visual_clarity",
@@ -207,6 +208,65 @@ def score_sample_frames(frame_paths: list[str | Path]) -> dict[str, Any]:
             "occupancy_consistency_observation": round(occupancy * 100.0, 4),
         },
         "sampled_frames": [str(path.resolve()) for path in paths],
+    }
+
+
+def assess_render_frame_health(frame_paths: list[str | Path]) -> dict[str, Any]:
+    """Detect unreadable or spatially blank render samples before VLM review.
+
+    A uniform frame is not a semantic quality score. It is an artifact-level
+    failure signal: a camera pointed at an empty background gives a visual
+    judge no evidence to inspect, so the real inner loop should regenerate the
+    candidate instead of recording an ambiguous VLM review.
+    """
+
+    paths = [Path(path) for path in frame_paths]
+    if Image is None:
+        return {
+            "health_version": RENDER_FRAME_HEALTH_VERSION,
+            "status": "unavailable",
+            "reason": "Pillow is not installed in the evaluator runtime",
+            "requested_count": len(paths),
+            "readable_count": 0,
+            "frame_metrics": [],
+        }
+    metrics: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for path in paths:
+        try:
+            with Image.open(path) as image:
+                image.load()
+                metrics.append({"path": str(path.resolve()), **_frame_metrics(image)})
+        except (OSError, ValueError) as exc:
+            errors.append(f"{path.name}: {exc}")
+    if not metrics:
+        return {
+            "health_version": RENDER_FRAME_HEALTH_VERSION,
+            "status": "unavailable",
+            "reason": "no readable render frames",
+            "requested_count": len(paths),
+            "readable_count": 0,
+            "errors": errors,
+            "frame_metrics": [],
+        }
+    # A low-variance image with no foreground pixels and no edges is the
+    # characteristic output of an incorrectly aimed or clipped camera. Keep
+    # the thresholds deliberately conservative so ordinary low-detail scenes
+    # remain available to the independent VLM judge.
+    blank = len(metrics) == len(paths) and all(
+        float(item["luminance_std"]) <= 1.5
+        and float(item["foreground_fraction"]) <= 0.001
+        and float(item["edge_density"]) <= 0.001
+        for item in metrics
+    )
+    return {
+        "health_version": RENDER_FRAME_HEALTH_VERSION,
+        "status": "blank" if blank else ("visible" if len(metrics) == len(paths) else "partial"),
+        "reason": "uniform_spatially_empty_frames" if blank else None,
+        "requested_count": len(paths),
+        "readable_count": len(metrics),
+        "errors": errors,
+        "frame_metrics": metrics,
     }
 
 

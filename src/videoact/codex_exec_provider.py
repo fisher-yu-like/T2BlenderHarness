@@ -29,7 +29,7 @@ def _parse_json_message(text: str) -> dict[str, Any]:
     return value
 
 
-def _normalize_strict_schema(value: Any) -> Any:
+def _normalize_strict_schema(value: Any, *, allow_open_maps: bool = True) -> Any:
     """Make object schemas compatible with strict structured-output APIs.
 
     Pydantic correctly omits fields with defaults from ``required``.  Codex's
@@ -40,9 +40,24 @@ def _normalize_strict_schema(value: Any) -> Any:
     """
 
     if isinstance(value, dict):
-        normalized = {key: _normalize_strict_schema(item) for key, item in value.items()}
+        normalized = {
+            key: _normalize_strict_schema(item, allow_open_maps=allow_open_maps)
+            for key, item in value.items()
+        }
         properties = normalized.get("properties")
-        if normalized.get("type") == "object" or isinstance(properties, dict) or "additionalProperties" in normalized:
+        additional_properties = normalized.get("additionalProperties")
+        is_open_map = (
+            allow_open_maps
+            and
+            "properties" not in normalized
+            and "additionalProperties" in normalized
+            and additional_properties is not False
+        )
+        if not is_open_map and (
+            normalized.get("type") == "object"
+            or isinstance(properties, dict)
+            or "additionalProperties" in normalized
+        ):
             if not isinstance(properties, dict):
                 properties = {}
                 normalized["properties"] = properties
@@ -62,7 +77,7 @@ def _normalize_strict_schema(value: Any) -> Any:
             normalized["items"] = {}
         return normalized
     if isinstance(value, list):
-        return [_normalize_strict_schema(item) for item in value]
+        return [_normalize_strict_schema(item, allow_open_maps=allow_open_maps) for item in value]
     return value
 
 
@@ -82,6 +97,9 @@ class CodexExecProvider:
         model_version: str = "codex-exec-v1",
         template_backed: bool = False,
         llm_generated: bool = True,
+        allow_open_maps: bool = True,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.command = command
         self.timeout_s = int(timeout_s)
@@ -93,18 +111,38 @@ class CodexExecProvider:
         self.model_version = str(model_version)
         self.template_backed = bool(template_backed)
         self.llm_generated = bool(llm_generated)
+        self.allow_open_maps = bool(allow_open_maps)
+        self.model = str(model) if model else None
+        self.reasoning_effort = str(reasoning_effort) if reasoning_effort else None
         self.call_records: list[dict[str, Any]] = []
         self.last_call_manifest: dict[str, Any] | None = None
 
     def __call__(self, payload: Any) -> dict[str, Any]:
         if not self.response_schema:
             raise RuntimeError("CodexExecProvider requires a response schema")
-        return self.call(prompt=self.prompt_builder(payload), schema=self.response_schema)
+        image_paths = None
+        if isinstance(payload, Mapping):
+            raw_image_paths = payload.get("_codex_image_paths")
+            if isinstance(raw_image_paths, (list, tuple)):
+                image_paths = [Path(str(path)) for path in raw_image_paths]
+        return self.call(
+            prompt=self.prompt_builder(payload),
+            schema=self.response_schema,
+            image_paths=image_paths,
+        )
 
-    def call(self, *, prompt: str, schema: Mapping[str, Any]) -> dict[str, Any]:
+    def call(
+        self,
+        *,
+        prompt: str,
+        schema: Mapping[str, Any],
+        image_paths: list[str | Path] | None = None,
+    ) -> dict[str, Any]:
         started_at = now_utc()
         call_id = f"codex-exec:{self.stage}:{uuid.uuid4().hex}"
-        normalized_schema = _normalize_strict_schema(dict(schema))
+        normalized_schema = _normalize_strict_schema(
+            dict(schema), allow_open_maps=self.allow_open_maps
+        )
         request_schema = {
             "type": "object",
             "properties": {
@@ -126,12 +164,20 @@ class CodexExecProvider:
                 "--skip-git-repo-check",
                 "--sandbox",
                 "read-only",
+            ]
+            if self.model:
+                command.extend(["--model", self.model])
+            if self.reasoning_effort:
+                command.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
+            for image_path in image_paths or []:
+                command.extend(["--image", str(Path(image_path).resolve())])
+            command.extend([
                 "--output-schema",
                 str(schema_path),
                 "-o",
                 str(output_path),
                 "-",
-            ]
+            ])
             try:
                 completed = subprocess.run(
                     command,
@@ -254,6 +300,7 @@ class CodexExecProvider:
                 )
             )
 
+        kwargs.setdefault("allow_open_maps", False)
         return cls(stage="director", response_schema=schema, prompt_builder=build_prompt, **kwargs)
 
     @classmethod
@@ -265,13 +312,28 @@ class CodexExecProvider:
         def build_prompt(payload: Any) -> str:
             return (
                 "Generate one case-specific Blender job source from this DirectorPlan. Return only the "
-                "schema-constrained JSON object. Use only listed blender.lib primitives, import the "
-                "runtime scaffolding, bind every required ID to executable logic, save candidate.blend "
-                "for the trusted observer, and never "
-                "reference legacy template compilers.\n"
+                "schema-constrained JSON object. Use only listed blender.lib primitives and import the "
+                "runtime scaffolding. The generated_code is accepted only when it has these exact "
+                "runtime bindings: a top-level `DIRECTOR_PLAN = ...` assignment containing the current "
+                "case plan or its exact plan hash; `OUTPUT_DIR = Path(__file__).resolve().parent`; and "
+                "exactly one `bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))` "
+                "call. `PLAN_HASH` or `JOB_DIR` are not substitutes for those required bindings. "
+                "Preserve every required entity, event, trajectory, and camera obligation, and report "
+                "only verified library calls. Camera primitives return CameraKeyframe objects with only "
+                ".frame, .location, and .target; never use `.rotation`, and compute camera rotation from "
+                "Vector(target) - Vector(location) with to_track_quat when applying a keyframe. Do not "
+                "rely on object names alone: for every visual entity set `obj['entity_id']`, "
+                "`obj['entity_kind']`, and `obj['geometry_style']` on its primary mesh object so the "
+                "trusted observer can discover it. Do not render, write telemetry/index/video outputs, call "
+                "legacy template compilers, or use a generic fallback; the trusted observer owns those "
+                "artifacts in a fresh Blender process. Set up clearly visible lighting in the saved scene: "
+                "create at least one light with `bpy.ops.object.light_add` or `bpy.data.lights.new`, assign "
+                "useful energy/power, and avoid relying on the default world or viewport lighting.\n"
                 + json.dumps(payload, ensure_ascii=False, sort_keys=True)
             )
 
+        kwargs.setdefault("allow_open_maps", False)
+        kwargs.setdefault("reasoning_effort", "low")
         return cls(stage="blender_code", response_schema=schema, prompt_builder=build_prompt, **kwargs)
 
 

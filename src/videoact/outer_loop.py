@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from .patch_attribution import PatchVerdict, attribute
 from .paired_statistics import evaluate_paired_acceptance
 from .experiment_fingerprint import compare_experiment_fingerprints
+from .patch_impact import PatchImpactProof, validate_patch_impact
 
 
 class AcceptanceDecision(BaseModel):
@@ -27,6 +29,7 @@ class AcceptanceDecision(BaseModel):
     failed_checks: list[str] = []
     paired_statistics: dict[str, Any] = {}
     experiment_fingerprint: dict[str, Any] | None = None
+    patch_impact: dict[str, Any] | None = None
 
 
 def _hard_regression(payload: dict[str, Any]) -> bool:
@@ -133,6 +136,8 @@ def evaluate_candidate(
     dev: dict[str, Any],
     *,
     owner: str | None = None,
+    impact_proof: Mapping[str, Any] | PatchImpactProof | None = None,
+    require_impact_proof: bool = False,
 ) -> AcceptanceDecision:
     train_before = float(before["train_score"])
     train_after = float(after["train_score"])
@@ -156,6 +161,23 @@ def evaluate_candidate(
         after,
         required=bool(train.get("paired_statistics_required") or dev.get("paired_statistics_required")),
     )
+    impact_required = bool(
+        require_impact_proof
+        or train.get("patch_impact_proof_required")
+        or dev.get("patch_impact_proof_required")
+    )
+    impact_ok = True
+    impact_report: dict[str, Any] | None = None
+    if impact_proof is not None:
+        try:
+            impact_model = validate_patch_impact(impact_proof)
+            impact_report = impact_model.model_dump(mode="json")
+        except (TypeError, ValueError) as exc:
+            impact_ok = False
+            impact_report = {"status": "rejected", "reason": str(exc)}
+    elif impact_required:
+        impact_ok = False
+        impact_report = {"status": "blocked", "reason": "complete Patch Impact Proof is required"}
     checks = {
         "overall_train_improved": train_after > train_before,
         "paired_train": _paired_train_ok(train, train_before, train_after)
@@ -167,6 +189,7 @@ def evaluate_candidate(
         and paired_statistics["checks"]["dev_noninferiority"],
         "paired_statistics": paired_statistics["accepted"],
         "experiment_fingerprint_compatible": fingerprint_compatible,
+        "patch_impact_proof": impact_ok,
         "zero_hard_regression": not (_hard_regression(train) or _hard_regression(dev)),
     }
     artifact_before = before.get("artifact_completion", before.get("artifact_rate"))
@@ -201,6 +224,7 @@ def evaluate_candidate(
         failed_checks=failed_checks,
         paired_statistics=paired_statistics,
         experiment_fingerprint=fingerprint_report,
+        patch_impact=impact_report,
     )
 
 

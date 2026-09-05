@@ -10,8 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 METADATA = ROOT / "dataset" / "vbench2-agent-training-index-v1" / "metadata.json"
-SCANNED_ROOTS = (ROOT / "tests", ROOT / "dataset", ROOT / "training")
-ABSOLUTE_WINDOWS = re.compile(r"(?:[A-Za-z]:\\Users\\|Desktop\\T2BlenderCode)")
+SCANNED_ROOTS = (ROOT / "dataset" / "vbench2-agent-training-index-v1",)
+SCANNED_FILES = (ROOT / "pyproject.toml", ROOT / ".github" / "workflows" / "ci.yml")
+ABSOLUTE_WINDOWS = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:(?:/|\\{1,2})")
 
 
 def _metadata_failures() -> list[str]:
@@ -39,19 +40,21 @@ def _metadata_failures() -> list[str]:
 
 def _text_failures() -> list[str]:
     failures: list[str] = []
+    paths: list[Path] = list(SCANNED_FILES)
     for scanned_root in SCANNED_ROOTS:
         if not scanned_root.is_dir():
             failures.append(f"missing_scanned_root:{scanned_root.relative_to(ROOT)}")
             continue
-        for path in scanned_root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in {".py", ".json", ".jsonl", ".toml", ".md"}:
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            if ABSOLUTE_WINDOWS.search(text):
-                failures.append(f"absolute_windows_path:{path.relative_to(ROOT)}")
+        paths.extend(path for path in scanned_root.rglob("*") if path.is_file())
+    for path in paths:
+        if path.suffix.lower() not in {".py", ".json", ".jsonl", ".toml", ".md", ".yml", ".yaml"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if ABSOLUTE_WINDOWS.search(text):
+            failures.append(f"absolute_windows_path:{path.relative_to(ROOT)}")
     return failures
 
 

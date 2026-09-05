@@ -68,7 +68,18 @@ def evaluate_interactions(
         attachments = list(trajectory.attachment_events)
         attach = next((item for item in attachments if item.action == "attach"), None)
         transfer = next((item for item in attachments if item.action == "transfer"), None)
-        detach = next((item for item in attachments if item.action == "detach"), None)
+        detach_candidates = [item for item in attachments if item.action == "detach"]
+        detach = (
+            next(
+                (
+                    item
+                    for item in detach_candidates
+                    if lifecycle.final_support_id and item.object_id == lifecycle.final_support_id
+                ),
+                None,
+            )
+            or (detach_candidates[0] if detach_candidates else None)
+        )
         carry_only = (
             lifecycle.transfer_event_id is None
             and lifecycle.receiver_id is None

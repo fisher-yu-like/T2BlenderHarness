@@ -295,6 +295,7 @@ class RunManifest(ContractModel):
     frame_start: int = Field(ge=1)
     frame_end: int = Field(ge=1)
     artifacts: dict[str, str] = Field(default_factory=dict)
+    obligation_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_frames(self) -> "RunManifest":

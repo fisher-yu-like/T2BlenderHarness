@@ -200,6 +200,13 @@ def test_training_cli_exposes_diagnostic_modes_without_relaxing_formal_modes():
     assert "require_training_readiness(args.readiness_report)" in text
 
 
+def test_training_cli_exposes_start_and_end_only_test_schedule():
+    text = (ROOT / "scripts" / "train_real_harness.py").read_text(encoding="utf-8")
+    assert '"--test-schedule"' in text
+    assert '"every_round", "baseline_final_only"' in text
+    assert "test_schedule=args.test_schedule" in text
+
+
 def test_training_cli_uses_safe_four_worker_default():
     text = (ROOT / "scripts" / "train_real_harness.py").read_text(encoding="utf-8")
     assert 'parser.add_argument("--workers", type=int, default=4)' in text

@@ -215,6 +215,17 @@ class MultiEntityTrajectoryComposer:
         for index, entity in enumerate(interpretation.entities):
             if entity.id in known_ids:
                 continue
+            hold_primitives = [
+                MotionPrimitive(
+                    type="hold",
+                    start_frame=frame(event.start),
+                    end_frame=frame(event.end),
+                    parameters={"event_id": event.id, "entity_id": entity.id},
+                )
+                for event in schedule.events
+                if entity.id in event.participant_ids or entity.id in event.target_ids
+                if event.action in {"observe", "pause"}
+            ]
             entities[entity.id] = EntityTrajectory(
                 states=[
                     EntityState(
@@ -226,7 +237,7 @@ class MultiEntityTrajectoryComposer:
                         position=(0.0, (float(index) - 0.5) * 1.5, 1.0),
                     ),
                 ],
-                motion_primitives=[],
+                motion_primitives=hold_primitives,
             )
 
         return DirectorTrajectories(

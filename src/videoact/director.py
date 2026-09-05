@@ -16,6 +16,7 @@ from .director_contracts import (
     DirectorRequest,
 )
 from .director_projection import DirectorProjection
+from .obligations import bind_obligations_to_plan, compile_obligations
 from .director_prompt import DeterministicPromptInterpreter
 from .director_schedule import EventScheduler
 from .director_trajectory import MultiEntityTrajectoryComposer
@@ -163,6 +164,12 @@ class DirectorAgent:
             director_trajectories=trajectories,
             director_camera=camera,
         )
+        compiled_obligations = compile_obligations(
+            record={"case_id": request.scene_id, "prompt": request.prompt},
+            director_plan=director_plan,
+            scene_contract=scene_contract,
+        )
+        director_plan = bind_obligations_to_plan(director_plan, compiled_obligations)
         return DirectorPlanningResult(
             director_plan=director_plan,
             director_trajectories=trajectories,
@@ -242,6 +249,12 @@ class DirectorAgent:
             provider_fingerprint="provider:deterministic-baseline",
             policy_fingerprint="policy:baseline-v1",
         )
+        compiled_obligations = compile_obligations(
+            record={"case_id": scene_id, "prompt": prompt},
+            director_plan=director_plan,
+            scene_contract=contract,
+        )
+        director_plan = bind_obligations_to_plan(director_plan, compiled_obligations)
         director_trajectories = DirectorTrajectories(
             timebase=trajectory_plan.timebase,
             entities=trajectory_plan.entities,

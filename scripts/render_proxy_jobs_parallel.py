@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -49,6 +50,20 @@ def build_blender_command(job_dir: str | Path, blender_bin: str) -> list[str]:
 
 def classify_render_status(return_code: int, render_artifacts_ready: bool) -> str:
     return "success" if return_code == 0 and render_artifacts_ready else "failed"
+
+
+def _extract_blender_version(*outputs: str | None) -> str | None:
+    """Extract Blender's semantic version from noisy CLI output."""
+
+    pattern = re.compile(r"\bBlender\s+(\d+(?:\.\d+){1,3})\b", re.IGNORECASE)
+    for output in outputs:
+        if not isinstance(output, str):
+            continue
+        for line in output.splitlines():
+            match = pattern.search(line)
+            if match:
+                return match.group(1)
+    return None
 
 
 def mark_render_state(job_dir: str | Path, *, return_code: int, blender_version: str | None = None) -> None:
@@ -199,6 +214,11 @@ def _run_trusted_observer(
         candidate_blend_hash=sha256_file(candidate),
         observer_source_hash=observer_hash,
         mesh_entity_ids=_mesh_entity_ids_for_observer(job_dir),
+        obligation_ids=[
+            str(item)
+            for item in manifest_payload.get("obligation_ids", [])
+            if isinstance(item, str) and item.strip()
+        ],
     )
     command = _observer_command(job_dir, blender_bin, request_path, observer_hash)
     inherited_pythonpath = os.environ.get("PYTHONPATH", "")
@@ -209,6 +229,8 @@ def _run_trusted_observer(
             cwd=str(job_dir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s,
             check=False,
             env={**os.environ, "PYTHONPATH": pythonpath},
@@ -313,6 +335,8 @@ def _run_one(
                 cwd=str(job_dir),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout_s,
                 check=False,
                 env=environment,
@@ -391,7 +415,13 @@ def _run_one(
                 "proxy_video": str((job_dir / "proxy.mp4").resolve()),
                 "job_source_hash": frozen_source_hash,
             }
-            mark_render_state(job_dir, return_code=0, blender_version=(completed.stdout or "")[:120])
+            blender_version = _extract_blender_version(
+                completed.stdout,
+                completed.stderr,
+                (observer_result or {}).get("stdout_tail"),
+                (observer_result or {}).get("stderr_tail"),
+            )
+            mark_render_state(job_dir, return_code=0, blender_version=blender_version)
             (job_dir / "render_attempts.json").write_text(json.dumps(attempts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             return result
         if not source_unchanged:

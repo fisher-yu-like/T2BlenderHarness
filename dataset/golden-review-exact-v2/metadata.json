@@ -8,7 +8,7 @@
   "comparison_only": false,
   "comparison_only_reason": null,
   "dataset_id": "golden-review-exact-v2",
-  "fingerprint": "736da99b370690e70a24d77c99db2b5addd017fe93d92ce99fd2b6ada613d7de",
+  "fingerprint": "017270a2ec40cef4940a1e19fe312be956964b3793bc0b383c74d4aebf141286",
   "inter_rater_agreement": {},
   "patch_selection_allowed": false,
   "prompt_policy": "use source_prompt verbatim when present; never rewrite benchmark prompt for human review",

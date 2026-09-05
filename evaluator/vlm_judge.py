@@ -15,24 +15,24 @@ class VLMJudge:
     def prepare_input(
         *,
         prompt: str,
-        scene_contract: Any,
         selected_frames: list[str],
-        deterministic_findings: list[Any],
+        video_path: str | None = None,
+        frame_metadata: list[dict[str, Any]] | None = None,
+        scene_contract: Any | None = None,
+        deterministic_findings: list[Any] | None = None,
         harness_version: str | None = None,
     ) -> dict[str, Any]:
         del harness_version  # Harness identity must not become a VLM cue.
-        if hasattr(scene_contract, "model_dump"):
-            scene_contract = scene_contract.model_dump(mode="json")
-        deterministic_findings = [
-            item.model_dump(mode="json") if hasattr(item, "model_dump") else item
-            for item in deterministic_findings
-        ]
-        return {
+        del scene_contract, deterministic_findings
+        payload = {
             "prompt": prompt,
-            "scene_contract": scene_contract,
             "selected_frames": list(selected_frames),
-            "deterministic_findings": deterministic_findings,
         }
+        if video_path is not None:
+            payload["video_path"] = str(video_path)
+        if frame_metadata is not None:
+            payload["frame_metadata"] = list(frame_metadata)
+        return payload
 
     def judge(self, **kwargs: Any) -> VLMJudgeResponse:
         if self.provider is None:

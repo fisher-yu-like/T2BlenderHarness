@@ -16,7 +16,10 @@ from typing import Any
 
 
 RELEASE_GATES_VERSION = "release-gates-v1"
-REQUIRED_RELEASE_GATE_IDS = ("G0", "G1", "G2", "G3")
+# Historical reports contain G0--G3.  New formal release reports add G4 for
+# frozen/OOD test isolation; both profiles remain verifiable.
+LEGACY_RELEASE_GATE_IDS = ("G0", "G1", "G2", "G3")
+REQUIRED_RELEASE_GATE_IDS = (*LEGACY_RELEASE_GATE_IDS, "G4")
 
 
 def _canonical_payload(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -161,6 +164,117 @@ def validate_shadow_report(report: Mapping[str, Any] | None) -> dict[str, Any]:
     return _failure_report("G3", report, failures, "shadow_evidence_incomplete")
 
 
+def _at_least_count(report: Mapping[str, Any], field: str, minimum: int, failures: list[str]) -> None:
+    value = report.get(field)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or int(value) < minimum:
+        failures.append(f"{field}_must_be_at_least_{minimum}")
+
+
+def _audit_is_zero(value: Any) -> bool:
+    """Accept only an explicit zero-valued leakage audit."""
+
+    if isinstance(value, bool):
+        return value is True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value == 0
+    if isinstance(value, Mapping):
+        # ``dataset_leakage.audit_leakage`` carries descriptive version and
+        # status fields in addition to zero collision counts.  Treat that
+        # structured report specially; arbitrary ``{"status": "pass"}``
+        # is not sufficient evidence.
+        if "collisions" in value or "collision_counts" in value:
+            collisions = value.get("collisions")
+            counts = value.get("collision_counts")
+            return (
+                value.get("status") == "pass"
+                and isinstance(collisions, list)
+                and not collisions
+                and isinstance(counts, Mapping)
+                and all(item == 0 for item in counts.values())
+            )
+        return bool(value) and all(_audit_is_zero(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return len(value) == 0
+    return False
+
+
+def validate_generalization_gate(report: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Validate G4 without allowing test evidence into controller context."""
+
+    failures = _base_failures(report, "G4")
+    if isinstance(report, Mapping):
+        _at_least_count(report, "case_count", 60, failures)
+        _at_least_count(report, "ood_slice_case_count", 60, failures)
+        if report.get("leakage_audit_zero") is not True and not _audit_is_zero(report.get("leakage_audit")):
+            failures.append("leakage_audit_must_be_zero")
+        failures.extend(
+            _require_true_fields(
+                report,
+                (
+                    "controller_test_access_blocked",
+                    "baseline_final_only",
+                    "paired_delta_reported",
+                    "ci_reported",
+                    "effect_size_reported",
+                    "test_metrics_absent_from_controller",
+                ),
+            )
+        )
+    return _failure_report("G4", report, failures, "generalization_evidence_incomplete")
+
+
+def build_generalization_gate_report(
+    frozen_report: Mapping[str, Any] | None,
+    *,
+    controller_access_report: Mapping[str, Any] | None = None,
+    outcome_report: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Translate frozen-eval and access-boundary evidence into sealed G4."""
+
+    frozen = frozen_report if isinstance(frozen_report, Mapping) else {}
+    access = controller_access_report if isinstance(controller_access_report, Mapping) else {}
+    outcome = outcome_report if isinstance(outcome_report, Mapping) else {}
+    leakage = frozen.get("leakage_audit", frozen.get("leakage"))
+    if leakage is None:
+        errors = frozen.get("errors")
+        leakage = {"validator_errors": len(errors)} if isinstance(errors, list) else None
+    ood = frozen.get("ood_slice_case_count")
+    if ood is None:
+        coverage = frozen.get("coverage_matrix")
+        if isinstance(coverage, Mapping):
+            slice_report = coverage.get("ood_unseen_dimensions")
+            if isinstance(slice_report, Mapping):
+                ood = slice_report.get("case_count")
+    payload = {
+        "status": "pass" if frozen.get("status") == "pass" else "blocked",
+        "gate_id": "G4",
+        "case_count": frozen.get("case_count", 0),
+        "ood_slice_case_count": ood or 0,
+        "leakage_audit": leakage,
+        "leakage_audit_zero": _audit_is_zero(leakage),
+        "controller_test_access_blocked": access.get("controller_test_access_blocked") is True,
+        "baseline_final_only": access.get("baseline_final_only") is True,
+        "test_metrics_absent_from_controller": access.get("test_metrics_absent_from_controller") is True,
+        "paired_delta_reported": outcome.get("paired_delta_reported") is True,
+        "ci_reported": outcome.get("ci_reported") is True,
+        "effect_size_reported": outcome.get("effect_size_reported") is True,
+        "frozen_fingerprint": frozen.get("fingerprint"),
+        "source_frozen_report_hash": frozen.get("report_hash"),
+        "source_access_report_hash": access.get("report_hash"),
+        "source_outcome_report_hash": outcome.get("report_hash"),
+    }
+    candidate = seal_report(payload)
+    validated = validate_generalization_gate(candidate)
+    candidate.update(
+        {
+            "status": validated["status"],
+            "failures": validated["failures"],
+            "reason": validated["reason"],
+        }
+    )
+    return seal_report(candidate)
+
+
 def _validate_generic_gate(report: Mapping[str, Any] | None, gate_id: str) -> dict[str, Any]:
     failures = _base_failures(report, gate_id)
     return _failure_report(gate_id, report, failures, f"{gate_id}_evidence_incomplete")
@@ -173,13 +287,14 @@ def _revalidate_embedded_gate(derived: Mapping[str, Any], gate_id: str) -> list[
     source = derived.get("source_report")
     if not isinstance(source, Mapping):
         return [f"{gate_id}:source_report_missing"]
-    expected = (
-        validate_paired_pilot(source)
-        if gate_id == "G2"
-        else validate_shadow_report(source)
-        if gate_id == "G3"
-        else _validate_generic_gate(source, gate_id)
-    )
+    if gate_id == "G2":
+        expected = validate_paired_pilot(source)
+    elif gate_id == "G3":
+        expected = validate_shadow_report(source)
+    elif gate_id == "G4":
+        expected = validate_generalization_gate(source)
+    else:
+        expected = _validate_generic_gate(source, gate_id)
     for field in ("status", "failures", "reason", "report_hash"):
         if derived.get(field) != expected.get(field):
             failures.append(f"{gate_id}:derived_{field}_mismatch")
@@ -196,8 +311,20 @@ def build_formal_release_report(
     g1: Mapping[str, Any] | None,
     pilot: Mapping[str, Any] | None,
     shadow: Mapping[str, Any] | None,
+    g4: Mapping[str, Any] | None = None,
+    *,
+    generalization: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a sealed G0--G3 decision; only a complete pass unlocks training."""
+    """Build a sealed release decision; G4 is required for new formal runs.
+
+    Four positional arguments retain compatibility with historical reports.
+    Passing ``g4`` (or ``generalization=``) selects the complete G0--G4
+    profile used by the current protocol.
+    """
+
+    if g4 is not None and generalization is not None:
+        raise ValueError("provide either g4 or generalization, not both")
+    g4 = g4 if g4 is not None else generalization
 
     checks = {
         "G0": _validate_generic_gate(g0, "G0"),
@@ -205,6 +332,8 @@ def build_formal_release_report(
         "G2": validate_paired_pilot(pilot),
         "G3": validate_shadow_report(shadow),
     }
+    if g4 is not None:
+        checks["G4"] = validate_generalization_gate(g4)
     blocking = [gate_id for gate_id, result in checks.items() if result["status"] != "pass"]
     payload: dict[str, Any] = {
         "version": RELEASE_GATES_VERSION,
@@ -219,6 +348,7 @@ def build_formal_release_report(
             "shadow_dev_cases": 60,
             "formal_round_count": 6,
             "max_attempts_per_round": 5,
+            "release_profile": "g0_g4" if g4 is not None else "legacy_g0_g3",
         },
         "reason": "formal_release_gates_passed" if not blocking else "formal_release_blocked_by_gate_evidence",
     }
@@ -231,7 +361,11 @@ def validate_formal_release_report(report: Mapping[str, Any] | None) -> dict[str
     if not isinstance(report, Mapping):
         return {"status": "blocked", "training_allowed": False, "reason": "release_report_not_an_object"}
     sealed, reason = verify_sealed_report(report)
-    missing = [gate_id for gate_id in REQUIRED_RELEASE_GATE_IDS if gate_id not in (report.get("gate_reports") or {})]
+    gate_reports = report.get("gate_reports") or {}
+    protocol = report.get("protocol")
+    profile = protocol.get("release_profile") if isinstance(protocol, Mapping) else None
+    required_gate_ids = REQUIRED_RELEASE_GATE_IDS if profile == "g0_g4" or "G4" in gate_reports else LEGACY_RELEASE_GATE_IDS
+    missing = [gate_id for gate_id in required_gate_ids if gate_id not in gate_reports]
     if not sealed or report.get("status") != "pass" or report.get("training_allowed") is not True or missing:
         failures = []
         if not sealed:
@@ -249,7 +383,7 @@ def validate_formal_release_report(report: Mapping[str, Any] | None) -> dict[str
             "reason": "formal_release_report_invalid",
         }
     nested_failures: list[str] = []
-    for gate_id in REQUIRED_RELEASE_GATE_IDS:
+    for gate_id in required_gate_ids:
         nested = report["gate_reports"].get(gate_id)
         if not isinstance(nested, Mapping):
             nested_failures.append(f"{gate_id}:gate_report_not_an_object")
@@ -257,7 +391,7 @@ def validate_formal_release_report(report: Mapping[str, Any] | None) -> dict[str
         nested_failures.extend(_revalidate_embedded_gate(nested, gate_id))
         if nested.get("status") != "pass":
             nested_failures.append(f"gate_not_pass:{gate_id}")
-    expected_blocking = [gate_id for gate_id in REQUIRED_RELEASE_GATE_IDS if (report["gate_reports"].get(gate_id) or {}).get("status") != "pass"]
+    expected_blocking = [gate_id for gate_id in required_gate_ids if (report["gate_reports"].get(gate_id) or {}).get("status") != "pass"]
     if report.get("blocking_gates") != expected_blocking:
         nested_failures.append("blocking_gates_mismatch")
     expected_status = "pass" if not expected_blocking else "blocked"
@@ -280,18 +414,21 @@ def validate_formal_release_report(report: Mapping[str, Any] | None) -> dict[str
         "report_hash": str(report["report_hash"]),
         "gate_report_hashes": {
             gate_id: str(report["gate_reports"][gate_id].get("report_hash") or "")
-            for gate_id in REQUIRED_RELEASE_GATE_IDS
+            for gate_id in required_gate_ids
         },
         "reason": "formal_release_report_verified",
     }
 
 
 __all__ = [
+    "LEGACY_RELEASE_GATE_IDS",
     "RELEASE_GATES_VERSION",
     "REQUIRED_RELEASE_GATE_IDS",
     "build_formal_release_report",
+    "build_generalization_gate_report",
     "report_hash",
     "seal_report",
+    "validate_generalization_gate",
     "validate_formal_release_report",
     "validate_paired_pilot",
     "validate_shadow_report",

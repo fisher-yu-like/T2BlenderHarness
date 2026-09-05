@@ -22,6 +22,9 @@ class FailureGroup(BaseModel):
     affected_case_ids: list[str]
     evidence_paths: list[str] = []
     representative_message: str
+    attribution_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    expected_obligation_impact: int = Field(default=0, ge=0)
+    patch_risk: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class FailureSummary(BaseModel):
@@ -40,6 +43,12 @@ class PatchBrief(BaseModel):
     observed_failure_pattern: str
     desired_behavior: str
     rerun_command: str
+    target_obligations: list[str] = []
+    expected_artifact_changes: list[str] = []
+    minimum_effect: float = 0.0
+    verification_plan: list[str] = []
+    attribution_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    patch_risk: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 OWNER_FILES = {
@@ -65,7 +74,25 @@ OWNER_FILES = {
 FROZEN_OWNERS = {"evaluator"}
 
 
-def aggregate_failures(records: list[dict[str, Any]]) -> FailureSummary:
+def _owner_patch_risk(owner: str) -> float:
+    return {
+        "director_prompt_interpreter": 0.25,
+        "director_event_scheduler": 0.25,
+        "director_trajectory": 0.30,
+        "director_camera": 0.30,
+        "trajectory_planner": 0.30,
+        "camera_planner": 0.30,
+        "blender_code_agent": 0.60,
+        "blender_executor": 0.45,
+        "proxy_renderer": 0.50,
+    }.get(owner, 0.75)
+
+
+def aggregate_failures(
+    records: list[dict[str, Any]],
+    *,
+    attributions: dict[str, dict[str, Any]] | None = None,
+) -> FailureSummary:
     grouped: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     case_ids = set()
     for record in records:
@@ -73,6 +100,11 @@ def aggregate_failures(records: list[dict[str, Any]]) -> FailureSummary:
         case_ids.add(case_id)
         for raw in record.get("findings", []):
             finding = raw if isinstance(raw, Finding) else Finding.model_validate(raw)
+            evidence = [str(path).strip() for path in finding.evidence if str(path).strip()]
+            if not evidence:
+                # A repeated label without a case-local evidence reference is
+                # not sufficient to identify a patchable Harness failure.
+                continue
             root_cause_id = finding.root_cause_id or finding.failure_id
             key = (finding.failure_id, root_cause_id, finding.owner, finding.category, finding.severity)
             group = grouped.setdefault(
@@ -92,9 +124,28 @@ def aggregate_failures(records: list[dict[str, Any]]) -> FailureSummary:
             group["count"] += 1
             if case_id not in group["affected_case_ids"]:
                 group["affected_case_ids"].append(case_id)
-            for path in finding.evidence:
+            for path in evidence:
                 if path not in group["evidence_paths"]:
                     group["evidence_paths"].append(path)
+
+            root = str(root_cause_id)
+            attribution = (attributions or {}).get(root, {})
+            confidence = attribution.get("owner_confidence", attribution.get("confidence", 0.0))
+            try:
+                group["attribution_confidence"] = max(
+                    float(group.get("attribution_confidence", 0.0)),
+                    min(1.0, max(0.0, float(confidence))),
+                )
+            except (TypeError, ValueError):
+                pass
+            obligation_ids = finding.model_dump(mode="json").get("affected_obligation_ids", []) if isinstance(finding, Finding) else []
+            if isinstance(raw, dict):
+                obligation_ids = raw.get("affected_obligation_ids", raw.get("target_obligations", obligation_ids))
+            if isinstance(obligation_ids, (list, tuple, set)):
+                group["expected_obligation_impact"] = max(
+                    int(group.get("expected_obligation_impact", 0)), len(set(str(item) for item in obligation_ids))
+                )
+            group["patch_risk"] = _owner_patch_risk(finding.owner)
 
     groups = [FailureGroup.model_validate(group) for group in grouped.values()]
     groups.sort(key=lambda group: (-group.count, group.owner, group.failure_id))
@@ -118,4 +169,7 @@ def build_patch_brief(summary: FailureSummary) -> PatchBrief:
         ),
         desired_behavior=f"Resolve {group.failure_id} while preserving the frozen contracts and evaluator.",
         rerun_command="python scripts/run_harness_eval.py --split train",
+        attribution_confidence=group.attribution_confidence,
+        patch_risk=group.patch_risk,
+        minimum_effect=1.0,
     )

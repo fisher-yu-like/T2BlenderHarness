@@ -23,6 +23,16 @@ from .director_metrics import evaluate_director_plan
 from .interaction_metrics import evaluate_interactions
 
 
+_ENTITY_KIND_ALIASES = {
+    "actor": "character",
+}
+
+
+def _canonical_entity_kind(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return _ENTITY_KIND_ALIASES.get(normalized, normalized)
+
+
 def _runtime_telemetry_findings(telemetry: dict[str, Any]) -> list[Finding]:
     """Convert executable runtime observations into report findings.
 
@@ -69,6 +79,9 @@ class DeterministicReport(BaseModel):
     director_findings: list[Finding] = Field(default_factory=list)
     interaction_findings: list[Finding] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
+    # T05 diagnostic matrix.  It is optional for legacy synthetic reports and
+    # contains no aggregate score.
+    obligation_matrix: dict[str, Any] | None = None
 
 
 class DeterministicEvaluator:
@@ -147,6 +160,7 @@ class DeterministicEvaluator:
         telemetry: dict[str, Any],
         artifacts: Any,
         director_plan: DirectorPlan | None = None,
+        obligation_matrix: dict[str, Any] | None = None,
     ) -> DeterministicReport:
         """Evaluate a real Blender run after the ordinary plan-level checks."""
         base = self.evaluate(contract, plan, director_plan=director_plan, telemetry=telemetry)
@@ -188,7 +202,10 @@ class DeterministicEvaluator:
             observed_kind = telemetry.get("objects", {}).get(entity_id, {}).get("kind")
             # Older synthetic fixtures did not emit semantic kind metadata. Real
             # Blender telemetry does, so validate it whenever it is available.
-            if observed_kind is not None and observed_kind != expected_kind:
+            if (
+                observed_kind is not None
+                and _canonical_entity_kind(observed_kind) != _canonical_entity_kind(expected_kind)
+            ):
                 findings.append(
                     Finding(
                         failure_id="telemetry_entity_kind_mismatch",
@@ -244,6 +261,7 @@ class DeterministicEvaluator:
             director_plan_score=base.director_plan_score,
             director_findings=base.director_findings,
             interaction_findings=base.interaction_findings,
+            obligation_matrix=obligation_matrix,
             findings=findings,
             metrics={
                 "required_event_coverage": self._coverage(contract, plan),

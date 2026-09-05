@@ -271,6 +271,11 @@ def observe(*, run_dir: str | Path, request_path: str | Path, observer_source_ha
         for value in request.get("mesh_entity_ids", [])
         if isinstance(value, str) and value.strip()
     }
+    obligation_ids = [
+        str(value)
+        for value in request.get("obligation_ids", [])
+        if isinstance(value, str) and value.strip()
+    ]
     frames = list(range(frame_start, frame_end + 1))
     observations = [
         _raw_frame_observation(
@@ -318,6 +323,9 @@ def observe(*, run_dir: str | Path, request_path: str | Path, observer_source_ha
             "object_name": str(camera.name) if camera is not None else None,
         },
         "raw_scene_object_count": int(len(bpy.data.objects)),
+        # Identity-only trace anchors.  The observer never derives semantic
+        # success/failure from them and never accepts generated telemetry.
+        "obligation_ids": list(dict.fromkeys(obligation_ids)),
     }
     telemetry_path = root / "telemetry.json"
     telemetry_path.write_text(json.dumps(telemetry, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -348,6 +356,7 @@ def observe(*, run_dir: str | Path, request_path: str | Path, observer_source_ha
         "observer_source_hash": str(observer_source_hash),
         "telemetry_hash": telemetry_hash,
         "frame_count": len(rendered),
+        "obligation_ids": list(dict.fromkeys(obligation_ids)),
     }
     (root / "telemetry_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"

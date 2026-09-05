@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from pydantic import Field
 
 from .director_contracts import ContractModel
+from .obligations import ObligationCompilation, ObligationRecord, validate_obligation_completeness
 
 
 class CoverageReport(ContractModel):
@@ -31,6 +32,11 @@ class CoverageReport(ContractModel):
     covered_camera_events: list[str] = Field(default_factory=list)
     source_hash: str = Field(min_length=64, max_length=64)
     coverage_ratio: float = Field(ge=0.0, le=1.0)
+    # Optional T03 trace anchors.  Legacy benchmark coverage remains valid
+    # when no obligation compilation is supplied.
+    obligation_ids: list[str] = Field(default_factory=list)
+    covered_obligation_ids: list[str] = Field(default_factory=list)
+    missing_obligation_ids: list[str] = Field(default_factory=list)
 
 
 def _items(value: Any) -> list[Any]:
@@ -154,6 +160,8 @@ def validate_case_coverage(
     director_camera: Any,
     generated_code: str,
     existing_code_hashes: Mapping[str, str] | None = None,
+    obligations: ObligationCompilation | list[ObligationRecord] | None = None,
+    source_obligation_ids: list[str] | None = None,
 ) -> CoverageReport:
     """Reject a case unless every required identity and event reaches source.
 
@@ -174,6 +182,36 @@ def validate_case_coverage(
     for shot in _items(_field(director_camera, "shots")):
         camera_events.update(_ids(_field(shot, "required_event_ids")))
 
+    obligation_ids: list[str] = []
+    covered_obligation_ids: list[str] = []
+    missing_obligation_ids: list[str] = []
+    if obligations is not None:
+        # This is a schema gate, not a score.  A truncated compilation is
+        # rejected before source coverage can be reported as successful.
+        validate_obligation_completeness(obligations)
+        if isinstance(obligations, ObligationCompilation):
+            obligation_ids = list(obligations.obligation_ids)
+        else:
+            obligation_ids = [item.obligation_id for item in obligations]
+        plan_obligation_ids = set(_ids(_field(director_plan, "obligation_ids")))
+        missing_obligation_ids = [item for item in obligation_ids if item not in plan_obligation_ids]
+        if missing_obligation_ids:
+            hard_failures = [
+                f"missing_plan_obligations:{item}" for item in missing_obligation_ids
+            ]
+        else:
+            hard_failures = []
+        # The report itself is the source-coverage handoff.  If a caller
+        # supplies an explicit source list, use it as the stricter check.
+        covered_obligation_ids = list(
+            dict.fromkeys(source_obligation_ids if source_obligation_ids is not None else obligation_ids)
+        )
+        if source_obligation_ids is not None:
+            missing_source_ids = [item for item in obligation_ids if item not in set(source_obligation_ids)]
+            hard_failures.extend(f"missing_source_obligations:{item}" for item in missing_source_ids)
+    else:
+        hard_failures = []
+
     # Raw benchmark records intentionally carry no locally authored entity,
     # event, or camera labels.  Their executable DirectorPlan is therefore
     # the *internal* coverage contract: it must still reach trajectories,
@@ -189,7 +227,7 @@ def validate_case_coverage(
 
     source = str(generated_code or "")
     source_hash = _source_hash(source)
-    hard_failures: list[str] = []
+    hard_failures = list(hard_failures)
     if not source.strip():
         hard_failures.append("empty_generated_source")
 
@@ -243,4 +281,7 @@ def validate_case_coverage(
         covered_camera_events=sorted(camera_events & set(required_camera_events)),
         source_hash=source_hash,
         coverage_ratio=round(ratio, 6),
+        obligation_ids=obligation_ids,
+        covered_obligation_ids=covered_obligation_ids,
+        missing_obligation_ids=missing_obligation_ids,
     )

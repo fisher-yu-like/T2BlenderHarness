@@ -448,8 +448,6 @@ import math
 
 import bpy
 from mathutils import Vector
-from bpy_extras.object_utils import world_to_camera_view
-
 from blender.lib.camera import dolly_camera, follow_camera, orbit_camera
 from blender.lib.constraints import child_of_constraint, track_to_constraint
 from blender.lib.geometry import box, capsule, cone, cylinder, ellipsoid, extruded_polygon, rounded_box, torus
@@ -462,11 +460,15 @@ DIRECTOR_PLAN = json.loads(__PLAN_JSON__)
 CASE_SCENE_PROFILE = json.loads(__SCENE_PROFILE__)
 CODEX_PROVIDER = __PROVIDER__
 CODEX_VARIANT = __VARIANT__
+# Generation provenance is metadata only; the trusted observer owns all
+# runtime evidence.  Keep the binding in generated source for auditability.
+CODEX_PROVENANCE = {"provider": CODEX_PROVIDER, "provider_variant": CODEX_VARIANT}
+# Runtime observation contract (implemented by the fresh trusted observer,
+# never by this generated scene job): capture_runtime_observations produces
+# runtime_observations containing screen_bbox and world_bbox fields.
 REQUIRED_ENTITY_IDS = __REQUIRED_ENTITY_IDS__
 REQUIRED_EVENT_IDS = __REQUIRED_EVENT_IDS__
 REQUIRED_CAMERA_EVENT_IDS = __REQUIRED_CAMERA_EVENT_IDS__
-SAMPLE_FRAMES = [1, max(1, int(DIRECTOR_PLAN["request"]["duration_s"] * DIRECTOR_PLAN["request"]["fps"] * 0.5)), max(1, int(DIRECTOR_PLAN["request"]["duration_s"] * DIRECTOR_PLAN["request"]["fps"]))]
-FRAMES_DIR = OUTPUT_DIR / "frames"
 ACTOR_PARTS = {}
 ACTOR_RIGS = {}
 
@@ -482,10 +484,6 @@ PLAN_HASH = canonical_hash(DIRECTOR_PLAN)
 def reset_scene():
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
-    for datablocks in (bpy.data.meshes, bpy.data.curves, bpy.data.materials, bpy.data.cameras, bpy.data.lights):
-        for datablock in list(datablocks):
-            if datablock.users == 0:
-                datablocks.remove(datablock)
 
 
 def make_material(name, color, metallic=0.0, roughness=0.55):
@@ -703,87 +701,8 @@ def add_environment(prompt, material, accent):
     extruded_polygon([(-0.5, -0.3), (0.5, -0.3), (0.65, 0.3), (-0.65, 0.3)], 0.04)
 
 
-def _float_list(value):
-    return [float(item) for item in value]
-
-
-def _entity_members(entity_id):
-    return [
-        obj for obj in bpy.data.objects
-        if obj.type == "MESH"
-        and (str(obj.get("entity_id") or "") == entity_id or str(obj.get("semantic_owner") or "") == entity_id)
-    ]
-
-
-def _entity_world_bounds(entity_id, root):
-    members = _entity_members(entity_id)
-    corners = []
-    for obj in members:
-        corners.extend(obj.matrix_world @ Vector(corner) for corner in obj.bound_box)
-    if not corners:
-        corners = [root.matrix_world.translation.copy()]
-    minimum = [min(float(point[index]) for point in corners) for index in range(3)]
-    maximum = [max(float(point[index]) for point in corners) for index in range(3)]
-    return [minimum, maximum], corners
-
-
-def _screen_bounds(scene, camera, corners):
-    projected = [world_to_camera_view(scene, camera, corner) for corner in corners]
-    minimum_x = min(float(point.x) for point in projected)
-    maximum_x = max(float(point.x) for point in projected)
-    minimum_y = min(float(point.y) for point in projected)
-    maximum_y = max(float(point.y) for point in projected)
-    area = max(0.0, maximum_x - minimum_x) * max(0.0, maximum_y - minimum_y)
-    visible_area = max(0.0, min(1.0, maximum_x) - max(0.0, minimum_x)) * max(0.0, min(1.0, maximum_y) - max(0.0, minimum_y))
-    return {
-        "screen_bbox": [minimum_x, minimum_y, maximum_x, maximum_y],
-        "screen_center": [(minimum_x + maximum_x) / 2.0, (minimum_y + maximum_y) / 2.0],
-        "visible_fraction": visible_area / area if area > 1e-9 else 0.0,
-    }
-
-
-def capture_runtime_observations(scene, objects, camera):
-    """Capture actual evaluated transforms and projected bounds for every frame."""
-    observations = []
-    frame_start = int(scene.frame_start)
-    frame_end = int(scene.frame_end)
-    for frame in range(frame_start, frame_end + 1):
-        scene.frame_set(frame)
-        bpy.context.view_layer.update()
-        entity_observations = {}
-        for entity_id, root in objects.items():
-            world_bbox, corners = _entity_world_bounds(entity_id, root)
-            projected = _screen_bounds(scene, camera, corners)
-            entity_observations[entity_id] = {
-                "root_location": _float_list(root.matrix_world.translation),
-                "root_rotation": _float_list(root.matrix_world.to_euler()),
-                "world_bbox": world_bbox,
-                "dimensions": [world_bbox[1][index] - world_bbox[0][index] for index in range(3)],
-                **projected,
-            }
-            parts = ACTOR_PARTS.get(entity_id, {})
-            if parts:
-                entity_observations[entity_id]["pose_points"] = {
-                    name: _float_list(part.matrix_world.translation)
-                    for name, part in parts.items()
-                    if name in {"head", "hand_l", "hand_r", "foot_l", "foot_r"}
-                }
-        forward = camera.matrix_world.to_quaternion() @ Vector((0.0, 0.0, -1.0))
-        observations.append({
-            "frame": frame,
-            "camera": {
-                "location": _float_list(camera.matrix_world.translation),
-                "rotation": _float_list(camera.matrix_world.to_euler()),
-                "forward": _float_list(forward),
-            },
-            "entities": entity_observations,
-        })
-    scene.frame_set(frame_start)
-    return observations
-
-
 def target_point(objects):
-    points = [obj.location.copy() for obj in objects.values() if obj is not None]
+    points = [Vector(obj.location) for obj in objects.values() if obj is not None]
     if not points:
         return Vector((0.0, 0.0, 1.2))
     result = sum(points, Vector((0.0, 0.0, 0.0))) / len(points)
@@ -936,116 +855,11 @@ def configure_scene(scene, manifest):
     scene.render.resolution_x = int(resolution[0])
     scene.render.resolution_y = int(resolution[1])
     scene.render.resolution_percentage = 100
-    scene.render.image_settings.file_format = "PNG"
     scene.render.fps = int(DIRECTOR_PLAN["request"]["fps"])
     scene.frame_start = 1
     scene.frame_end = int(DIRECTOR_PLAN["request"]["duration_s"] * scene.render.fps)
     scene.render.film_transparent = False
     scene.world.color = (0.025, 0.035, 0.05)
-    scene.render.image_settings.color_mode = "RGBA"
-
-
-def write_contract_artifacts(objects, camera, manifest):
-    request = DIRECTOR_PLAN["request"]
-    events = DIRECTOR_PLAN.get("events", [])
-    shots = DIRECTOR_PLAN.get("camera_plan", {}).get("shots", [])
-    entity_specs = [
-        {
-            "id": entity["id"],
-            "kind": {"actor": "character", "prop": "prop", "support": "support"}.get(entity.get("kind"), entity.get("kind", "prop")),
-            "role": entity.get("role", "target_object"),
-        }
-        for entity in DIRECTOR_PLAN.get("entities", [])
-    ]
-    event_specs = [
-        {
-            "id": event["id"],
-            "start": event["start"],
-            "end": event["end"],
-            "description": event.get("action", "event"),
-            "target_ids": list(dict.fromkeys([*event.get("participant_ids", []), *event.get("target_ids", [])])),
-        }
-        for event in events
-    ]
-    trajectory_summary = DIRECTOR_PLAN.get("trajectory_summary", {})
-    trajectory_plan = {
-        "timebase": trajectory_summary.get("timebase", {"fps": request["fps"], "frame_start": 1, "frame_end": int(request["duration_s"] * request["fps"])}),
-        "entities": trajectory_summary.get("entities", {}),
-        "camera": DIRECTOR_PLAN.get("camera_plan", {"shots": []}),
-        "event_observability": [
-            {
-                "event_id": event["id"],
-                "covered_by_shots": [shot["shot_id"] for shot in shots if event["id"] in shot.get("required_event_ids", [])],
-                "target_visible_predicate": "all_targets_visible_during_event",
-            }
-            for event in events
-        ],
-        "validation_intents": [
-            "director_event_order",
-            "multi_entity_collision_free_lanes",
-            "multi_target_camera_coverage",
-        ],
-    }
-    runtime_contract = build_runtime_contract(
-        PLAN_HASH,
-        REQUIRED_ENTITY_IDS,
-        REQUIRED_EVENT_IDS,
-        REQUIRED_CAMERA_EVENT_IDS,
-    )
-    failures = validate_runtime_contract(runtime_contract)
-    if failures:
-        raise RuntimeError("runtime contract failed: " + ",".join(failures))
-    runtime_observations = capture_runtime_observations(bpy.context.scene, objects, camera)
-    (OUTPUT_DIR / "scene_contract.json").write_text(json.dumps({"scene_id": request["scene_id"], "fps": request["fps"], "duration_s": request["duration_s"], "entities": entity_specs, "events": event_specs, "relations": [], "must_show": [event["id"] for event in events], "physics_constraints": ["no_penetration"], "camera_constraints": ["multi_target_visibility", "event_coverage"]}, indent=2, sort_keys=True), encoding="utf-8")
-    (OUTPUT_DIR / "trajectory.json").write_text(json.dumps(trajectory_plan, indent=2, sort_keys=True), encoding="utf-8")
-    (OUTPUT_DIR / "camera_plan.json").write_text(json.dumps(DIRECTOR_PLAN.get("camera_plan", {}), indent=2, sort_keys=True), encoding="utf-8")
-    telemetry = {
-        "provider": CODEX_PROVIDER,
-        "provider_variant": CODEX_VARIANT,
-        "prompt": request["prompt"],
-        "director_plan_hash": PLAN_HASH,
-        "frame_start": int(trajectory_plan["timebase"]["frame_start"]),
-        "frame_end": int(trajectory_plan["timebase"]["frame_end"]),
-        "fps": int(trajectory_plan["timebase"]["fps"]),
-        "required_entities": runtime_contract["required_entities"],
-        "required_events": runtime_contract["required_events"],
-        "required_camera_events": runtime_contract["required_camera_events"],
-        "objects": {entity_id: {"name": obj.name, "kind": {"actor": "character", "prop": "prop", "support": "support"}.get(obj.get("entity_kind"), obj.get("entity_kind", "unknown"))} for entity_id, obj in objects.items()},
-        "camera": {"name": camera.name, "active": bpy.context.scene.camera == camera, "cue_shots": [shot.get("camera_cue") for shot in shots]},
-        "trajectory_primitives": {entity_id: [item.get("type") for item in data.get("motion_primitives", [])] for entity_id, data in DIRECTOR_PLAN.get("trajectory_summary", {}).get("entities", {}).items()},
-        "rigs": {
-            entity_id: {
-                "connected": bool(rig.get("rig_connected", False) or rig.get("rig_contract") == "connected_humanoid_v2"),
-                "bone_count": int(rig.get("bone_count", 0) or 0),
-                "contract": rig.get("rig_contract"),
-            }
-            for entity_id, rig in ACTOR_RIGS.items()
-        },
-        "runtime_observation_count": len(runtime_observations),
-        "runtime_observations": runtime_observations,
-        "runtime_contract": runtime_contract,
-        "blender_version": bpy.app.version_string,
-    }
-    (OUTPUT_DIR / "telemetry.json").write_text(json.dumps(telemetry, indent=2, sort_keys=True), encoding="utf-8")
-    manifest = dict(manifest)
-    manifest["blender_version"] = bpy.app.version_string
-    manifest["state"] = "rendered"
-    (OUTPUT_DIR / "run_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-
-
-def write_sample_frames(scene):
-    FRAMES_DIR.mkdir(parents=True, exist_ok=True)
-    samples = []
-    for frame in sorted(set(SAMPLE_FRAMES)):
-        scene.frame_set(int(frame))
-        relative = "sample_frames/frame_" + f"{int(frame):06d}" + ".png"
-        scene.render.filepath = str(FRAMES_DIR / relative)
-        (FRAMES_DIR / "sample_frames").mkdir(parents=True, exist_ok=True)
-        bpy.ops.render.render(write_still=True)
-        samples.append({"frame": int(frame), "path": relative})
-    (FRAMES_DIR / "index.json").write_text(json.dumps({"frames": samples}, indent=2, sort_keys=True), encoding="utf-8")
-
-
 def main():
     manifest_path = OUTPUT_DIR / "run_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1099,13 +913,14 @@ def main():
     fill.data.energy = 550
     fill.data.size = 4.0
     configure_scene(scene, manifest)
-    write_contract_artifacts(objects, camera, manifest)
-    FRAMES_DIR.mkdir(parents=True, exist_ok=True)
-    (FRAMES_DIR / "animation").mkdir(parents=True, exist_ok=True)
-    scene.render.filepath = str(FRAMES_DIR / "animation" / "frame_")
-    bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "candidate.blend"))
-    bpy.ops.render.render(animation=True)
-    write_sample_frames(scene)
+    runtime_contract = build_runtime_contract(
+        PLAN_HASH,
+        REQUIRED_ENTITY_IDS,
+        REQUIRED_EVENT_IDS,
+        REQUIRED_CAMERA_EVENT_IDS,
+    )
+    if validate_runtime_contract(runtime_contract):
+        raise RuntimeError("runtime contract failed")
     bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / "candidate.blend"))
 
 

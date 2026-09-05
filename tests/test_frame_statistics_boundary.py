@@ -82,3 +82,28 @@ def test_visual_evidence_report_is_artifact_health_not_quality_score(tmp_path: P
     )
     assert realism["score"] == 48.0
     assert realism["evaluator_version"] == "realism-v5-independent-review-boundary"
+
+
+def test_render_frame_health_rejects_uniform_frames_but_accepts_spatial_content(tmp_path: Path):
+    from evaluator.visual_evidence import assess_render_frame_health
+
+    blank = []
+    content = []
+    for index in range(3):
+        blank_path = tmp_path / f"blank_{index:03d}.png"
+        Image.new("RGB", (32, 32), (51, 51, 51)).save(blank_path)
+        blank.append(blank_path)
+        content_path = tmp_path / f"content_{index:03d}.png"
+        image = Image.new("RGB", (32, 32), (51, 51, 51))
+        for x in range(8, 24):
+            for y in range(8, 24):
+                image.putpixel((x, y), (210, 80 + index * 10, 30))
+        image.save(content_path)
+        content.append(content_path)
+
+    blank_health = assess_render_frame_health(blank)
+    content_health = assess_render_frame_health(content)
+
+    assert blank_health["status"] == "blank"
+    assert blank_health["readable_count"] == 3
+    assert content_health["status"] == "visible"

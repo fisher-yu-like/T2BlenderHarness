@@ -32,6 +32,18 @@
 
 当前 training_allowed=false 代表训练接受门禁尚未全部满足，不代表真实视频链路没有跑通。
 
+## 测试入口
+
+测试状态以 GitHub Actions 的 CI 报告为准，README 不固定记录通过数量。跨平台 unit suite 使用当前解释器启动：
+
+    uv run python scripts/run_unit_tests.py -q
+
+真实 Blender integration 与 unit suite 分离，必须显式提供当前机器的 Blender binary：
+
+    uv run python scripts/run_blender_integration.py --blender-bin <path-to-blender> -q
+
+该 integration 测试会启动 Blender 的 factory background mode；未配置 Blender 的本地环境只运行 unit suite。
+
 本分支按 `D:/sy/T2BlenderHarness-improvement-plan-zh.md` 增加了可复核的
 `source-fingerprint-v1`、`paired-statistics-v1`、
 `physics-oracle-v2-obb-bvh-contact-ownership`、`experiment-fingerprint-v1` 和

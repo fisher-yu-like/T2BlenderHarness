@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  unit:
     strategy:
       fail-fast: false
       matrix:
@@ -21,11 +21,28 @@ jobs:
           python-version: "3.11"
       - name: Install development dependencies
         run: uv sync --group dev
-      - name: Run unit and non-Blender tests
-        run: uv run pytest -q
+      - name: Run cross-platform unit tests
+        run: uv run python scripts/run_unit_tests.py -q
       - name: Compile Python modules
         run: uv run python -m compileall -q src evaluator blender scripts training
       - name: Validate benchmark prompt index
         run: uv run python scripts/validate_benchmark_prompt_index.py --root dataset/vbench2-agent-training-index-v1
       - name: Check path portability
         run: uv run python scripts/check_repo_portability.py
+
+  blender-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install development dependencies
+        run: uv sync --group dev
+      - name: Install Blender
+        run: sudo apt-get update && sudo apt-get install --yes blender
+      - name: Run Blender integration tests
+        run: uv run python scripts/run_blender_integration.py --blender-bin blender -q

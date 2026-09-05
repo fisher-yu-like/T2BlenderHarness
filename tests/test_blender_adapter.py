@@ -60,3 +60,21 @@ def test_cli_backend_converts_timeout_to_execution_result(tmp_path):
 
     assert result.status == "timeout"
     assert result.backend == "cli"
+
+
+def test_cli_backend_decodes_blender_output_as_utf8_with_replacement(tmp_path):
+    import subprocess
+
+    from videoact.blender_adapter import BlenderCliBackend
+
+    captured = {}
+
+    def fake_runner(*args, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
+
+    result = BlenderCliBackend(runner=fake_runner).run("scene_script.py", tmp_path)
+
+    assert result.status == "success"
+    assert captured["encoding"] == "utf-8"
+    assert captured["errors"] == "replace"

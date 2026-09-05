@@ -1,9 +1,8 @@
-"""Run one real evaluation batch (test/train/dev) through the assistant arm.
+"""Run one real evaluation batch through GLM generation and Codex review.
 
-Prepares, renders, and deterministically evaluates the requested cases with
-the assistant-session providers, leaving the split awaiting local visual
-review.  After the driving session authors reviews, complete them with
-scripts/complete_assistant_local_reviews.py and summarize with --summarize.
+The default arm uses GLM-5.3-Flash for DirectorPlan and Blender source
+generation, real Blender for execution, and a local read-only Codex provider
+for visual review. No template fallback is enabled.
 """
 
 from __future__ import annotations
@@ -20,10 +19,14 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from evaluator.visual_primary import SCORING_V7_VERSION  # noqa: E402
+from evaluator.codex_visual import CodexVisualReviewProvider  # noqa: E402
 from scripts.train_real_harness import (  # noqa: E402
     build_dynamic_codex_agents,
     run_real_batch_with_inner_loop,
 )
+
+
+DEFAULT_INNER_ATTEMPTS = 3
 
 
 def main() -> int:
@@ -35,6 +38,18 @@ def main() -> int:
     parser.add_argument("--blender-bin", default=r"D:\blender\blender.exe")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout-s", type=int, default=1800)
+    parser.add_argument(
+        "--provider-mode",
+        choices=["glm", "model", "assistant"],
+        default="glm",
+        help="generation provider; glm uses GLM primary with OpenAI fallback",
+    )
+    parser.add_argument(
+        "--visual-review-provider",
+        choices=["codex"],
+        default="codex",
+        help="keep VLM review on the local Codex provider",
+    )
     parser.add_argument("--summarize", action="store_true",
                         help="write test_score_summary.json from the merged split report")
     args = parser.parse_args()
@@ -79,24 +94,26 @@ def main() -> int:
             for line in (Path(args.dataset_root) / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
             if line.strip() and json.loads(line).get("split") == args.split
         ]
-    director, code_agent = build_dynamic_codex_agents(provider_mode="assistant")
+    director, code_agent = build_dynamic_codex_agents(provider_mode=args.provider_mode)
+    visual_provider = CodexVisualReviewProvider(command="codex", timeout_s=args.timeout_s)
     report = run_real_batch_with_inner_loop(
         args.run_root,
         split=args.split,
         case_ids=case_ids,
         dataset_root=args.dataset_root,
-        harness_version="t2blendercodeharness-v5-assistant-session",
+        harness_version="t2blendercodeharness-v6-glm-codex-review",
         evaluator_version=SCORING_V7_VERSION,
         blender_bin=args.blender_bin,
         workers=args.workers,
         timeout_s=args.timeout_s,
-        vlm_model="gpt-5.6-luna",
+        vlm_model=visual_provider.model_alias,
         markdown_path=None,
         director_agent=director,
         code_agent=code_agent,
-        provider_mode="assistant",
+        provider_mode=args.provider_mode,
         code_cache_dir=Path(args.run_root) / "code_cache",
-        max_inner_attempts=2,
+        max_inner_attempts=DEFAULT_INNER_ATTEMPTS,
+        visual_provider=visual_provider,
     )
     print(json.dumps({"status": report.get("status"), "run_root": args.run_root}, indent=2))
     return 0

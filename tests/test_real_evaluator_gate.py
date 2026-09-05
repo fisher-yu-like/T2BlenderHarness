@@ -68,6 +68,16 @@ def test_real_evaluator_flags_semantic_entity_kind_mismatch():
     assert any(f.failure_id == "telemetry_entity_kind_mismatch" for f in report.findings)
 
 
+def test_real_evaluator_accepts_actor_alias_for_character_entity_kind():
+    from evaluator.deterministic import DeterministicEvaluator
+
+    contract, plan, telemetry, artifacts = real_inputs()
+    telemetry["objects"]["character"]["kind"] = "actor"
+    report = DeterministicEvaluator().evaluate_real(contract, plan, telemetry, artifacts)
+
+    assert not any(f.failure_id == "telemetry_entity_kind_mismatch" for f in report.findings)
+
+
 def test_real_evaluator_surfaces_runtime_camera_findings_from_telemetry():
     from evaluator.deterministic import DeterministicEvaluator
 

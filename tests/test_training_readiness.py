@@ -341,6 +341,17 @@ def test_readiness_can_reference_and_verify_a_formal_release_report(tmp_path: Pa
     assert report["formal_release"]["gate_report_hashes"]["G0"]
 
 
+def test_missing_optional_formal_release_is_not_added_to_diagnostic_readiness(tmp_path: Path) -> None:
+    from scripts.check_training_readiness import build_training_readiness_from_project
+
+    report = build_training_readiness_from_project(
+        project_root=tmp_path,
+        golden_root=tmp_path / "missing-golden-review",
+    )
+
+    assert "formal_release" not in report["gates"]
+
+
 def test_readiness_blocks_a_tampered_formal_release_report(tmp_path: Path) -> None:
     import json
 

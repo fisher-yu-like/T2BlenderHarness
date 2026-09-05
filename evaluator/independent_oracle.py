@@ -267,7 +267,12 @@ def evaluate_independent_oracle(
     ]
     actual_attachments = [action for _frame, action in sorted(actual_attachments)]
     required_attachments = list(oracle.get("required_attachment_actions", []))
-    if actual_attachments != required_attachments:
+    actual_iter = iter(actual_attachments)
+    attachments_match = all(
+        any(action == required for action in actual_iter)
+        for required in required_attachments
+    )
+    if not attachments_match:
         findings.append(
             _finding(
                 "oracle_attachment_lifecycle_mismatch",

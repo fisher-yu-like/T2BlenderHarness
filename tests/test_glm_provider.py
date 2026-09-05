@@ -54,6 +54,225 @@ def test_glm_provider_uses_official_v4_endpoint_and_json_object(monkeypatch):
     assert "glm-test-secret" not in json.dumps(provider.last_call(), sort_keys=True)
 
 
+def test_glm_director_provider_discards_only_known_request_echo_fields():
+    from videoact.external_structured_provider import GLMStructuredProvider
+
+    provider = GLMStructuredProvider(
+        response_schema={
+            "type": "object",
+            "properties": {
+                "entities": {"type": "array"},
+                "directives": {"type": "array"},
+                "evidence": {"type": "array"},
+            },
+        },
+        prompt_builder=lambda payload: json.dumps(payload),
+        api_key="glm-test-secret",
+        opener=lambda request, timeout: _Response(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "prompt": "Garden, zoom in.",
+                                    "scene_id": "case-a",
+                                    "provider": "external",
+                                    "policy": "director-v5-glm-structured",
+                                    "obligations": {"required_event_ids": ["obs"]},
+                                    "entities": [],
+                                    "directives": [],
+                                    "evidence": [],
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+        ),
+    )
+
+    result = provider({"prompt": "Garden, zoom in."})
+
+    assert result == {"entities": [], "directives": [], "evidence": []}
+
+
+def test_glm_director_prompt_separates_camera_cues_from_entity_directives():
+    from videoact.external_structured_provider import director_interpretation_boundary
+
+    _schema, build_prompt = director_interpretation_boundary()
+    request = type(
+        "Request",
+        (),
+        {
+            "prompt": "Garden, zoom in.",
+            "scene_id": "case-a",
+            "duration_s": 10.0,
+            "fps": 12,
+            "obligations": {"required_event_ids": ["observe"]},
+        },
+    )()
+    prompt = build_prompt(request).lower()
+
+    assert "camera cue" in prompt
+    assert "target entity" in prompt
+    assert "never use camera" in prompt
+
+
+def test_structured_interpreter_repairs_only_unambiguous_inclusive_evidence_end():
+    from videoact.director_contracts import DirectorEntity, DirectorRequest
+    from videoact.director_prompt import DirectorCameraCue
+    from videoact.director_prompt_llm import StructuredPromptInterpreter
+
+    request = DirectorRequest(
+        prompt="Garden, zoom in.",
+        scene_id="case-a",
+        duration_s=10.0,
+        fps=12,
+        provider="external-glm",
+        policy="director-v5-glm-structured",
+    )
+    interpretation = StructuredPromptInterpreter(
+        lambda _request: {
+            "entities": [
+                {
+                    "id": "garden",
+                    "kind": "environment",
+                    "role": "setting",
+                    "label": "Garden",
+                }
+            ],
+            "directives": [],
+            "camera_cues": [
+                {
+                    "id": "cam-zoom",
+                    "action": "zoom",
+                    "direction": "in",
+                    "evidence_id": "ev-zoom",
+                }
+            ],
+            "evidence": [
+                {
+                    "id": "ev-zoom",
+                    "source": "prompt",
+                    "prompt_span": [8, 14],
+                    "quoted_text": "zoom in",
+                    "claim": "the camera zooms in",
+                }
+            ],
+        }
+    ).interpret(request)
+
+    assert interpretation.evidence[0].prompt_span == (8, 15)
+
+
+def test_structured_interpreter_resolves_grounded_camera_target_after_camera_sentence():
+    from videoact.director_contracts import DirectorRequest
+    from videoact.director_prompt_llm import StructuredPromptInterpreter
+
+    prompt = "The camera orbits around in a clockwise direction. Watch."
+    interpretation = StructuredPromptInterpreter(
+        lambda _request: {
+            "entities": [],
+            "directives": [],
+            "camera_cues": [],
+            "evidence": [],
+            "uncertainties": [
+                {
+                    "id": "unc-orbit-target",
+                    "description": "The orbit target is unresolved.",
+                    "severity": "hard",
+                    "resolved": False,
+                }
+            ],
+        }
+    ).interpret(
+        DirectorRequest(
+            prompt=prompt,
+            scene_id="camera-orbit-watch",
+            duration_s=10.0,
+            fps=12,
+            provider="external-glm",
+            policy="director-v5-glm-structured",
+        )
+    )
+
+    assert [entity.label for entity in interpretation.entities] == ["Watch"]
+    assert interpretation.camera_cues[0].action == "orbit"
+    assert interpretation.camera_cues[0].direction == "clockwise"
+    assert interpretation.uncertainties[0].resolved is True
+
+
+def test_structured_interpreter_repairs_only_unambiguous_one_character_span_shift():
+    from videoact.director_contracts import DirectorRequest
+    from videoact.director_prompt_llm import StructuredPromptInterpreter
+
+    request = DirectorRequest(
+        prompt="Observe a cup of water.",
+        scene_id="case-a",
+        duration_s=10.0,
+        fps=12,
+        provider="external-glm",
+        policy="director-v5-glm-structured",
+    )
+    interpretation = StructuredPromptInterpreter(
+        lambda _request: {
+            "entities": [
+                {"id": "cup", "kind": "prop", "role": "subject", "label": "a cup of water"},
+            ],
+            "directives": [],
+            "camera_cues": [],
+            "evidence": [
+                {
+                    "id": "ev-cup",
+                    "source": "prompt",
+                    "prompt_span": [7, 21],
+                    "quoted_text": "a cup of water",
+                    "claim": "the prompt names a cup of water",
+                },
+            ],
+        }
+    ).interpret(request)
+
+    assert interpretation.evidence[0].prompt_span == (8, 22)
+
+
+def test_structured_interpreter_trims_small_unique_quote_overrun_to_prompt_span():
+    from videoact.director_contracts import DirectorRequest
+    from videoact.director_prompt_llm import StructuredPromptInterpreter
+
+    prompt = "In a distant kingdom, there was an ancient legend about the power of five stars. The first adventurer entered the sky mountains."
+    quoted = "In a distant kingdom, there was an ancient legend about the power of five stars. T"
+    interpretation = StructuredPromptInterpreter(
+        lambda _request: {
+            "entities": [],
+            "directives": [],
+            "camera_cues": [],
+            "evidence": [
+                {
+                    "id": "ev-legend",
+                    "source": "prompt",
+                    "prompt_span": [0, len(prompt.split(" The first")[0])],
+                    "quoted_text": quoted,
+                    "claim": "the prompt describes the legend",
+                },
+            ],
+        }
+    ).interpret(
+        DirectorRequest(
+            prompt=prompt,
+            scene_id="case-a",
+            duration_s=10.0,
+            fps=12,
+            provider="external-glm",
+            policy="director-v5-glm-structured",
+        )
+    )
+
+    assert interpretation.evidence[0].quoted_text == prompt.split(" The first")[0]
+    assert interpretation.evidence[0].prompt_span == (0, len(prompt.split(" The first")[0]))
+
+
 def test_glm_provider_restores_transport_token_only_in_generated_source():
     from videoact.external_structured_provider import GLMStructuredProvider
 
@@ -87,6 +306,39 @@ def test_glm_provider_restores_transport_token_only_in_generated_source():
     assert result["generated_code"] == "from json import dumps as serialize_json\npath = 'telemetry.json'\n"
     assert result["generation_provenance"]["transport_token_restored"] == "__JTK__"
     assert result["generation_provenance"]["transport_token_replacement_count"] == 3
+
+
+def test_openai_fallback_codegen_restores_the_same_transport_placeholder():
+    from videoact.external_structured_provider import OpenAICompatibleStructuredProvider
+
+    provider = OpenAICompatibleStructuredProvider.for_codegen(
+        api_key="openai-test-secret",
+        base_url="https://provider.example/v1",
+        opener=lambda request, timeout: _Response(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "status": "success",
+                                    "generated_code": (
+                                        "from __JTK__ import dumps as serialize___JTK__\n"
+                                        "path = 'telemetry.__JTK__'\n"
+                                    ),
+                                    "library_calls": [],
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+        ),
+    )
+
+    result = provider({"director_plan": {}, "director_plan_hash": "a" * 64})
+
+    assert result["generated_code"] == "from json import dumps as serialize_json\npath = 'telemetry.json'\n"
 
 
 def test_glm_provider_recovers_only_identifiable_endpoint_token_truncation():
@@ -174,6 +426,9 @@ def test_glm_codegen_factory_returns_a_structured_codegen_response():
     assert "a" * 64 in provider.prompt_builder({"director_plan_hash": "a" * 64, "director_plan": {}})
     assert "vertices" in code_prompt
     assert "from_pydata" in code_prompt
+    assert "entity_id" in code_prompt
+    assert "entity_kind" in code_prompt
+    assert "trusted observer reads" in code_prompt
     assert "exact module" in code_prompt.lower()
     assert "frames/animation/frame_" in code_prompt
     assert "Path(__file__).resolve().parent" in code_prompt
@@ -183,6 +438,22 @@ def test_glm_codegen_factory_returns_a_structured_codegen_response():
     assert "blank import" in code_prompt
     assert "json.dump" in code_prompt
     assert "__JTK__" in code_prompt
+    assert "length_xy" in code_prompt
+    assert "math.sqrt" in code_prompt
+    assert "to_track_quat" in code_prompt
+    assert "'-Z'" in code_prompt
+    assert "BLENDER_EEVEE" in code_prompt
+    assert "BLENDER_EEVEE_NEXT" in code_prompt
+    assert "math.cos" in code_prompt
+    assert "math.pi" in code_prompt
+    assert "camera.data.clip_start" in code_prompt
+    assert "camera.data.clip_end" in code_prompt
+    assert "action.fcurves" in code_prompt
+    assert "keyframe_insert" in code_prompt
+    assert "strictly positive" in code_prompt
+    assert "obj.data.materials" in code_prompt
+    assert "scene.render.clip_start" in code_prompt
+    assert "never subtract them directly" in code_prompt
 
 
 def test_codegen_provider_assigns_transport_call_id_when_model_omits_it():

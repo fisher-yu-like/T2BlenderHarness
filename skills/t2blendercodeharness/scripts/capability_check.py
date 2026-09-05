@@ -183,6 +183,7 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
         optimizer = MetaHarnessOptimizer(output_dir=root / "out" / "skill-capability-check")
         failure = {
             "case_id": "skill-probe-01",
+            "split": "train",
             "findings": [
                 {
                     "failure_id": "camera_event_uncovered",
@@ -195,7 +196,7 @@ def run_capability_check(project_root: str | Path) -> dict[str, Any]:
                 }
             ],
         }
-        optimizer.propose([failure, {**failure, "case_id": "skill-probe-02"}])
+        optimizer.propose([failure, {**failure, "case_id": "skill-probe-02", "split": "train"}])
         checks.append(_check("one_owner_proposal", True, "repeated failure yields a bounded proposal"))
         try:
             optimizer.propose([{"case_id": "pass-01", "findings": []}])

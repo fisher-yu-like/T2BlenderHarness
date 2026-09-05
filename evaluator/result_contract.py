@@ -34,6 +34,9 @@ class EvaluationResult(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     evidence_completeness: float = Field(ge=0, le=1)
     reasons: list[str] = Field(default_factory=list)
+    # Identity-only trace anchors; these are attached after blind visual
+    # judgement and are never part of the Judge input payload.
+    obligation_ids: list[str] = Field(default_factory=list)
 
 
 def _score(value: Any) -> float | None:
@@ -75,6 +78,7 @@ def build_evaluation_result(
     realism_score: float | None,
     required_event_scores: Mapping[str, float | None] | None = None,
     confidence: float | None = None,
+    obligation_ids: list[str] | None = None,
 ) -> EvaluationResult:
     """Build a result without collapsing missing evidence into a numeric score.
 
@@ -104,6 +108,7 @@ def build_evaluation_result(
             confidence=None,
             evidence_completeness=0.0,
             reasons=reasons,
+            obligation_ids=list(obligation_ids or []),
         )
 
     if required_event_scores is None:
@@ -144,6 +149,7 @@ def build_evaluation_result(
         confidence=_score(confidence) / 100.0 if confidence is not None and float(confidence) > 1.0 else confidence,
         evidence_completeness=round(completeness, 4),
         reasons=reasons,
+        obligation_ids=list(obligation_ids or []),
     )
 
 

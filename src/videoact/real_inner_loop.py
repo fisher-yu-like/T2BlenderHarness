@@ -12,13 +12,15 @@ from __future__ import annotations
 import json
 import hashlib
 import shutil
+import inspect
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 
 PrepareCallback = Callable[[list[str], int], dict[str, Any]]
 RenderCallback = Callable[[list[str], int], dict[str, Any]]
 EvaluateCallback = Callable[[str, int], dict[str, Any]]
+StageCallback = Callable[..., dict[str, Any]]
 
 
 def _archive_case(split_root: Path, case_id: str, attempt: int) -> str | None:
@@ -343,4 +345,233 @@ def run_real_inner_loop(
     return result
 
 
-__all__ = ["run_real_inner_loop"]
+def _invoke_stage_callback(callback: StageCallback, case_id: str, state: dict[str, Any], attempt: int) -> dict[str, Any]:
+    """Invoke a stage hook once without signature-based hidden retries."""
+
+    try:
+        signature = inspect.signature(callback)
+        positional = [
+            parameter
+            for parameter in signature.parameters.values()
+            if parameter.kind
+            in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+        ]
+        if any(parameter.kind == inspect.Parameter.VAR_POSITIONAL for parameter in signature.parameters.values()) or len(positional) >= 3:
+            value = callback(case_id, dict(state), attempt)
+        elif len(positional) == 2:
+            value = callback(case_id, dict(state))
+        elif len(positional) == 1:
+            value = callback(case_id)
+        else:
+            value = callback()
+    except (TypeError, ValueError):
+        # Opaque callables are still called exactly once with the documented
+        # three-argument contract.
+        value = callback(case_id, dict(state), attempt)
+    if not isinstance(value, dict):
+        raise ValueError("stage callback must return an object")
+    return value
+
+
+def _stage_success(value: Mapping[str, Any]) -> bool:
+    return str(value.get("status") or "").casefold() in {"success", "pass", "passed", "complete", "completed", "valid"}
+
+
+def _stage_hashes(value: Mapping[str, Any]) -> dict[str, Any]:
+    hashes = value.get("hashes") or value.get("output_hashes") or value.get("artifact_hashes")
+    if isinstance(hashes, Mapping):
+        return {str(key): str(item) for key, item in hashes.items()}
+    # A stage may return explicit plan/source/blend hashes without wrapping
+    # them; retain them as lineage rather than inventing file contents.
+    return {
+        str(key): str(value[key])
+        for key in ("plan_hash", "source_hash", "blend_hash", "telemetry_hash", "mp4_hash")
+        if value.get(key) is not None
+    }
+
+
+def run_stage_aware_inner_loop(
+    case_ids: Iterable[str],
+    split_root: str | Path,
+    *,
+    director: StageCallback,
+    codegen: StageCallback,
+    executor: StageCallback,
+    evaluator: StageCallback,
+    observer: StageCallback | None = None,
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    """Run retries at the first failed stage while preserving valid upstreams.
+
+    The callbacks are intentionally stage-specific.  A Director failure
+    retries Director; a CodeAgent failure keeps the valid plan; executor and
+    observer failures keep plan/source/blend respectively; evaluator
+    transport failures keep every prior artifact.  A valid video with a
+    semantic failure is terminal evidence and is never regenerated here.
+    """
+
+    if not 1 <= max_attempts <= 5:
+        raise ValueError("max_attempts must be between 1 and 5")
+    values = [str(case_id) for case_id in case_ids]
+    if not values or len(values) != len(set(values)):
+        raise ValueError("case IDs must be non-empty and unique")
+    root = Path(split_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    progress = root / "stage_retry_progress.jsonl"
+    if progress.exists():
+        raise FileExistsError(f"stage retry progress already exists: {progress}")
+    cases: dict[str, dict[str, Any]] = {
+        case_id: {
+            "case_id": case_id,
+            "status": "pending",
+            "selected_attempt": None,
+            "attempts": [],
+            "stage_call_counts": {},
+        }
+        for case_id in values
+    }
+
+    for case_id in values:
+        state: dict[str, Any] = {"case_id": case_id, "stage": "director"}
+        stage = "director"
+        total_attempts = 0
+        retry_count = 0
+        terminal = False
+        # ``max_attempts`` is the shared retry budget.  Successful progression
+        # through the five stages does not consume a retry; a failed stage
+        # consumes one and is the only stage invoked again.
+        while not terminal and retry_count <= max_attempts:
+            total_attempts += 1
+            callback = {
+                "director": director,
+                "codegen": codegen,
+                "executor": executor,
+                "observer": observer,
+                "evaluator": evaluator,
+            }.get(stage)
+            if callback is None:
+                raise ValueError(f"stage callback is not configured: {stage}")
+            input_hashes = _stage_hashes(state)
+            try:
+                output = _invoke_stage_callback(callback, case_id, state, total_attempts)
+            except Exception as exc:
+                output = {
+                    "status": "failed",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "retryable": True,
+                }
+            cases[case_id]["stage_call_counts"][stage] = cases[case_id]["stage_call_counts"].get(stage, 0) + 1
+            output_hashes = _stage_hashes(output)
+            if _stage_success(output):
+                state.update({key: value for key, value in output.items() if key not in {"status", "reason"}})
+                state["stage"] = stage
+                if stage == "director":
+                    stage = "codegen"
+                elif stage == "codegen":
+                    stage = "executor"
+                elif stage == "executor":
+                    stage = "observer" if observer is not None else "evaluator"
+                elif stage == "observer":
+                    stage = "evaluator"
+                elif stage == "evaluator":
+                    cases[case_id]["status"] = "success"
+                    cases[case_id]["selected_attempt"] = total_attempts
+                    cases[case_id]["evaluation"] = output
+                    terminal = True
+                continue
+
+            semantic = (
+                stage == "evaluator"
+                and str(output.get("execution_status") or "").casefold() == "valid"
+                and str(output.get("semantic_status") or "").casefold()
+                in {"failed_required_event", "semantic_failed", "uncertain", "semantic_uncertain"}
+            )
+            terminal_failure = bool(output.get("retryable") is False) and not semantic
+            retry_stage = stage
+            if semantic:
+                status = "semantic_failed" if "failed" in str(output.get("semantic_status") or "").casefold() else "semantic_uncertain"
+                cases[case_id]["status"] = status
+                cases[case_id]["selected_attempt"] = total_attempts
+                cases[case_id]["evaluation"] = output
+                entry = {
+                    "attempt": total_attempts,
+                    "case_id": case_id,
+                    "status": status,
+                    "retry_stage": "outer_loop",
+                    "parent_attempt_id": f"{case_id}:attempt-{max(0, total_attempts - 1):02d}",
+                    "reason": str(output.get("reason") or status),
+                    "input_hashes": input_hashes,
+                    "output_hashes": output_hashes,
+                    "detail": output,
+                }
+                cases[case_id]["attempts"].append(entry)
+                _write_progress(progress, entry)
+                terminal = True
+                continue
+
+            if terminal_failure:
+                cases[case_id]["status"] = "terminal_failed"
+                cases[case_id]["selected_attempt"] = total_attempts
+                cases[case_id]["evaluation"] = output
+                entry = {
+                    "attempt": total_attempts,
+                    "case_id": case_id,
+                    "status": "terminal_failed",
+                    "retry_stage": "outer_loop",
+                    "parent_attempt_id": f"{case_id}:attempt-{max(0, total_attempts - 1):02d}",
+                    "reason": str(output.get("reason") or f"{stage}_marked_non_retryable"),
+                    "input_hashes": input_hashes,
+                    "output_hashes": output_hashes,
+                    "detail": output,
+                }
+                cases[case_id]["attempts"].append(entry)
+                _write_progress(progress, entry)
+                terminal = True
+                continue
+
+            entry = {
+                "attempt": total_attempts,
+                "case_id": case_id,
+                "status": "retryable_failure",
+                "retry_stage": retry_stage,
+                "parent_attempt_id": f"{case_id}:attempt-{max(0, total_attempts - 1):02d}",
+                "reason": str(output.get("reason") or output.get("status") or f"{stage}_failed"),
+                "input_hashes": input_hashes,
+                "output_hashes": output_hashes,
+                "detail": output,
+            }
+            cases[case_id]["attempts"].append(entry)
+            _write_progress(progress, entry)
+            # Keep successful upstream state and retry only this stage.  The
+            # callback may return replacement hashes on its next success.
+            state["stage"] = stage
+            retry_count += 1
+        if not terminal:
+            cases[case_id]["status"] = "exhausted"
+            cases[case_id]["reason"] = "max_stage_retry_attempts_exhausted"
+
+    result = {
+        "status": "completed" if all(item["status"] in {"success", "semantic_failed", "semantic_uncertain"} for item in cases.values()) else "exhausted",
+        "max_attempts": max_attempts,
+        "case_count": len(values),
+        "completed_count": sum(item["status"] == "success" for item in cases.values()),
+        "exhausted_count": sum(item["status"] == "exhausted" for item in cases.values()),
+        "progress_path": str(progress.resolve()),
+        "cases": cases,
+        "retry_policy": {
+            "director_failure": "director",
+            "codegen_failure": "codegen",
+            "executor_failure": "executor",
+            "observer_failure": "observer",
+            "evaluator_transport_failure": "evaluator",
+            "semantic_failure": "outer_loop_terminal",
+        },
+    }
+    (root / "stage_retry_report.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return result
+
+
+__all__ = ["run_real_inner_loop", "run_stage_aware_inner_loop"]

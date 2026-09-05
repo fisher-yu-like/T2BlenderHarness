@@ -34,6 +34,7 @@ def create_observer_request(
     observer_source_hash: str,
     observer_version: str = OBSERVER_SCHEMA_VERSION,
     mesh_entity_ids: list[str] | None = None,
+    obligation_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create a one-use host request consumed by the trusted Blender process."""
 
@@ -46,6 +47,8 @@ def create_observer_request(
     }
     if mesh_entity_ids:
         payload["mesh_entity_ids"] = list(dict.fromkeys(str(item) for item in mesh_entity_ids if str(item).strip()))
+    if obligation_ids:
+        payload["obligation_ids"] = list(dict.fromkeys(str(item) for item in obligation_ids if str(item).strip()))
     return payload
 
 
@@ -56,12 +59,14 @@ def write_observer_request(
     observer_source_hash: str,
     observer_version: str = OBSERVER_SCHEMA_VERSION,
     mesh_entity_ids: list[str] | None = None,
+    obligation_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     payload = create_observer_request(
         candidate_blend_hash=candidate_blend_hash,
         observer_source_hash=observer_source_hash,
         observer_version=observer_version,
         mesh_entity_ids=mesh_entity_ids,
+        obligation_ids=obligation_ids,
     )
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +76,22 @@ def write_observer_request(
 
 def _failure(*items: str) -> dict[str, Any]:
     return {"status": "fail", "trusted": False, "failures": list(dict.fromkeys(items)), "telemetry": None}
+
+
+def _forbidden_semantic_fields(value: Any, forbidden: set[str]) -> set[str]:
+    """Find semantic self-attestation keys at every nesting level."""
+
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            normalized = str(key).strip().casefold()
+            if normalized in forbidden:
+                found.add(str(key))
+            found.update(_forbidden_semantic_fields(child, forbidden))
+    elif isinstance(value, list):
+        for child in value:
+            found.update(_forbidden_semantic_fields(child, forbidden))
+    return found
 
 
 def read_trusted_observer_output(
@@ -120,6 +141,7 @@ def read_trusted_observer_output(
         failures.append("telemetry_hash_mismatch")
     if telemetry.get("schema_version") != OBSERVER_SCHEMA_VERSION:
         failures.append("telemetry_schema_version_mismatch")
+    requested_obligation_ids: list[str] = []
     required_telemetry = {
         "frame_start",
         "frame_end",
@@ -139,7 +161,7 @@ def read_trusted_observer_output(
     }
     failures.extend(
         f"observer_emitted_forbidden_semantic_field:{field}"
-        for field in sorted(forbidden_semantic_fields & set(telemetry))
+        for field in sorted(_forbidden_semantic_fields(telemetry, forbidden_semantic_fields))
     )
     request_path = root / OBSERVER_REQUEST_NAME
     if require_request:
@@ -152,12 +174,21 @@ def read_trusted_observer_output(
                 request = {}
                 failures.append(f"observer_request_unreadable:{type(exc).__name__}")
             if isinstance(request, dict):
+                requested_obligation_ids = [
+                    str(item)
+                    for item in request.get("obligation_ids", [])
+                    if isinstance(item, str) and item.strip()
+                ]
                 if manifest.get("request_nonce") != request.get("nonce"):
                     failures.append("observer_request_nonce_mismatch")
                 if request.get("candidate_blend_hash") != expected_blend_hash:
                     failures.append("observer_request_blend_hash_mismatch")
                 if request.get("observer_source_hash") != expected_source_hash:
                     failures.append("observer_request_source_hash_mismatch")
+                if list(telemetry.get("obligation_ids", [])) != list(dict.fromkeys(requested_obligation_ids)):
+                    failures.append("observer_obligation_ids_mismatch")
+                if list(manifest.get("obligation_ids", [])) != list(dict.fromkeys(requested_obligation_ids)):
+                    failures.append("observer_manifest_obligation_ids_mismatch")
     if failures:
         return _failure(*failures)
     return {

@@ -12,10 +12,9 @@ def test_payload_normalizes_canonical_model_to_endpoint_id(tmp_path):
     Image.new("RGB", (4, 4), (255, 255, 255)).save(frame)
     payload = build_responses_payload(
         prompt="Observe.",
-        scene_contract={"events": []},
         frame_paths=[frame],
-        deterministic_findings=[],
         model="gpt-5.6-Terra",
+        frame_metadata=[{"frame": 1, "timecode": "00:00:00.000"}],
     )
 
     assert payload["model"] == "gpt-5.6-terra"

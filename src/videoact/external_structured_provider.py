@@ -34,11 +34,12 @@ GLM_JSON_TOKEN = "__JTK__"
 def _restore_glm_json_token(result: dict[str, Any]) -> dict[str, Any]:
     """Restore a transport-safe token only inside model-generated source.
 
-    ``glm-5.3-flash`` currently drops the consecutive ``json`` token from
-    code strings returned inside a JSON-object response.  The protocol uses a
-    token that is not affected by that behavior, then restores it before any
-    source validation.  This is a lossless transport normalization, not a
-    source/template fallback; all static and real-Blender gates still run.
+    ``glm-5.3-flash`` can drop the consecutive ``json`` token from code
+    strings returned inside a JSON-object response. The codegen prompt uses a
+    transport-safe token for both the primary and fallback providers, then
+    restores it before source validation. This is a lossless transport
+    normalization, not a source/template fallback; all static and real-
+    Blender gates still run.
     """
 
     source = result.get("generated_code")
@@ -151,6 +152,36 @@ def _parse_chat_json(raw: Mapping[str, Any]) -> dict[str, Any]:
     return value
 
 
+def _strip_director_request_echo(result: dict[str, Any]) -> dict[str, Any]:
+    """Drop known request-context echoes before local contract validation.
+
+    Some OpenAI-compatible models repeat the prompt envelope (``prompt``,
+    ``scene_id``, ``obligations`` and similar fields) beside the requested
+    interpretation, even when the response schema excludes it.  Those fields
+    are transport echoes, not planner claims; discard only this closed list and
+    leave every interpretation field untouched so Pydantic remains the
+    semantic gate.
+    """
+
+    context_fields = {
+        "prompt",
+        "prompt_length_chars",
+        "span_convention",
+        "scene_id",
+        "duration_s",
+        "fps",
+        "obligations",
+        "schema",
+        "provider",
+        "policy",
+    }
+    return {
+        key: value
+        for key, value in result.items()
+        if key not in context_fields
+    }
+
+
 def director_interpretation_boundary() -> tuple[dict[str, Any], Callable[[Any], str]]:
     """Shared Director interpretation schema and prompt builder."""
 
@@ -167,8 +198,16 @@ def director_interpretation_boundary() -> tuple[dict[str, Any], Callable[[Any], 
             "Return only JSON; preserve exact evidence spans and do not invent unsupported entities, "
             "actions, or camera facts. Evidence offsets are Python-style zero-based, half-open "
             "character ranges [start, end); valid end is at most prompt_length_chars. If you cannot "
-            "calculate an exact span, set prompt_span and quoted_text to null instead of guessing. "
-            "Do not use inclusive end offsets. Unresolved material uncertainty must be hard.\n"
+            "calculate an exact span by checking prompt[prompt_span[0]:prompt_span[1]] against "
+            "quoted_text before returning; do not count punctuation or whitespace by eye. If you "
+            "cannot calculate an exact span, set prompt_span and quoted_text to null instead of guessing. "
+            "Do not use inclusive end offsets. Unresolved material uncertainty must be hard. "
+            "For a concise benchmark prompt containing an explicit subject followed by a camera cue, "
+            "the subject is a valid visible environment/prop target and the camera cue is an executable "
+            "observe event; do not mark the target unresolved merely because its styling or contents are "
+            "unspecified. Keep only optional appearance detail as soft uncertainty. Keep camera cues in "
+            "camera_cues; their observe directive must target the visible subject entity, never use camera "
+            "as a target entity, and never invent a camera entity solely to satisfy a camera cue.\n"
             + json.dumps(
                 {
                     "prompt": prompt_text,
@@ -260,6 +299,11 @@ def build_codegen_prompt(payload: Any, normalized_schema: Mapping[str, Any]) -> 
         "forbidden. The verified geometry functions return a (vertices, faces) tuple, not a Blender "
         "object: create a mesh with bpy.data.meshes.new, call mesh.from_pydata(vertices, [], faces), "
         "then create/link the bpy object before assigning name, materials, animation, or parenting. "
+        "For every visual entity in DIRECTOR_PLAN, set the exact observer metadata on its primary mesh "
+        "object before saving: obj['entity_id'] must equal the plan entity ID, obj['entity_kind'] must "
+        "equal the plan entity kind, and obj['geometry_style'] should describe the generated geometry. "
+        "Do not rely on the Blender object name alone for entity discovery; the trusted observer reads these "
+        "custom properties from the saved candidate.blend. "
         "Typed return contracts are literal: geometry returns (vertices, faces); camera returns a list "
         "of CameraKeyframe dataclasses accessed as .frame, .location, and .target (never tuple indexing "
         "or .look_at); constraints return ConstraintSpec dataclasses; scaffolding returns mappings or "
@@ -271,10 +315,36 @@ def build_codegen_prompt(payload: Any, normalized_schema: Mapping[str, Any]) -> 
         "frames/index.json; do not truncate either filename or an attribute such as json.dump. Prefer "
         "Path.write_text(serialize___JTK__(payload), encoding='utf-8') for these two artifacts, which "
         "avoids an unnecessary open/dump sequence. "
+        "The runtime is Blender 5.1: mathutils.Vector has no length_xy() method. For a horizontal "
+        "vector length, compute math.sqrt(vector.x * vector.x + vector.y * vector.y) (or use a "
+        "verified equivalent) and never call Vector.length_xy(). CameraKeyframe.location and "
+        "CameraKeyframe.target are tuples; never subtract them directly. Convert each to a "
+        "mathutils.Vector first or subtract their numeric components explicitly. For every camera "
+        "keyframe, orient the Blender camera toward the resolved target with "
+        "(Vector(target) - Vector(location)).to_track_quat('-Z', 'Y').to_euler() (or an equivalent "
+        "verified look-at construction); do not hand-derive Euler signs or leave the camera pointing "
+        "along an arbitrary axis. Keep the resolved subject inside the camera frame and configure "
+        "If the source calls Vector directly, include the complete line `from mathutils import Vector`; "
+        "if it calls mathutils.Vector, include `import mathutils`; never use either name without its "
+        "matching import. "
+        "sensible camera.data.clip_start and camera.data.clip_end values before rendering; never "
+        "write scene.render.clip_start or scene.render.clip_end because those attributes do not exist. "
+        "The target Blender executable is version 5.1.2: its Eevee render-engine enum is exactly "
+        "'BLENDER_EEVEE'; never emit 'BLENDER_EEVEE_NEXT', which is not a valid enum in this runtime. "
+        "If using easing or trigonometry, import math explicitly and qualify calls as math.cos, "
+        "math.sin, and math.pi; never emit bare cos, sin, or pi names. "
+        "Blender 5.1 Action data has no direct action.fcurves collection; keyframe animated objects "
+        "with object.keyframe_insert or another Blender 5.1-supported API, and never iterate "
+        "action.fcurves. All geometry radius, depth, height, width, and scale values passed to "
+        "verified primitives must be strictly positive; never pass a literal 0 or 0.0 for any "
+        "radius, depth, height, width, or scale argument. For a mesh object's material slots use "
+        "obj.data.materials; Blender Object itself has no materials collection. "
         "For the artifact contract, set scene.render.image_settings.file_format='PNG', set "
         "scene.render.filepath to the absolute job path ending in frames/animation/frame_, and call "
         "bpy.ops.render.render(animation=True) so the fixed observer can collect numbered animation "
         "frames. Do not write an MP4 from the generated job. "
+        "For every executable entity and event in DIRECTOR_PLAN, materialize the matching Blender object "
+        "or animation/camera binding; do not omit an environment subject merely because it is static. "
         "Return no markdown fences.\n"
         + opening_protocol
         + "Authoritative verified import table (copy the module literally; category is not a module):\n"
@@ -454,9 +524,10 @@ class OpenAICompatibleStructuredProvider:
             if not isinstance(raw, Mapping):
                 raise ValueError("structured chat response must be an object")
             result = _parse_chat_json(raw)
+            if self.stage == "director":
+                result = _strip_director_request_echo(result)
             if self.stage == "blender_code":
-                if self.provider_kind == "zhipu_glm_openai_compatible":
-                    result = _restore_glm_json_token(result)
+                result = _restore_glm_json_token(result)
                 # The model must not be able to invent provenance.  Bind the
                 # typed response to the transport call that produced it.
                 result["llm_call_id"] = call_id
@@ -548,6 +619,68 @@ class OpenAICompatibleStructuredProvider:
         )
 
 
+class FallbackStructuredProvider:
+    """Try a primary structured provider and fail over to a secondary one.
+
+    The wrapper only changes transport availability. Both providers retain
+    their own schema, prompt, identity, and call provenance; no generated
+    source or semantic response is fabricated by the fallback layer.
+    """
+
+    def __init__(self, *, primary: Any, fallback: Any) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.stage = str(getattr(primary, "stage", getattr(fallback, "stage", "unknown")))
+        self.provider_kind = str(getattr(primary, "provider_kind", "structured_primary"))
+        self.model_id = str(getattr(primary, "model_id", "primary"))
+        self.model_version = str(getattr(primary, "model_version", "unknown"))
+        self.template_backed = False
+        self.llm_generated = True
+        self.fallback_used = False
+        self.fallback_errors: list[str] = []
+        self.call_records: list[dict[str, Any]] = []
+        self._seen_counts = {id(primary): 0, id(fallback): 0}
+
+    def _sync_records(self, provider: Any) -> None:
+        records = getattr(provider, "call_records", None)
+        if not isinstance(records, list):
+            return
+        identity = id(provider)
+        before = self._seen_counts.get(identity, 0)
+        fresh = records[before:]
+        self._seen_counts[identity] = len(records)
+        for record in fresh:
+            if isinstance(record, dict):
+                self.call_records.append(dict(record))
+
+    def __call__(self, payload: Any) -> dict[str, Any]:
+        try:
+            result = self.primary(payload)
+        except Exception as primary_error:
+            self._sync_records(self.primary)
+            self.fallback_used = True
+            self.fallback_errors.append(f"{type(primary_error).__name__}: {primary_error}")
+            try:
+                result = self.fallback(payload)
+            except Exception as fallback_error:
+                self._sync_records(self.fallback)
+                raise RuntimeError(
+                    "structured primary provider failed and fallback provider failed: "
+                    f"primary={type(primary_error).__name__}:{primary_error}; "
+                    f"fallback={type(fallback_error).__name__}:{fallback_error}"
+                ) from fallback_error
+            self._sync_records(self.fallback)
+            return result
+        self._sync_records(self.primary)
+        return result
+
+    def last_call(self, stage: str | None = None) -> dict[str, Any] | None:
+        for record in reversed(self.call_records):
+            if stage is None or record.get("stage") == stage:
+                return record
+        return None
+
+
 class GLMStructuredProvider(OpenAICompatibleStructuredProvider):
     """Official Zhipu GLM-5.3-Flash provider for both generation stages."""
 
@@ -595,7 +728,11 @@ class GLMStructuredProvider(OpenAICompatibleStructuredProvider):
 
     @classmethod
     def for_director(cls, **kwargs: Any) -> "GLMStructuredProvider":
-        kwargs.setdefault("max_tokens", 6000)
+        # Complex_Plot prompts can require many prompt-grounded events and
+        # evidence entries. The larger response budget and the default high
+        # reasoning effort keep the semantic interpretation complete.
+        kwargs.setdefault("max_tokens", 12000)
+        kwargs.setdefault("reasoning_effort", "high")
         return super().for_director(**kwargs)  # type: ignore[return-value]
 
     @classmethod
@@ -605,4 +742,9 @@ class GLMStructuredProvider(OpenAICompatibleStructuredProvider):
         return super().for_codegen(**kwargs)  # type: ignore[return-value]
 
 
-__all__ = ["GLMStructuredProvider", "OpenAICompatibleStructuredProvider", "_chat_completions_endpoint"]
+__all__ = [
+    "FallbackStructuredProvider",
+    "GLMStructuredProvider",
+    "OpenAICompatibleStructuredProvider",
+    "_chat_completions_endpoint",
+]

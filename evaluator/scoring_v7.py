@@ -182,6 +182,7 @@ def score_v7(
             for key in (
                 "object_trajectory",
                 "character_trajectory",
+                "event_timing",
                 "camera_coverage",
                 "camera_innovation",
                 "visual_clarity",

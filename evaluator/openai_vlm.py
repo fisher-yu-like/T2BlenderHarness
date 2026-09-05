@@ -54,10 +54,12 @@ def _image_data_url(path: str | Path) -> str:
 def build_responses_payload(
     *,
     prompt: str,
-    scene_contract: Any,
     frame_paths: list[str | Path],
-    deterministic_findings: list[Any],
     model: str,
+    video_path: str | Path | None = None,
+    frame_metadata: list[dict[str, Any]] | None = None,
+    scene_contract: Any | None = None,
+    deterministic_findings: list[Any] | None = None,
     harness_version: str | None = None,
 ) -> dict[str, Any]:
     del scene_contract, deterministic_findings, harness_version
@@ -65,6 +67,10 @@ def build_responses_payload(
         "blind_review_version": "primary-blind-v1",
         "prompt": prompt,
     }
+    if video_path is not None:
+        context["video_path"] = str(Path(video_path).resolve())
+    if frame_metadata:
+        context["frame_metadata"] = list(frame_metadata)
     content: list[dict[str, Any]] = [
         {
             "type": "input_text",
@@ -158,19 +164,22 @@ class OpenAIVLMProvider:
         self,
         *,
         prompt: str,
-        scene_contract: Any,
         frame_paths: list[str | Path],
-        deterministic_findings: list[Any],
+        video_path: str | Path | None = None,
+        frame_metadata: list[dict[str, Any]] | None = None,
+        scene_contract: Any | None = None,
+        deterministic_findings: list[Any] | None = None,
         harness_version: str | None = None,
     ) -> tuple[VLMJudgeResponse, dict[str, Any]]:
+        del scene_contract, deterministic_findings
         if not self.api_key:
             raise VLMUnavailable("OPENAI_API_KEY is not configured")
         payload = build_responses_payload(
             prompt=prompt,
-            scene_contract=scene_contract,
             frame_paths=frame_paths,
-            deterministic_findings=deterministic_findings,
             model=self.model,
+            video_path=video_path,
+            frame_metadata=frame_metadata,
             harness_version=harness_version,
         )
         request = urllib.request.Request(

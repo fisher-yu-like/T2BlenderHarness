@@ -31,8 +31,11 @@ from videoact.real_pipeline import RealRunStateMachine  # noqa: E402
 from videoact.real_video import assemble_mp4_from_pngs  # noqa: E402
 from videoact.observer_contract import read_trusted_observer_output  # noqa: E402
 from videoact.experiment_fingerprint import build_from_run_dir, hash_file  # noqa: E402
+from videoact.obligations import ObligationCompilation  # noqa: E402
+from videoact.obligation_matrix import build_obligation_matrix  # noqa: E402
 from blender.lib.__meta__ import collect_library_signatures  # noqa: E402
 from scripts.evaluate_proxy_realism import audit_run  # noqa: E402
+from evaluator.visual_evidence import assess_render_frame_health  # noqa: E402
 
 
 def discover_run_dirs(root: str | Path) -> list[Path]:
@@ -70,6 +73,49 @@ def _formal_score_policy_payload(config_path: str | Path | None) -> tuple[dict[s
         f"generator={formal.generator_model_id}"
     )
     return payload, model_identity
+
+
+def _build_runtime_obligation_matrix(
+    root: Path,
+    *,
+    manifest: dict[str, Any],
+    director_plan: DirectorPlan | None,
+    observer_report: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Materialize the planned/implemented/executed prefix for a real run."""
+
+    obligations_path = root / "obligations.json"
+    if not obligations_path.is_file():
+        return None
+    try:
+        compilation = ObligationCompilation.model_validate(
+            json.loads(obligations_path.read_text(encoding="utf-8"))
+        )
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    planned = set(getattr(director_plan, "obligation_ids", []) or []) if director_plan is not None else set()
+    implemented: set[str] = set()
+    coverage_path = root / "coverage_report.json"
+    if coverage_path.is_file():
+        try:
+            coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            coverage = {}
+        if isinstance(coverage, dict) and coverage.get("status") == "pass":
+            implemented = set(str(item) for item in coverage.get("covered_obligation_ids", []) if str(item).strip())
+    executed: set[str] = set()
+    if isinstance(observer_report, dict) and observer_report.get("status") == "pass":
+        observer_manifest = observer_report.get("manifest") or {}
+        observer_telemetry = observer_report.get("telemetry") or {}
+        observed_ids = observer_manifest.get("obligation_ids") or observer_telemetry.get("obligation_ids") or []
+        executed = set(str(item) for item in observed_ids if str(item).strip())
+    matrix = build_obligation_matrix(
+        compilation,
+        planned=planned,
+        implemented=implemented,
+        executed=executed,
+    )
+    return matrix.model_dump(mode="json")
 
 
 def evaluate_real_run(
@@ -134,6 +180,14 @@ def evaluate_real_run(
     animation_frames = sorted((root / "frames" / "animation").glob("frame_*.png"))
     if not (root / "proxy.mp4").exists() and animation_frames:
         assemble_mp4_from_pngs(animation_frames, root / "proxy.mp4", fps=manifest["fps"])
+    health_frames = animation_frames
+    if len(health_frames) > 12:
+        health_indices = {
+            round(index * (len(health_frames) - 1) / 11)
+            for index in range(12)
+        }
+        health_frames = [health_frames[index] for index in sorted(health_indices)]
+    visual_frame_health = assess_render_frame_health(health_frames)
 
     experiment_fingerprint = None
     experiment_fingerprint_error = None
@@ -183,6 +237,18 @@ def evaluate_real_run(
         artifacts,
         director_plan=director_plan,
     )
+    obligation_matrix = _build_runtime_obligation_matrix(
+        root,
+        manifest=manifest,
+        director_plan=director_plan,
+        observer_report=observer_report,
+    )
+    if obligation_matrix is not None:
+        (root / "obligation_matrix.json").write_text(
+            json.dumps(obligation_matrix, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        report = report.model_copy(update={"obligation_matrix": obligation_matrix})
     if experiment_fingerprint_error is not None:
         fingerprint_finding = Finding(
             failure_id="experiment_fingerprint_unavailable",
@@ -328,6 +394,7 @@ def evaluate_real_run(
                 "observer_report": str((root / "observer_report.json").resolve()) if (root / "observer_report.json").is_file() else None,
                 "physics_oracle": str((root / "physics_oracle.json").resolve()) if (root / "physics_oracle.json").is_file() else None,
                 "physics_oracle_version": PHYSICS_ORACLE_VERSION,
+                "obligation_matrix": str((root / "obligation_matrix.json").resolve()) if (root / "obligation_matrix.json").is_file() else None,
                 "vlm_policy": "one shared local visual review after artifact, deterministic, geometry, and MP4 gates; task, visual, physical, trajectory, camera, and realism channels remain separate",
                 "real_video_evidence": "proxy.mp4 decoded plus Blender runtime_observations; missing either source is unavailable",
                 "scores_are_added": False,
@@ -337,21 +404,26 @@ def evaluate_real_run(
         ),
         encoding="utf-8",
     )
-    if report.terminal_status == "pass" and machine.state == "artifact_valid":
+    blank_visual_failure = visual_frame_health.get("status") == "blank"
+    if report.terminal_status == "pass" and machine.state == "artifact_valid" and not blank_visual_failure:
         machine.transition("evaluated", {"score": report.score})
-    elif report.terminal_status == "fail" and machine.state not in {"failed", "evaluated"}:
+    elif (report.terminal_status == "fail" or blank_visual_failure) and machine.state not in {"failed", "evaluated"}:
         machine.transition(
             "failed",
             {
                 "findings": [
                     finding.failure_id
                     for finding in [*report.findings, *director_findings]
-                ]
+                ],
+                "visual_frame_health": visual_frame_health,
             },
         )
+    evaluation_status = "evaluation_failed" if blank_visual_failure else report.terminal_status
     return {
         "case_id": manifest["case_id"],
-        "status": report.terminal_status,
+        "status": evaluation_status,
+        "reason": visual_frame_health.get("reason") if blank_visual_failure else None,
+        "retryable": True if blank_visual_failure else None,
         "score": report.score,
         "state": machine.state,
         "artifact_status": artifacts.artifact_status,
@@ -367,6 +439,8 @@ def evaluate_real_run(
         "physics_oracle": physics_report,
         "experiment_fingerprint": experiment_fingerprint.model_dump(mode="json") if experiment_fingerprint is not None else None,
         "realism": realism,
+        "visual_frame_health": visual_frame_health,
+        "obligation_matrix": obligation_matrix,
     }
 
 

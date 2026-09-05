@@ -15,13 +15,50 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from videoact.meta_harness import MetaHarnessOptimizer  # noqa: E402
+from videoact.failure_extractor import FailureExtractor  # noqa: E402
 
 
-def collect_records(run_root: str | Path, split: str) -> list[dict[str, Any]]:
+def collect_records(
+    run_root: str | Path,
+    split: str,
+    *,
+    forbidden_case_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for run_dir in sorted(Path(run_root).glob("case-*/")):
+    root = Path(run_root)
+    if not root.is_dir():
+        return records
+    run_dirs = sorted(
+        path
+        for path in root.iterdir()
+        if path.is_dir() and (path / "run_manifest.json").is_file()
+    )
+    for run_dir in run_dirs:
         manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+        manifest_split = str(manifest.get("split") or "")
+        if manifest_split and manifest_split != split:
+            raise ValueError(
+                f"run manifest split mismatch for {manifest.get('case_id')}: "
+                f"expected {split}, got {manifest_split}"
+            )
         report = json.loads((run_dir / "deterministic_report.json").read_text(encoding="utf-8"))
+        normalized_failures: list[dict[str, Any]] = []
+        abstentions: list[dict[str, Any]] = []
+        if split == "train":
+            # Only train evidence may reach proposal aggregation.  Dev is
+            # summarized below for acceptance and is intentionally not fed to
+            # the extractor/controller.
+            extracted = FailureExtractor().extract_run(
+                run_dir,
+                expected_split="train",
+                forbidden_case_ids=forbidden_case_ids,
+            )
+            normalized_failures = [item.to_finding() for item in extracted if item.actionable]
+            abstentions = [item.model_dump(mode="json") for item in extracted if item.abstain]
+        else:
+            # Dev remains available for the paired acceptance summary only;
+            # it cannot become a proposal input.
+            normalized_failures = list(report.get("findings", []))
         records.append(
             {
                 "case_id": manifest["case_id"],
@@ -29,7 +66,9 @@ def collect_records(run_root: str | Path, split: str) -> list[dict[str, Any]]:
                 "status": report["terminal_status"],
                 "score": report["score"],
                 "hard_gate_failed": report["hard_gate_failed"],
-                "findings": report.get("findings", []),
+                "findings": normalized_failures,
+                "abstentions": abstentions,
+                "raw_findings": report.get("findings", []),
             }
         )
     return records
@@ -52,7 +91,11 @@ def run_outer_loop(
     *,
     forbidden_case_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    train_records = collect_records(train_root, "train")
+    train_records = collect_records(
+        train_root,
+        "train",
+        forbidden_case_ids=forbidden_case_ids,
+    )
     dev_records = collect_records(dev_root, "dev")
     optimizer = MetaHarnessOptimizer(output_dir=Path(output).parent)
     train_summary = summarize(train_records)

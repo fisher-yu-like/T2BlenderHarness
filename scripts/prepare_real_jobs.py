@@ -24,6 +24,7 @@ from videoact.codegen_context import load_validated_context_examples
 from videoact.codegen_contracts import CodegenRequest, CodegenResponse, FunctionSignature
 from videoact.director import DirectorAgent
 from videoact.fallback_codegen import FallbackCodegen
+from videoact.obligations import bind_obligations_to_plan, compile_obligations
 from videoact.provider_provenance import ProviderManifest, make_call_record, provider_identity, provider_owner
 from videoact.real_artifacts import RealRunManifest, fingerprint_real_run
 from videoact.observer_contract import OBSERVER_SCHEMA_VERSION, sha256_file
@@ -157,7 +158,8 @@ def _record_provider_failure(
             if isinstance(record, dict) and record.get("stage") == stage
         ]
         if before_count is not None and len(stage_records) > before_count:
-            manifest.add_record(stage_records[-1])
+            for record in stage_records[before_count:]:
+                manifest.add_record(record)
             return
 
     identity = provider_identity(provider)
@@ -226,7 +228,7 @@ def prepare_jobs(
     code_agent: BlenderCodeAgent | None = None,
     fallback_codegen: FallbackCodegen | None = None,
     code_cache_dir: str | Path | None = None,
-    codegen_examples_root: str | Path | None = "dataset/codegen-examples-v1",
+    codegen_examples_root: str | Path | None = None,
 ) -> dict[str, Any]:
     if split not in {"calibration", "train", "dev", "test"}:
         raise ValueError("split must be calibration, train, dev, or test")
@@ -479,13 +481,35 @@ def prepare_jobs(
             contract = director_result.scene_contract
             plan = director_result.trajectory_plan
             director_plan_hash = director_result.director_plan_hash
+        # Compile the case contract before code generation and bind only the
+        # identity anchors back into the DirectorPlan.  Recompile after the
+        # binding so the stored plan hash and obligation fingerprint agree.
+        obligations = compile_obligations(
+            record=record,
+            director_plan=director_result.director_plan,
+            scene_contract=director_result.scene_contract,
+        )
+        bound_plan = bind_obligations_to_plan(director_result.director_plan, obligations)
+        obligations = compile_obligations(
+            record=record,
+            director_plan=bound_plan,
+            scene_contract=director_result.scene_contract,
+        )
+        director_result = director_result.model_copy(
+            update={
+                "director_plan": bound_plan,
+                "director_plan_hash": bound_plan.content_hash(),
+            }
+        )
+        director_plan_hash = director_result.director_plan_hash
         if generation_mode == "agent" and director is not None:
             director_provider = getattr(getattr(director, "interpreter", None), "provider", None)
             if director_provider is not None:
-                _record_provider_stage(
+                _record_provider_calls_since(
                     provider_manifest,
                     provider=director_provider,
                     stage="director",
+                    before_count=director_call_count,
                     request=director_result.director_plan.request.model_dump(mode="json"),
                     response=director_result.director_plan.model_dump(mode="json"),
                     prompt=record["prompt"],
@@ -520,6 +544,7 @@ def prepare_jobs(
             trusted_observer_required=True,
             observer_version=OBSERVER_SCHEMA_VERSION,
             observer_source_hash=sha256_file(ROOT / "blender" / "trusted_observer.py"),
+            obligation_ids=list(obligations.obligation_ids),
         )
         if director_result is not None:
             (run_dir / "director_plan.json").write_text(
@@ -527,6 +552,10 @@ def prepare_jobs(
                 encoding="utf-8",
             )
         (run_dir / "scene_contract.json").write_text(json.dumps(contract.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
+        (run_dir / "obligations.json").write_text(
+            json.dumps(obligations.model_dump(mode="json"), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         (run_dir / "proxy_scene.json").write_text(json.dumps(record.get("proxy_scene", {}), indent=2, sort_keys=True), encoding="utf-8")
         (run_dir / "trajectory.json").write_text(json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
         (run_dir / "camera_plan.json").write_text(json.dumps(plan.camera.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
@@ -583,6 +612,7 @@ def prepare_jobs(
                 cached_violations = validate_generated_source(
                     cached_source,
                     allowed_library_calls=request.available_library_calls,
+                    require_visible_lighting=getattr(agent, "require_visible_lighting", False),
                 )
                 response = (
                     CodegenResponse(
@@ -658,6 +688,7 @@ def prepare_jobs(
                 existing_code_hashes={
                     key: value for key, value in frozen_sources.items() if key != director_plan_hash
                 },
+                obligations=obligations,
             )
             (run_dir / "coverage_report.json").write_text(
                 json.dumps(coverage.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -749,7 +780,9 @@ def main() -> int:
         default="injected",
     )
     parser.add_argument("--code-cache-dir", default=None)
-    parser.add_argument("--codegen-examples-root", default="dataset/codegen-examples-v1")
+    parser.add_argument("--codegen-examples-root", default=None)
+    parser.add_argument("--codex-command", default="codex")
+    parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--case-id", action="append", default=None)
     parser.add_argument("--resolution", nargs=2, type=int, metavar=("WIDTH", "HEIGHT"), default=None)
     parser.add_argument("--samples", type=int, default=None)
@@ -759,7 +792,36 @@ def main() -> int:
         render_settings["resolution"] = args.resolution
     if args.samples is not None:
         render_settings["samples"] = args.samples
-    print(json.dumps(prepare_jobs(args.split, args.out_dir, dataset_root=args.dataset_root, harness_version=args.harness_version, evaluator_version=args.evaluator_version, case_ids=args.case_id, render_settings=render_settings, generation_mode=args.generation_mode, provider_mode=args.provider_mode, code_cache_dir=args.code_cache_dir, codegen_examples_root=args.codegen_examples_root), sort_keys=True))
+    director_agent = None
+    code_agent = None
+    if args.generation_mode == "agent" and args.provider_mode in {"model", "glm"}:
+        from scripts.train_real_harness import build_dynamic_codex_agents
+
+        director_agent, code_agent = build_dynamic_codex_agents(
+            codex_command=args.codex_command,
+            timeout_s=args.timeout_s,
+            provider_mode=args.provider_mode,
+        )
+    print(
+        json.dumps(
+            prepare_jobs(
+                args.split,
+                args.out_dir,
+                dataset_root=args.dataset_root,
+                harness_version=args.harness_version,
+                evaluator_version=args.evaluator_version,
+                case_ids=args.case_id,
+                render_settings=render_settings,
+                generation_mode=args.generation_mode,
+                provider_mode=args.provider_mode,
+                director_agent=director_agent,
+                code_agent=code_agent,
+                code_cache_dir=args.code_cache_dir,
+                codegen_examples_root=args.codegen_examples_root,
+            ),
+            sort_keys=True,
+        )
+    )
     return 0
 
 

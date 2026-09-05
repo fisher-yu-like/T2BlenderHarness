@@ -69,8 +69,10 @@ class OpenAICompatibleVLMAdapter:
         *,
         prompt: str,
         frame_paths: list[str | Path],
-        scene_contract: Any,
-        deterministic_findings: list[Any],
+        video_path: str | Path | None = None,
+        frame_metadata: list[dict[str, Any]] | None = None,
+        scene_contract: Any | None = None,
+        deterministic_findings: list[Any] | None = None,
     ) -> dict[str, Any]:
         # Keep the primary visual judge blind to all generator-side artifacts.
         # The arguments remain in the public API for compatibility, but are
@@ -81,6 +83,10 @@ class OpenAICompatibleVLMAdapter:
             "prompt": prompt,
             "required_dimensions": list(REVIEW_FIELDS),
         }
+        if video_path is not None:
+            context["video_path"] = str(Path(video_path).resolve())
+        if frame_metadata:
+            context["frame_metadata"] = list(frame_metadata)
         content: list[dict[str, Any]] = [
             {
                 "type": "text",
@@ -125,6 +131,23 @@ class OpenAICompatibleVLMAdapter:
                 },
             },
         }
+
+    def build_blind_payload(
+        self,
+        *,
+        prompt: str,
+        frame_paths: list[str | Path],
+        video_path: str | Path | None = None,
+        frame_metadata: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Build the formal prompt/frame/timecode-only Judge payload."""
+
+        return self.build_payload(
+            prompt=prompt,
+            frame_paths=frame_paths,
+            video_path=video_path,
+            frame_metadata=frame_metadata,
+        )
 
     def parse_response(self, response: dict[str, Any]) -> VLMJudgeResponse:
         choices = response.get("choices") or []
@@ -228,18 +251,20 @@ class OpenAICompatibleVLMProvider:
         self,
         *,
         prompt: str,
-        scene_contract: Any,
         frame_paths: list[str | Path],
-        deterministic_findings: list[Any],
+        video_path: str | Path | None = None,
+        frame_metadata: list[dict[str, Any]] | None = None,
+        scene_contract: Any | None = None,
+        deterministic_findings: list[Any] | None = None,
         harness_version: str | None = None,
     ) -> tuple[VLMJudgeResponse, dict[str, Any]]:
-        del harness_version
+        del scene_contract, deterministic_findings, harness_version
         result = dispatch_vlm(
             model=self.model,
             prompt=prompt,
             frame_paths=frame_paths,
-            scene_contract=scene_contract,
-            deterministic_findings=deterministic_findings,
+            video_path=video_path,
+            frame_metadata=frame_metadata,
             transport=self.transport,
             base_url=self.base_url,
             api_key=self.api_key,
@@ -255,8 +280,10 @@ def dispatch_vlm(
     model: str,
     prompt: str,
     frame_paths: list[str | Path],
-    scene_contract: Any,
-    deterministic_findings: list[Any],
+    video_path: str | Path | None = None,
+    frame_metadata: list[dict[str, Any]] | None = None,
+    scene_contract: Any | None = None,
+    deterministic_findings: list[Any] | None = None,
     transport: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
@@ -270,6 +297,8 @@ def dispatch_vlm(
         payload = adapter.build_payload(
             prompt=prompt,
             frame_paths=frame_paths,
+            video_path=video_path,
+            frame_metadata=frame_metadata,
             scene_contract=scene_contract,
             deterministic_findings=deterministic_findings,
         )

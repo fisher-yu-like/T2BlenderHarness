@@ -130,6 +130,9 @@ class DirectorPlan(ContractModel):
     trajectory_summary: dict[str, Any] = Field(default_factory=dict)
     camera_plan: CameraPlan | None = None
     coverage_obligations: list[str] = Field(default_factory=list)
+    # Obligation Compiler IDs are identity-only trace anchors.  They are not
+    # semantic findings and are never sent to the blind visual Judge.
+    obligation_ids: list[str] = Field(default_factory=list)
     provider_fingerprint: str = Field(min_length=1)
     policy_fingerprint: str = Field(min_length=1)
 
@@ -161,6 +164,8 @@ class DirectorPlan(ContractModel):
         evidence_ids = [item.id for item in self.evidence]
         if len(evidence_ids) != len(set(evidence_ids)):
             raise ValueError("evidence IDs must be unique")
+        if len(self.obligation_ids) != len(set(self.obligation_ids)):
+            raise ValueError("obligation IDs must be unique")
 
         entity_set = set(entity_ids)
         event_set = set(event_ids)

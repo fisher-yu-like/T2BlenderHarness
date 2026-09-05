@@ -116,6 +116,7 @@ def build_training_readiness(
     dynamic_agent_provider: Any,
     paired_gate: Any,
     formal_release_report: Any | None = None,
+    experiment_contract: Any | None = None,
 ) -> dict[str, Any]:
     """Combine independent evidence without converting any value to a score."""
 
@@ -142,6 +143,23 @@ def build_training_readiness(
         )
         evidence_by_name["formal_release"] = formal_release_evidence
         gate_names.append("formal_release")
+    if experiment_contract is not None:
+        try:
+            from videoact.real_artifacts import validate_experiment_contract
+
+            contract = validate_experiment_contract(experiment_contract)
+            evidence_by_name["experiment_contract"] = {
+                "status": "pass",
+                "experiment_id": contract.experiment_id,
+                "experiment_fingerprint": contract.experiment_fingerprint,
+                "contract_version": contract.contract_version,
+            }
+        except (TypeError, ValueError):
+            evidence_by_name["experiment_contract"] = {
+                "status": "blocked",
+                "reason": "experiment_contract_invalid",
+            }
+        gate_names.append("experiment_contract")
     gates: dict[str, dict[str, Any]] = {}
     numeric_substitutions: list[str] = []
     for name in gate_names:
@@ -175,6 +193,12 @@ def build_training_readiness(
     if formal_release_verification is not None:
         result["formal_release"] = formal_release_verification
         result["gate_report_hashes"] = formal_release_verification.get("gate_report_hashes", {})
+    if experiment_contract is not None and gates["experiment_contract"]["status"] == "pass":
+        result["experiment_contract"] = {
+            "contract_version": gates["experiment_contract"]["contract_version"],
+            "experiment_id": gates["experiment_contract"]["experiment_id"],
+            "experiment_fingerprint": gates["experiment_contract"]["experiment_fingerprint"],
+        }
     return result
 
 
@@ -497,6 +521,7 @@ def build_training_readiness_from_project(
     formal_evaluator_config: str | Path | None = "config/formal-evaluator-v1.json",
     paired_gate_report: str | Path | None = None,
     formal_release_report: str | Path | None = None,
+    experiment_contract: str | Path | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root).resolve()
     def resolve_input(value: str | Path | None) -> Path | None:
@@ -514,6 +539,7 @@ def build_training_readiness_from_project(
     resolved_formal_config = resolve_input(formal_evaluator_config)
     resolved_paired = resolve_input(paired_gate_report)
     resolved_release = resolve_input(formal_release_report)
+    resolved_contract = resolve_input(experiment_contract)
     resolved_references = [path for value in (frozen_reference_roots or []) if (path := resolve_input(value)) is not None]
     golden = (
         _report_or_pending(golden_path, "golden_review_bundle_missing")
@@ -551,9 +577,8 @@ def build_training_readiness_from_project(
         except Exception as exc:
             golden = {"status": "fail", "reason": f"{type(exc).__name__}: {exc}"}
     frozen_refs = frozen_reference_roots or []
-    release_evidence = _report_or_pending(resolved_release, "formal_release_report_missing")
-    report = build_training_readiness(
-        automated_checks={
+    readiness_kwargs: dict[str, Any] = {
+        "automated_checks": {
             "full_test": _report_or_pending(resolved_full_test, "full_test_report_missing"),
             "capability": _report_or_pending(capability_path, "capability_report_missing"),
             "dataset": _dataset_evidence(
@@ -562,15 +587,26 @@ def build_training_readiness_from_project(
             ),
             "frozen_eval": _frozen_evidence(resolved_frozen or root / "dataset" / "frozen-eval-v2", resolved_references),
         },
-        real_blender_smoke=_smoke_evidence(resolve_input(blender_smoke_root), root),
-        golden_review=golden,
-        dynamic_agent_provider=_provider_evidence(
+        "real_blender_smoke": _smoke_evidence(resolve_input(blender_smoke_root), root),
+        "golden_review": golden,
+        "dynamic_agent_provider": _provider_evidence(
             resolved_provider,
             formal_evaluator_config=resolved_formal_config,
         ),
-        paired_gate=_report_or_pending(resolved_paired, "paired_gate_report_missing"),
-        formal_release_report=release_evidence,
-    )
+        "paired_gate": _report_or_pending(resolved_paired, "paired_gate_report_missing"),
+    }
+    if resolved_release is not None:
+        readiness_kwargs["formal_release_report"] = _report_or_pending(
+            resolved_release, "formal_release_report_missing"
+        )
+    if resolved_contract is not None:
+        try:
+            from videoact.real_artifacts import load_experiment_contract
+
+            readiness_kwargs["experiment_contract"] = load_experiment_contract(resolved_contract).model_dump(mode="json")
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            readiness_kwargs["experiment_contract"] = {"invalid": True}
+    report = build_training_readiness(**readiness_kwargs)
     report["project_root"] = str(root)
     return report
 
@@ -589,6 +625,7 @@ def main() -> int:
     parser.add_argument("--formal-evaluator-config", default="config/formal-evaluator-v1.json")
     parser.add_argument("--paired-gate-report")
     parser.add_argument("--formal-release-report")
+    parser.add_argument("--experiment-contract")
     parser.add_argument("--out")
     args = parser.parse_args()
     project_root = Path(args.project_root).resolve()
@@ -605,6 +642,7 @@ def main() -> int:
         formal_evaluator_config=project_root / args.formal_evaluator_config if args.formal_evaluator_config else None,
         paired_gate_report=project_root / args.paired_gate_report if args.paired_gate_report else None,
         formal_release_report=project_root / args.formal_release_report if args.formal_release_report else None,
+        experiment_contract=project_root / args.experiment_contract if args.experiment_contract else None,
     )
     destination = Path(args.out) if args.out else project_root / "out" / "training_readiness_report.json"
     destination.parent.mkdir(parents=True, exist_ok=True)

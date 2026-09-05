@@ -30,7 +30,15 @@ def _inspect(blender_bin: str, run_dir: Path, timeout_s: int) -> dict[str, Any]:
     output = run_dir / "geometry_raw.json"
     script = ROOT / "scripts" / "inspect_blend_geometry.py"
     command = [blender_bin, "-b", str(run_dir / "proxy.blend"), "--python", str(script), "--", "--output", str(output)]
-    completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout_s, check=False)
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout_s,
+        check=False,
+    )
     if completed.returncode != 0 or not output.is_file():
         return {
             "audit_available": False,

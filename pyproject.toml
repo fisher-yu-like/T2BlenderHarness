@@ -25,6 +25,9 @@ dev = ["pytest>=8.0"]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
 addopts = "-ra"
+markers = [
+    "blender_integration: requires a real Blender binary supplied by VIDEOACT_BLENDER_BIN",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

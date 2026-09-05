@@ -43,6 +43,19 @@ def test_model_mode_uses_the_codex_exec_provider() -> None:
     assert code_agent.provider.provider_kind == "codex_exec_local"
     assert code_agent.provider.template_backed is False
     assert code_agent.provider.llm_generated is True
+    assert code_agent.require_visible_lighting is True
+
+
+def test_model_mode_allows_one_bounded_codegen_repair() -> None:
+    from scripts.train_real_harness import build_dynamic_codex_agents
+
+    _director, code_agent = build_dynamic_codex_agents(
+        codex_command="codex-test",
+        timeout_s=31,
+        provider_mode="model",
+    )
+
+    assert code_agent.max_codegen_attempts == 2
 
 
 def test_external_director_provider_records_structured_response_and_endpoint() -> None:

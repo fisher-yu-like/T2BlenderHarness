@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .pytest-tmp-*/
+.pytest-unit/
+.pytest-blender-integration/
 .mypy_cache/
 *.egg-info/
 out/

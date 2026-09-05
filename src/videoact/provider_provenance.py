@@ -132,6 +132,16 @@ class ProviderManifest:
         # Keep a convenient summary for gate code while retaining retries.
         current.update(normalized)
         current["retry_count"] = max(int(current.get("retry_count") or 0), len(current["calls"]) - 1)
+        provider_kinds = sorted(
+            {
+                str(item.get("provider_kind") or "")
+                for item in current["calls"]
+                if isinstance(item, Mapping) and str(item.get("provider_kind") or "").strip()
+            }
+        )
+        current["call_count"] = len(current["calls"])
+        current["provider_kinds"] = provider_kinds
+        current["fallback_used"] = len(provider_kinds) > 1
         return normalized
 
     def as_dict(self) -> dict[str, Any]:
@@ -154,6 +164,7 @@ class ProviderManifest:
             for stage, value in stages.items()
             if value.get("error")
         ]
+        fallback_used = any(bool(value.get("fallback_used")) for value in stage_values)
         return {
             "manifest_version": PROVIDER_MANIFEST_VERSION,
             "case_id": self.case_id,
@@ -163,6 +174,7 @@ class ProviderManifest:
             "template_backed": template_backed,
             "llm_generated": llm_generated,
             "status": "error" if errors else "complete" if stages else "incomplete",
+            "fallback_used": fallback_used,
             "errors": errors,
             "stages": stages,
         }

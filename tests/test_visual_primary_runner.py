@@ -58,6 +58,31 @@ def _response():
     )
 
 
+def test_missing_deterministic_report_is_unavailable_without_visual_review(tmp_path):
+    from scripts.evaluate_real_videos import evaluate_vlm_run
+
+    calls = []
+
+    class Provider:
+        def evaluate(self, **kwargs):
+            calls.append(kwargs)
+            raise AssertionError("visual review must not run without deterministic evidence")
+
+    result = evaluate_vlm_run(
+        tmp_path,
+        prompt="Alice carries the red cup.",
+        scene_contract={"events": [], "fps": 24},
+        provider=Provider(),
+        scoring_policy="visual-primary-v6",
+    )
+
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "deterministic_report_missing"
+    assert result["review_source"] == "not_evaluated"
+    assert calls == []
+    assert json.loads((tmp_path / "vlm_report.json").read_text(encoding="utf-8")) == result
+
+
 def test_visual_primary_runner_emits_independent_task_and_realism_channels(tmp_path, monkeypatch):
     from scripts.evaluate_real_videos import evaluate_vlm_run
 
@@ -151,6 +176,80 @@ def test_formal_visual_result_includes_three_layer_status_from_real_artifacts(tm
     assert result["evaluation_result"]["execution_status"] == "valid"
     assert result["evaluation_result"]["semantic_status"] == "failed_required_event"
     assert result["evaluation_result"]["task_score"] == 49
+
+
+def test_formal_visual_result_does_not_trust_generated_telemetry(tmp_path, monkeypatch):
+    from scripts.evaluate_real_videos import evaluate_vlm_run
+
+    root = _run(tmp_path)
+    monkeypatch.setattr(
+        "scripts.evaluate_real_videos.probe_mp4",
+        lambda *_args, **_kwargs: {"playable": True, "frame_count": 3, "fps": 24.0, "duration_s": 0.125},
+    )
+    manifest = json.loads((root / "run_manifest.json").read_text(encoding="utf-8"))
+    manifest["trusted_observer_required"] = True
+    (root / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "artifact_report.json").write_text(json.dumps({"artifact_status": "complete"}), encoding="utf-8")
+    (root / "telemetry.json").write_text(
+        json.dumps({"observations": [{"frame": 1}, {"frame": 2}, {"frame": 3}]}),
+        encoding="utf-8",
+    )
+
+    class Provider:
+        model_alias = "gpt-5.6-luna"
+
+        def evaluate(self, **_kwargs):
+            return _response_with_event_score(), {"id": "generated-telemetry-must-not-count"}
+
+    result = evaluate_vlm_run(
+        root,
+        prompt="Alice carries the red cup.",
+        scene_contract={"events": [], "fps": 24},
+        provider=Provider(),
+        scoring_policy="scoring-v7-independent-channels",
+    )
+
+    assert result["status"] == "scored"
+    assert result["evaluation_result"]["execution_status"] == "invalid"
+    assert "runtime_observations_missing" in result["evaluation_result"]["reasons"]
+
+
+def test_observe_only_event_does_not_require_discrete_event_timing_evidence(tmp_path, monkeypatch):
+    from scripts.evaluate_real_videos import evaluate_vlm_run
+
+    root = _run(tmp_path)
+    monkeypatch.setattr(
+        "scripts.evaluate_real_videos.probe_mp4",
+        lambda *_args, **_kwargs: {"playable": True, "frame_count": 3, "fps": 24.0, "duration_s": 0.125},
+    )
+    response = _response_with_event_score()
+    evidence = dict(response.dimension_evidence or {})
+    evidence.pop("event_timing", None)
+    response = response.model_copy(update={"dimension_evidence": evidence})
+
+    class Provider:
+        model_alias = "codex_local_visual_review"
+        provider_kind = "codex_exec_visual_review"
+
+        def evaluate(self, **_kwargs):
+            return response, {"id": "observe-only-review"}
+
+    result = evaluate_vlm_run(
+        root,
+        prompt="A garden remains visible.",
+        scene_contract={
+            "events": [{"id": "observe", "start": 0.0, "end": 1.0, "description": "observe"}],
+            "must_show": ["observe"],
+            "duration_s": 1.0,
+            "fps": 24,
+        },
+        provider=Provider(),
+        scoring_policy="scoring-v7-independent-channels",
+    )
+
+    assert result["status"] == "scored"
+    assert result["visual_primary"]["applicability"]["event_timing"] is False
+    assert result["visual_primary"]["dimension_evidence"]["event_timing"]["applicability"] is False
 
 
 def _response_with_event_score():

@@ -65,14 +65,9 @@ def test_agent_mode_freezes_valid_case_specific_source(tmp_path) -> None:
                 "from blender.lib.scaffolding import build_runtime_contract\n"
                 "DIRECTOR_PLAN = {" + ", ".join(repr(token) + ": " + repr(token) for token in tokens) + "}\n"
                 "OUTPUT_DIR = Path(__file__).resolve().parent\n"
-                "telemetry_path = 'telemetry.json'\n"
-                "sample_frames = ['index.json']\n"
                 "runtime_contract = build_runtime_contract('" + "a" * 64 + "', " + repr([token for token in tokens if token.startswith('actor_')]) + ", " + repr([token for token in tokens if token.startswith('carry_') or token.startswith('place_')]) + ", " + repr([token for token in tokens if token.startswith('carry_') or token.startswith('place_')]) + ")\n"
                 "mesh = box((0, 0, 0), (1, 1, 1))\n"
-                "bpy.context.scene.render.image_settings.file_format = 'PNG'\n"
-                "bpy.context.scene.render.filepath = 'frames/animation/frame_'\n"
                 "bpy.ops.wm.save_as_mainfile(filepath='candidate.blend')\n"
-                "bpy.ops.render.render(animation=True)\n"
             ),
             "library_calls": ["box"],
             "llm_call_id": "call-agent-case-01",

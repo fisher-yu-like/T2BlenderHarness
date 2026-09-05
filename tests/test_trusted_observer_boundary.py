@@ -113,6 +113,27 @@ def test_observer_semantic_claims_are_rejected_even_with_matching_hashes(tmp_pat
     assert "observer_emitted_forbidden_semantic_field:handoff_success" in report["failures"]
 
 
+def test_observer_rejects_nested_semantic_claims_even_with_matching_hashes(tmp_path: Path) -> None:
+    from videoact.observer_contract import read_trusted_observer_output
+
+    _write_trusted_fixture(tmp_path)
+    telemetry_path = tmp_path / "telemetry.json"
+    telemetry = json.loads(telemetry_path.read_text(encoding="utf-8"))
+    telemetry["observations"] = [
+        {"frame": 1, "entities": {"actor_a": {"handoff_success": True}}}
+    ]
+    telemetry_path.write_text(json.dumps(telemetry, sort_keys=True), encoding="utf-8")
+    manifest = json.loads((tmp_path / "telemetry_manifest.json").read_text(encoding="utf-8"))
+    manifest["telemetry_hash"] = _sha256(telemetry_path)
+    (tmp_path / "telemetry_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = read_trusted_observer_output(tmp_path, observer_source_path=tmp_path / "trusted_observer.py")
+
+    assert report["status"] == "fail"
+    assert report["telemetry"] is None
+    assert "observer_emitted_forbidden_semantic_field:handoff_success" in report["failures"]
+
+
 def test_observer_request_can_enable_bounded_mesh_geometry_for_physics_narrow_phase() -> None:
     from videoact.observer_contract import create_observer_request
 

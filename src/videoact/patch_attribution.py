@@ -7,6 +7,63 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+PATCH_SCOPE_VERSION = "harness-patch-scope-v1"
+_FROZEN_PATH_PARTS = {
+    "dataset",
+    "datasets",
+    "evaluator",
+    "observer",
+    "observers",
+    "test",
+    "tests",
+}
+
+
+def normalize_patch_path(path: str) -> str:
+    """Normalize one proposal path and reject workspace escapes."""
+
+    value = str(path).replace("\\", "/").strip()
+    if not value:
+        raise ValueError("patch path cannot be empty")
+    if value.startswith("/") or len(value) > 2 and value[1] == ":":
+        raise ValueError(f"patch path must be workspace-relative: {path}")
+    parts = [part for part in value.split("/") if part not in {"", "."}]
+    if ".." in parts:
+        raise ValueError(f"patch path cannot escape workspace: {path}")
+    return "/".join(parts)
+
+
+def validate_patch_paths(paths: list[str] | tuple[str, ...], *, allow_generated_contracts: bool = False) -> list[str]:
+    """Return a normalized Harness-only path list.
+
+    Dataset, evaluator, observer, and test paths are frozen in the formal
+    experiment.  Generated plan/contract JSON is also frozen unless a caller
+    explicitly requests the diagnostic-only exception.
+    """
+
+    if not isinstance(paths, (list, tuple)) or any(not isinstance(item, str) for item in paths):
+        raise ValueError("patch paths must be a list of strings")
+    normalized = list(dict.fromkeys(normalize_patch_path(item) for item in paths))
+    for path in normalized:
+        if not path.startswith("src/videoact/"):
+            raise ValueError(
+                "Harness-only patch scope violation: allowed files are under src/videoact/; "
+                f"rejected {path}"
+            )
+        parts = path.casefold().split("/")
+        basename = parts[-1]
+        if any(part in _FROZEN_PATH_PARTS for part in parts[:-1]) or basename in _FROZEN_PATH_PARTS:
+            raise ValueError(f"Harness-only patch scope violation: frozen component path {path}")
+        if basename.startswith("test_") or basename.startswith("observer") or basename.startswith("evaluator"):
+            raise ValueError(f"Harness-only patch scope violation: frozen component path {path}")
+        if not allow_generated_contracts and basename in {"trajectory.json", "camera_plan.json", "scene_contract.json"}:
+            raise ValueError(
+                "Harness-only patch scope violation: generated plan/contract contents are immutable; "
+                f"rejected {path}"
+            )
+    return normalized
+
+
 class PatchVerdict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,4 +119,13 @@ def attribute(manifest_entry: dict[str, Any], observed_deltas: dict[str, float])
         rollback_files=sorted({str(path) for path in manifest_entry.get("affected_files", [])}) if rollback_required else [],
         rationale=rationale,
     )
+
+
+__all__ = [
+    "PATCH_SCOPE_VERSION",
+    "PatchVerdict",
+    "attribute",
+    "normalize_patch_path",
+    "validate_patch_paths",
+]
 

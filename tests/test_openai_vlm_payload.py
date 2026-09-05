@@ -11,11 +11,10 @@ def test_responses_payload_contains_prompt_contract_and_image_data_url_without_h
     Image.new("RGB", (4, 4), (255, 255, 255)).save(frame)
     payload = build_responses_payload(
         prompt="Show a grasp.",
-        scene_contract={"events": [{"id": "grasp"}]},
         frame_paths=[frame],
-        deterministic_findings=[{"failure_id": "none"}],
         model="vision-model",
-        harness_version="secret-harness",
+        video_path=tmp_path / "proxy.mp4",
+        frame_metadata=[{"frame": 1, "timecode": "00:00:00.000"}],
     )
 
     assert payload["model"] == "vision-model"

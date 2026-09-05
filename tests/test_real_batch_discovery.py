@@ -25,6 +25,54 @@ def test_discovery_ignores_non_run_directories(tmp_path: Path):
     assert discover_run_dirs(tmp_path) == []
 
 
+def test_exhausted_inner_loop_is_not_reported_as_local_visual_review(tmp_path: Path):
+    from scripts.train_real_harness import (
+        _final_batch_status,
+        _inner_not_rendered_result,
+        merge_real_scores,
+    )
+
+    inner_case = {
+        "case_id": "case-exhausted",
+        "status": "exhausted",
+        "reason": "max_inner_attempts_exhausted",
+        "attempts": [
+            {
+                "attempt": 1,
+                "status": "evaluation_failed",
+                "reason": "Blender telemetry unavailable",
+            }
+        ],
+    }
+    deterministic = _inner_not_rendered_result(
+        case_id="case-exhausted",
+        run_root=tmp_path,
+        split="test",
+        inner_case=inner_case,
+    )
+    merged = merge_real_scores(
+        run_root=tmp_path,
+        deterministic_results=[deterministic],
+        vlm_results=[],
+    )
+
+    assert deterministic["vlm_status"] == "not_run"
+    assert deterministic["vlm_reason"] == "inner_loop_exhausted"
+    assert merged["cases"][0]["vlm_status"] == "not_run"
+    assert merged["cases"][0]["vlm_reason"] == "inner_loop_exhausted"
+    assert _final_batch_status(
+        inner={"pending_case_ids": ["case-exhausted"]},
+        vlm_scored_count=0,
+        real_video_count=0,
+    ) == "incomplete_inner_loop"
+
+
+def test_batch_eval_uses_protocol_inner_attempt_budget():
+    from scripts import run_batch_eval
+
+    assert run_batch_eval.DEFAULT_INNER_ATTEMPTS == 3
+
+
 def test_successful_cli_job_records_rendered_state(tmp_path: Path):
     from scripts.render_proxy_jobs_parallel import mark_render_state
 
@@ -52,6 +100,43 @@ def test_cli_command_uses_absolute_job_path_and_requires_video(tmp_path: Path):
     assert classify_render_status(0, True) == "success"
 
 
+def test_blender_version_extraction_ignores_leading_warnings():
+    from scripts.render_proxy_jobs_parallel import _extract_blender_version
+
+    stdout = (
+        "00:00.953  reports | WARNING Path 'D:/blender/datafiles/missing.blend' cannot be found\n"
+        "Blender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n"
+    )
+
+    assert _extract_blender_version(stdout, "") == "5.1.2"
+    assert _extract_blender_version("warning only", "") is None
+
+
+def test_geometry_audit_decodes_blender_output_as_utf8_with_replacement(tmp_path: Path, monkeypatch):
+    import subprocess
+
+    import scripts.evaluate_proxy_realism as evaluator
+
+    run_dir = tmp_path / "case-geometry"
+    run_dir.mkdir()
+    (run_dir / "proxy.blend").write_bytes(b"blend")
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        (run_dir / "geometry_raw.json").write_text(
+            json.dumps({"audit_available": True, "mesh_count": 0, "meshes": []}),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(evaluator.subprocess, "run", fake_run)
+
+    assert evaluator._inspect("blender", run_dir, timeout_s=10)["audit_available"] is True
+    assert captured["encoding"] == "utf-8"
+    assert captured["errors"] == "replace"
+
+
 def test_cli_render_retries_failed_blender_execution_and_records_attempts(tmp_path: Path, monkeypatch):
     import subprocess
     import scripts.render_proxy_jobs_parallel as renderer
@@ -59,10 +144,11 @@ def test_cli_render_retries_failed_blender_execution_and_records_attempts(tmp_pa
     job_dir = tmp_path / "hard-01-01"
     job_dir.mkdir()
     (job_dir / "blender_job.py").write_text("# fake job", encoding="utf-8")
-    calls = {"count": 0}
+    calls = {"count": 0, "kwargs": []}
 
     def fake_run(*args, **kwargs):
         calls["count"] += 1
+        calls["kwargs"].append(kwargs)
         if calls["count"] == 2:
             frames = job_dir / "frames" / "animation"
             frames.mkdir(parents=True)
@@ -83,6 +169,8 @@ def test_cli_render_retries_failed_blender_execution_and_records_attempts(tmp_pa
     saved = json.loads((job_dir / "render_attempts.json").read_text(encoding="utf-8"))
     assert saved[0]["return_code"] == 1
     assert saved[1]["return_code"] == 0
+    assert all(kwargs["encoding"] == "utf-8" for kwargs in calls["kwargs"])
+    assert all(kwargs["errors"] == "replace" for kwargs in calls["kwargs"])
 
 
 def test_cli_renderer_caps_parallel_workers_at_twelve(tmp_path: Path):

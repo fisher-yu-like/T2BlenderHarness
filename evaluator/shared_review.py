@@ -59,6 +59,8 @@ def score_shared_visual_review(
     realism = score_realism(geometry, visual, _review_payload(response, report_source))
     result = {
         "status": "scored",
+        "deterministic_status": deterministic.terminal_status,
+        "deterministic_hard_gate_failed": deterministic.hard_gate_failed,
         "review_source": review_source_label or report_source,
         "vlm_model": report_model,
         "video_probe": video_probe,

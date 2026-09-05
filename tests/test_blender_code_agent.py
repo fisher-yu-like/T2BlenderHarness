@@ -43,14 +43,9 @@ def test_agent_accepts_valid_library_composition() -> None:
                 "from blender.lib.scaffolding import build_runtime_contract\n"
                 "DIRECTOR_PLAN = {'actor_a': 'actor_a', 'red_cup': 'red_cup', 'carry_01': 'carry_01'}\n"
                 "OUTPUT_DIR = Path(__file__).resolve().parent\n"
-                "telemetry_path = 'telemetry.json'\n"
-                "sample_frames = ['index.json']\n"
                 "runtime_contract = build_runtime_contract('" + "a" * 64 + "', ['actor_a'], ['carry_01'], ['carry_01'])\n"
                 "mesh = box((0, 0, 0), (1, 1, 1))\n"
-                "bpy.context.scene.render.image_settings.file_format = 'PNG'\n"
-                "bpy.context.scene.render.filepath = 'frames/animation/frame_'\n"
                 "bpy.ops.wm.save_as_mainfile(filepath='candidate.blend')\n"
-                "bpy.ops.render.render(animation=True)\n"
             ),
             "library_calls": ["box"],
             "llm_call_id": "call-1",
@@ -64,7 +59,7 @@ def test_agent_accepts_valid_library_composition() -> None:
     assert "library_signatures" in seen
 
 
-def test_agent_runtime_contract_requires_candidate_blend_not_generated_telemetry() -> None:
+def test_agent_runtime_contract_accepts_candidate_blend_without_generated_telemetry() -> None:
     def provider(_payload):
         return {
             "status": "success",
@@ -77,8 +72,6 @@ def test_agent_runtime_contract_requires_candidate_blend_not_generated_telemetry
                 "OUTPUT_DIR = Path(__file__).resolve().parent\n"
                 "runtime_contract = build_runtime_contract('" + "a" * 64 + "', ['actor_a'], ['carry_01'], ['carry_01'])\n"
                 "mesh = box((0, 0, 0), (1, 1, 1))\n"
-                "bpy.context.scene.render.image_settings.file_format = 'PNG'\n"
-                "bpy.context.scene.render.filepath = 'frames/animation/frame_'\n"
                 "bpy.ops.wm.save_as_mainfile(filepath='candidate.blend')\n"
             ),
             "library_calls": ["box"],
@@ -87,8 +80,7 @@ def test_agent_runtime_contract_requires_candidate_blend_not_generated_telemetry
 
     response = BlenderCodeAgent(provider=provider).generate(_request())
 
-    assert response.status == "hard_uncertainty"
-    assert "animation_render" in response.uncertainties[0]["description"]
+    assert response.status == "success"
 
 
 def test_provider_failure_returns_hard_uncertainty_without_code() -> None:
@@ -111,12 +103,7 @@ def test_static_codegen_failure_can_request_one_bounded_model_repair() -> None:
         "from blender.lib.scaffolding import build_runtime_contract\n"
         "DIRECTOR_PLAN = {'actor_a': 'actor_a'}\n"
         "OUTPUT_DIR = Path(__file__).resolve().parent\n"
-        "telemetry_path = 'telemetry.json'\n"
-        "index_path = 'index.json'\n"
-        "bpy.context.scene.render.image_settings.file_format = 'PNG'\n"
-        "bpy.context.scene.render.filepath = str(OUTPUT_DIR / 'frames' / 'animation' / 'frame_')\n"
         "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
-        "bpy.ops.render.render(animation=True)\n"
     )
 
     def provider(payload):
@@ -143,6 +130,118 @@ def test_static_codegen_failure_can_request_one_bounded_model_repair() -> None:
     assert "validation_feedback" in calls[1]
     assert "syntax_error" in str(calls[1]["validation_feedback"])
     assert calls[1]["previous_generated_code"] == "import "
+
+
+def test_static_gate_rejects_blender_51_incompatible_runtime_patterns() -> None:
+    from videoact.blender_code_agent import validate_generated_source
+
+    source = (
+        "import bpy\n"
+        "from blender.lib.geometry import box\n"
+        "from blender.lib.scaffolding import build_runtime_contract\n"
+        "from pathlib import Path\n"
+        "DIRECTOR_PLAN = {}\n"
+        "OUTPUT_DIR = Path(__file__).resolve().parent\n"
+        "scene = bpy.context.scene\n"
+        "scene.render.engine = 'BLENDER_EEVEE_NEXT'\n"
+        "scene.render.clip_start = 0.1\n"
+        "action = obj.animation_data.action\n"
+        "for curve in action.fcurves: pass\n"
+        "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
+        "scene.render.filepath = str(OUTPUT_DIR / 'frames' / 'animation' / 'frame_')\n"
+        "scene.render.image_settings.file_format = 'PNG'\n"
+        "bpy.ops.render.render(animation=True)\n"
+        "(OUTPUT_DIR / 'telemetry.json').write_text('{}')\n"
+        "(OUTPUT_DIR / 'frames' / 'index.json').write_text('{}')\n"
+    )
+
+    violations = validate_generated_source(source, allowed_library_calls={"box"})
+
+    assert "blender_51_incompatible:BLENDER_EEVEE_NEXT" in violations
+    assert "blender_51_incompatible:scene.render.clip_start" in violations
+    assert "blender_51_incompatible:action.fcurves" in violations
+
+
+def test_static_gate_rejects_camera_keyframe_rotation_attribute() -> None:
+    from videoact.blender_code_agent import validate_generated_source
+
+    source = (
+        "import bpy\n"
+        "from pathlib import Path\n"
+        "from blender.lib.geometry import box\n"
+        "from blender.lib.camera import dolly_camera\n"
+        "from blender.lib.scaffolding import build_runtime_contract\n"
+        "DIRECTOR_PLAN = {}\n"
+        "OUTPUT_DIR = Path(__file__).resolve().parent\n"
+        "keyframes = dolly_camera((0, -4, 2), (0, -8, 3), (0, 0, 1), (1, 24))\n"
+        "for keyframe in keyframes:\n"
+        "    camera.rotation_euler = keyframe.rotation\n"
+        "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
+    )
+
+    violations = validate_generated_source(
+        source,
+        allowed_library_calls={"box", "dolly_camera"},
+        verified_library_modules={
+            "box": "blender.lib.geometry",
+            "dolly_camera": "blender.lib.camera",
+        },
+    )
+
+    assert "library_contract:CameraKeyframe.rotation" in violations
+
+
+def test_static_gate_requires_visible_lighting_when_requested() -> None:
+    from videoact.blender_code_agent import validate_generated_source
+
+    source = (
+        "import bpy\n"
+        "from pathlib import Path\n"
+        "from blender.lib.geometry import box\n"
+        "from blender.lib.scaffolding import build_runtime_contract\n"
+        "DIRECTOR_PLAN = {}\n"
+        "OUTPUT_DIR = Path(__file__).resolve().parent\n"
+        "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
+    )
+
+    violations = validate_generated_source(
+        source,
+        allowed_library_calls={"box"},
+        require_visible_lighting=True,
+    )
+
+    assert "runtime_missing:visible_lighting" in violations
+
+    lit_source = source + "bpy.ops.object.light_add(type='AREA', location=(0, 0, 4))\n"
+    assert "runtime_missing:visible_lighting" not in validate_generated_source(
+        lit_source,
+        allowed_library_calls={"box"},
+        require_visible_lighting=True,
+    )
+
+
+def test_static_gate_rejects_unimported_blender_mathutils_names() -> None:
+    from videoact.blender_code_agent import validate_generated_source
+
+    source = (
+        "import bpy\n"
+        "from blender.lib.geometry import box\n"
+        "from blender.lib.scaffolding import build_runtime_contract\n"
+        "from pathlib import Path\n"
+        "DIRECTOR_PLAN = {}\n"
+        "OUTPUT_DIR = Path(__file__).resolve().parent\n"
+        "Vector((0, 0, 0))\n"
+        "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
+        "scene.render.filepath = str(OUTPUT_DIR / 'frames' / 'animation' / 'frame_')\n"
+        "scene.render.image_settings.file_format = 'PNG'\n"
+        "bpy.ops.render.render(animation=True)\n"
+        "(OUTPUT_DIR / 'telemetry.json').write_text('{}')\n"
+        "(OUTPUT_DIR / 'frames' / 'index.json').write_text('{}')\n"
+    )
+
+    violations = validate_generated_source(source, allowed_library_calls={"box"})
+
+    assert "runtime_import_missing:mathutils.Vector" in violations
 
 
 def test_codegen_repair_prompt_is_a_model_rewrite_not_a_template_fallback() -> None:
@@ -231,7 +330,7 @@ def test_verified_library_call_cannot_be_used_without_an_import() -> None:
     assert "library_call_not_imported:box" in violations
 
 
-def test_runtime_contract_requires_host_collectable_telemetry_and_frame_index() -> None:
+def test_runtime_contract_rejects_generated_render_and_telemetry_outputs() -> None:
     from videoact.blender_code_agent import validate_generated_source
 
     source = (
@@ -241,6 +340,7 @@ def test_runtime_contract_requires_host_collectable_telemetry_and_frame_index() 
         "from blender.lib.scaffolding import build_runtime_contract\n"
         "DIRECTOR_PLAN = {}\n"
         "OUTPUT_DIR = Path(__file__).resolve().parent\n"
+        "telemetry_path = OUTPUT_DIR / 'telemetry.json'\n"
         "bpy.context.scene.render.image_settings.file_format = 'PNG'\n"
         "bpy.context.scene.render.filepath = str(OUTPUT_DIR / 'frames' / 'animation' / 'frame_')\n"
         "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
@@ -256,8 +356,57 @@ def test_runtime_contract_requires_host_collectable_telemetry_and_frame_index() 
         },
     )
 
-    assert "runtime_missing:telemetry_artifact" in violations
-    assert "runtime_missing:frame_index_artifact" in violations
+    assert "generated_job_forbidden:telemetry_output" in violations
+    assert "generated_job_forbidden:frame_output" in violations
+    assert "generated_job_forbidden:render" in violations
+
+
+def test_static_gate_rejects_aliased_dynamic_filesystem_writes() -> None:
+    from videoact.blender_code_agent import validate_generated_source
+
+    source = (
+        "import bpy\n"
+        "import builtins as host\n"
+        "from pathlib import Path as P\n"
+        "from blender.lib.geometry import box\n"
+        "from blender.lib.scaffolding import build_runtime_contract\n"
+        "DIRECTOR_PLAN = {}\n"
+        "OUTPUT_DIR = P(__file__).resolve().parent\n"
+        "runtime_contract = build_runtime_contract('" + "a" * 64 + "', [], [], [])\n"
+        "target = P(OUTPUT_DIR / ('tele' + 'metry.json'))\n"
+        "target.write_text('{}')\n"
+        "host.open(OUTPUT_DIR / 'result.json', 'w')\n"
+        "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
+    )
+
+    violations = validate_generated_source(source, allowed_library_calls={"box"})
+
+    assert "generated_job_forbidden:filesystem_write" in violations
+    assert "forbidden_import:builtins" in violations
+
+
+def test_static_gate_rejects_dynamic_import_and_attribute_execution() -> None:
+    from videoact.blender_code_agent import validate_generated_source
+
+    source = (
+        "import bpy\n"
+        "import importlib as loader\n"
+        "from pathlib import Path\n"
+        "from blender.lib.geometry import box\n"
+        "from blender.lib.scaffolding import build_runtime_contract\n"
+        "DIRECTOR_PLAN = {}\n"
+        "OUTPUT_DIR = Path(__file__).resolve().parent\n"
+        "runtime_contract = build_runtime_contract('" + "a" * 64 + "', [], [], [])\n"
+        "module = loader.import_module('pathlib')\n"
+        "getattr(module, 'Path')(OUTPUT_DIR / 'result.json').write_text('{}')\n"
+        "bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT_DIR / 'candidate.blend'))\n"
+    )
+
+    violations = validate_generated_source(source, allowed_library_calls={"box"})
+
+    assert "forbidden_import:importlib" in violations
+    assert "generated_job_forbidden:filesystem_write" in violations
+    assert "forbidden_call:getattr" in violations
 
 
 def test_forbidden_python_operations_are_fail_closed() -> None:

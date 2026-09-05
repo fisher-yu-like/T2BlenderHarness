@@ -34,6 +34,7 @@ def main() -> int:
     parser.add_argument("--g1", type=Path, required=True)
     parser.add_argument("--pilot", type=Path, required=True)
     parser.add_argument("--shadow", type=Path, required=True)
+    parser.add_argument("--g4", "--generalization", dest="g4", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -42,6 +43,7 @@ def main() -> int:
         _read(args.g1),
         _read(args.pilot),
         _read(args.shadow),
+        _read(args.g4) if args.g4 is not None else None,
     )
     verification = validate_formal_release_report(result)
     # Do not embed the outer report hash inside the report that is about to be

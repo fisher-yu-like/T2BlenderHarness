@@ -43,6 +43,8 @@ def run_pipeline(
         Path(out_dir, "real_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
         return summary
     if mode == "optimize":
+        if split != "train":
+            raise ValueError("optimize mode can only consume the train split")
         if train_records is None:
             raise ValueError("train_records are required for optimize mode")
         optimizer = MetaHarnessOptimizer(output_dir=out_dir)
